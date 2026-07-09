@@ -21,46 +21,53 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Verify JavaScript syntax
-        run: |
-          set -e
-          for f in $(find js sw.js -name '*.js'); do
-            node --check "$f"
-            echo "OK $f"
-          done
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: npm run typecheck
 
       - name: Compute next version
         id: ver
         run: |
           latest=$(git tag -l 'v*' --sort=-v:refname | head -1)
           if [ -z "$latest" ]; then
-            next="1.0.0"
+            next="2.0.0"
           else
             IFS=. read -r major minor patch <<< "${latest#v}"
-            next="$major.$minor.$((patch + 1))"
+            if [ "$major" -lt 2 ]; then
+              next="2.0.0"
+            else
+              next="$major.$minor.$((patch + 1))"
+            fi
           fi
           echo "version=$next" >> "$GITHUB_OUTPUT"
           echo "Next version: v$next (previous: ${latest:-none})"
 
-      - name: Build package
+      - name: Build (Vite + PWA)
+        env:
+          GITHUB_PAGES: '1'
+        run: npx vite build
+
+      - name: Stamp version + package
         run: |
           VER="${{ steps.ver.outputs.version }}"
-          mkdir -p dist/birds-app
-          rsync -a --exclude dist --exclude .git --exclude .github ./ dist/birds-app/
-          # stamp the version into the app
-          echo "{\"version\": \"$VER\", \"builtAt\": \"$(date -u +%FT%TZ)\", \"commit\": \"$GITHUB_SHA\"}" > dist/birds-app/version.json
-          # bust the service-worker cache so installed clients pick up the new version
-          sed -i "s/const CACHE = 'birds-app-v[^']*'/const CACHE = 'birds-app-v$VER'/" dist/birds-app/sw.js
-          grep "const CACHE" dist/birds-app/sw.js
+          echo "{\"version\": \"$VER\", \"builtAt\": \"$(date -u +%FT%TZ)\", \"commit\": \"$GITHUB_SHA\"}" > dist/version.json
           cd dist
-          zip -qr "birds-app-v$VER.zip" birds-app
-          ls -la *.zip
+          zip -qr "../birds-app-v$VER.zip" .
+          ls -la ../*.zip
 
-      - name: Upload build artifact
+      - name: Upload Pages build
         uses: actions/upload-artifact@v4
         with:
-          name: birds-app-v${{ steps.ver.outputs.version }}
-          path: dist/birds-app
+          name: dist
+          path: dist
 
       - name: Tag and create release
         env:
@@ -71,12 +78,11 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag "v$VER"
           git push origin "v$VER"
-          NOTES=$(printf 'בנייה אוטומטית מ-commit %s.\n\n**התקנה:** מחלצים את ה-ZIP ומעלים לכל אחסון סטטי עם HTTPS (GitHub Pages / Netlify / Cloudflare Pages), או מריצים מקומית עם `npx http-server`.' "${GITHUB_SHA::7}")
-          gh release create "v$VER" "dist/birds-app-v$VER.zip" \
+          NOTES=$(printf 'בנייה אוטומטית (Vite + TypeScript, PWA offline-first) מ-commit %s.\n\nהאפליקציה מותקנת מ-GitHub Pages; ה-ZIP הוא ה-build הסטטי (dist) לפריסה בכל אחסון סטטי עם HTTPS.' "${GITHUB_SHA::7}")
+          gh release create "v$VER" "birds-app-v$VER.zip" \
             --title "יומן צפרות v$VER" \
             --notes "$NOTES"
 
-  # פרסום ל-GitHub Pages — האפליקציה זמינה להתקנה כ-PWA בטלפון
   deploy-pages:
     needs: build-release
     runs-on: ubuntu-latest
@@ -91,7 +97,7 @@ jobs:
       - name: Download build
         uses: actions/download-artifact@v4
         with:
-          name: birds-app-v${{ needs.build-release.outputs.version }}
+          name: dist
           path: site
 
       - name: Configure Pages
