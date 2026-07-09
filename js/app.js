@@ -2,7 +2,7 @@
  * and service-worker registration. POC: fully client-side, no server. */
 
 import { seedSpeciesIfEmpty } from './db.js';
-import { SPECIES_SEED } from './species-seed.js';
+import { SPECIES_SEED, SPECIES_SEED_VERSION } from './species-seed.js';
 import { toast } from './ui.js';
 import * as formView from './views/form.js';
 import * as mapView from './views/map.js';
@@ -69,7 +69,7 @@ function registerServiceWorker() {
 }
 
 async function init() {
-  await seedSpeciesIfEmpty(SPECIES_SEED);
+  await seedSpeciesIfEmpty(SPECIES_SEED, SPECIES_SEED_VERSION);
   for (const [name, view] of Object.entries(VIEWS)) {
     view.init(document.getElementById(`view-${name}`));
   }

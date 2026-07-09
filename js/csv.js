@@ -65,7 +65,7 @@ export function toCsv(rows) {
 const HEADER_ALIASES = {
   dateTime: ['תאריך ושעה', 'תאריך', 'date', 'datetime', 'date time', 'time'],
   locationName: ['מיקום', 'שם מיקום', 'אתר', 'location', 'location name', 'site'],
-  coordinates: ['קואורדינטות', 'coordinates', 'latlong', 'lat/long', 'latlng'],
+  coordinates: ['קואורדינטות', 'קורדינטות', 'קואורדינאטות', 'coordinates', 'latlong', 'lat/long', 'latlng'],
   lat: ['רוחב', 'lat', 'latitude'],
   lng: ['אורך', 'lng', 'lon', 'long', 'longitude'],
   project: ['פרויקט', 'פרוייקט', 'project'],

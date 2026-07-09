@@ -132,16 +132,28 @@ export async function speciesExists(name) {
   return !!(await get('species', name));
 }
 
-export async function seedSpeciesIfEmpty(names) {
-  const existing = await getAll('species');
-  if (existing.length > 0) return false;
+async function replaceSpecies(names) {
   const db = await openDb();
   const store = txStore(db, 'species', 'readwrite');
+  store.clear();
   for (const name of names) store.put({ name });
   return new Promise((resolve, reject) => {
     store.transaction.oncomplete = () => resolve(true);
     store.transaction.onerror = () => reject(store.transaction.error);
   });
+}
+
+/**
+ * Seed the master species list on first run, and replace it when the bundled
+ * list version changes (so existing installs pick up an updated list).
+ */
+export async function seedSpeciesIfEmpty(names, version = 1) {
+  const existing = await getAll('species');
+  const storedVersion = await getSetting('speciesSeedVersion', 0);
+  if (existing.length > 0 && storedVersion >= version) return false;
+  await replaceSpecies(names);
+  await setSetting('speciesSeedVersion', version);
+  return true;
 }
 
 /* ---------- media (original-quality image blobs) ---------- */
