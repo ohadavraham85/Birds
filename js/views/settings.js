@@ -55,8 +55,9 @@ export async function activate() {
     <div class="settings-card">
       <h3>🎬 נתוני הדגמה</h3>
       <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
-        רוצים לראות איך האפליקציה נראית מלאה? טענו 12 תצפיות לדוגמה (עם מפה,
-        תמונות והערות). אפשר להסיר אותן בלחיצה בלי לפגוע בתצפיות אמיתיות.
+        רוצים לבדוק את האפליקציה מלאה? טענו 20 תצפיות לדוגמה (אתרים,
+        קואורדינטות והערות אמיתיים). אפשר להסיר אותן בלחיצה בלי לפגוע
+        בתצפיות אמיתיות.
       </p>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-primary" id="s-demo-load">🎬 טעינת נתוני דמה</button>

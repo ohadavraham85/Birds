@@ -1,127 +1,118 @@
-/* demo-data.js — נתוני דמה להתרשמות מהאפליקציה.
+/* demo-data.js — נתוני דמה לבדיקת האפליקציה (ללא תמונות).
  * נטענים מכפתור במסך ההגדרות; כל רשומת דמה מסומנת demo:true כך שאפשר
  * למחוק את כולן בלחיצה בלי לפגוע בתצפיות אמיתיות.
  */
 
-import { saveObservation, saveMedia, listObservationsRaw, deleteObservation } from './db.js';
+import { saveObservation, listObservationsRaw, deleteObservation } from './db.js';
 
 const DEMO = [
   {
     d: '2026-07-07T05:42', loc: 'מחצבת שדה אליהו', lat: 32.4413, lng: 35.5108,
-    proj: 'אוחים - עמק המעיינות', sp: 'אוח מצוי', q: 5, emoji: '🦉',
+    proj: 'אוחים - עמק המעיינות', sp: 'אוח מצוי', q: 5,
     notes: '# תצפית בוקר במחצבה\nהמשפחה בשלמותה: זוג הבוגרים + **3 פרחונים**.\n\n- הפרחונים כבר מנתרים בין המדפים בקיר הצפוני\n- הבוגר האכיל פעמיים בין 05:50 ל-06:20\n- קריאות ערות לאורך כל השהות',
   },
   {
+    d: '2026-07-06T18:20', loc: 'עין חרוד', lat: 32.5561, lng: 35.3919,
+    proj: '', sp: 'שרקרק גמדי', q: 4,
+    notes: 'ארבעה פרטים על גדר התיל לאורך המעיין.',
+  },
+  {
     d: '2026-07-04T17:55', loc: 'נחל שחל, רמת סירין', lat: 32.6068, lng: 35.4472,
-    proj: 'קינון חיוויאים 2026', sp: 'חיוויאי הנחשים', q: 2, emoji: '🦅',
+    proj: 'קינון חיוויאים 2026', sp: 'חיוויאי הנחשים', q: 2,
     notes: '## ביקורת קן על השיזף\nהגוזל גדל יפה — מוערך בן **3 שבועות**.\n\nההורה הגיע עם נחש (זעמן?) ב-18:10. מצלמת השביל הוחלפה סוללה ונמצאה תקינה.',
   },
   {
+    d: '2026-07-03T06:30', loc: 'כפר יחזקאל', lat: 32.5636, lng: 35.3661,
+    proj: '', sp: 'כחל', q: 1,
+    notes: '',
+  },
+  {
     d: '2026-07-01T06:15', loc: 'בריכות הדגים, עמק המעיינות', lat: 32.4589, lng: 35.4936,
-    proj: 'סקר קיץ', sp: 'שרקרק מצוי', q: 14, emoji: '🌈',
+    proj: 'סקר קיץ', sp: 'שרקרק מצוי', q: 14,
     notes: 'להקה פעילה מעל הבריכה המזרחית, ציד שפיריות אינטנסיבי. לפחות 3 זוגות מקננים בסוללה.',
   },
   {
     d: '2026-06-28T19:30', loc: 'מחצבת שדה אליהו', lat: 32.4409, lng: 35.5102,
-    proj: 'אוחים - עמק המעיינות', sp: 'אוח מצוי', q: 2, emoji: '🦉',
+    proj: 'אוחים - עמק המעיינות', sp: 'אוח מצוי', q: 2,
     notes: 'תצפית ערב: שני פרחונים על שפת המחצבה. אחד ביצע *גלישת תעופה* ראשונה של ~15 מטר!',
   },
   {
+    d: '2026-06-26T05:50', loc: 'תל יוסף, שדות חיטה', lat: 32.5583, lng: 35.4033,
+    proj: 'סקר קיץ', sp: 'עפרוני מצויץ', q: 7,
+    notes: 'שירה ערה מעמדות שליטה על ערמות הקש.',
+  },
+  {
+    d: '2026-06-24T06:10', loc: 'נחל הקיבוצים', lat: 32.4867, lng: 35.4772,
+    proj: '', sp: 'שלדג גמדי', q: 1,
+    notes: 'פרט בודד על ענף מעל המים — תצפית לא שגרתית לעונה!',
+  },
+  {
     d: '2026-06-21T08:05', loc: 'שמורת החולה', lat: 33.0623, lng: 35.5964,
-    proj: '', sp: 'עגור אפור', q: 47, emoji: '🪶',
-    notes: 'להקת קייטנים סביב אגמון. ספירה מהמסתור הצפוני.',
+    proj: '', sp: 'עגור אפור', q: 47,
+    notes: 'להקת קייטנים סביב האגמון. ספירה מהמסתור הצפוני.',
   },
   {
     d: '2026-06-18T06:50', loc: 'נחל שחל, רמת סירין', lat: 32.6071, lng: 35.4469,
-    proj: 'קינון חיוויאים 2026', sp: 'חיוויאי הנחשים', q: 1, emoji: '🦅',
+    proj: 'קינון חיוויאים 2026', sp: 'חיוויאי הנחשים', q: 1,
     notes: '# בקיעה!\n**נצפה גוזל בקן!** ההורה הסיר קליפות ביצה מהקן ב-07:12.\n\n- הוצבה מצלמת שביל על העץ הסמוך\n- מרחק תצפית נשמר: 120 מ׳',
   },
   {
+    d: '2026-06-15T09:40', loc: 'הרי גלבוע', lat: 32.5297, lng: 35.4189,
+    proj: '', sp: 'עקב עיטי', q: 3,
+    notes: 'שלושה פרטים בתרמיקה מעל הרכס, בהם פרט כהה.',
+  },
+  {
     d: '2026-06-12T11:20', loc: 'גמלא', lat: 32.9032, lng: 35.7402,
-    proj: '', sp: 'נשר מקראי', q: 6, emoji: '🪽',
+    proj: '', sp: 'נשר מקראי', q: 6,
     notes: 'שישה פרטים בתרמיקה מעל הנחל, בהם שניים מתויגים (דגלול כנף צהוב).',
   },
   {
+    d: '2026-06-08T17:15', loc: 'מעגן מיכאל', lat: 32.5586, lng: 34.9147,
+    proj: '', sp: 'פלמינגו מצוי', q: 23,
+    notes: 'להקה בבריכה הדרומית, רובם צעירים.',
+  },
+  {
     d: '2026-06-05T05:35', loc: 'בריכות הדגים, עמק המעיינות', lat: 32.4601, lng: 35.4921,
-    proj: 'סקר קיץ', sp: 'שלדג לבן-חזה', q: 3, emoji: '💙',
+    proj: 'סקר קיץ', sp: 'שלדג לבן-חזה', q: 3,
     notes: 'זוג + צעיר על חוטי החשמל לאורך התעלה. הצעיר נצפה מקבל דג מההורה.',
   },
   {
+    d: '2026-06-02T20:10', loc: 'בית אלפא', lat: 32.5158, lng: 35.4272,
+    proj: '', sp: 'תחמס נובי', q: 2,
+    notes: 'שני פרטים צדים חרקים סביב תאורת המגרש.',
+  },
+  {
     d: '2026-05-30T20:45', loc: 'מושב שדה אליהו', lat: 32.4402, lng: 35.5115,
-    proj: '', sp: 'תנשמת', q: 1, emoji: '🤍',
+    proj: '', sp: 'תנשמת', q: 1,
     notes: 'יוצאת מתיבת הקינון בכרם התמרים עם רדת החשכה.',
   },
   {
+    d: '2026-05-27T06:20', loc: 'עמק המעיינות', lat: 32.4700, lng: 35.5001,
+    proj: 'סקר קיץ', sp: 'סיקסק', q: 11,
+    notes: 'מקוננים בשדה הבלתי מעובד; **2 קינים פעילים** אותרו וסומנו.',
+  },
+  {
     d: '2026-05-24T06:40', loc: 'מחצבת שדה אליהו', lat: 32.4415, lng: 35.5111,
-    proj: 'אוחים - עמק המעיינות', sp: 'אוח מצוי', q: 5, emoji: '🦉',
+    proj: 'אוחים - עמק המעיינות', sp: 'אוח מצוי', q: 5,
     notes: '## תיעוד ראשון של המשפחה המלאה\nזוג בוגרים + 3 פרחונים על מדף הסלע.\n\nצולם ברצף עם עדשת 600. *נקודת תצפית קבועה נבחרה בגדה המערבית.*',
   },
   {
     d: '2026-05-18T07:10', loc: 'רמת סירין', lat: 32.6103, lng: 35.4418,
-    proj: 'קינון חיוויאים 2026', sp: 'חיוויאי הנחשים', q: 2, emoji: '🦅',
+    proj: 'קינון חיוויאים 2026', sp: 'חיוויאי הנחשים', q: 2,
     notes: 'הזוג משלים בניית קן על שיזף בערוץ. הועברו ענפים פעמיים במהלך התצפית.',
   },
   {
     d: '2026-05-11T06:25', loc: 'בריכות הדגים, עמק המעיינות', lat: 32.4595, lng: 35.4948,
-    proj: 'סקר קיץ', sp: 'דוכיפת', q: 2, emoji: '👑',
+    proj: 'סקר קיץ', sp: 'דוכיפת', q: 2,
     notes: 'זוג מאכיל בקן שבקיר הבטון של תעלת ההזנה.',
   },
 ];
 
-/* ---------- placeholder image generation (canvas, client-side) ---------- */
-
-const PALETTES = [
-  ['#2d6a4f', '#95d5b2'], ['#1d3557', '#a8dadc'], ['#7f5539', '#e6ccb2'],
-  ['#354f52', '#cad2c5'], ['#5f0f40', '#fdc500'],
-];
-
-function makeDemoImage(species, emoji, seed) {
-  const canvas = document.createElement('canvas');
-  canvas.width = 800;
-  canvas.height = 560;
-  const ctx = canvas.getContext('2d');
-  const [c1, c2] = PALETTES[seed % PALETTES.length];
-  const g = ctx.createLinearGradient(0, 0, 800, 560);
-  g.addColorStop(0, c1);
-  g.addColorStop(1, c2);
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, 800, 560);
-  // "sun"
-  ctx.fillStyle = 'rgba(255,255,255,.25)';
-  ctx.beginPath();
-  ctx.arc(640, 120, 70, 0, Math.PI * 2);
-  ctx.fill();
-  // bird emoji
-  ctx.font = '190px serif';
-  ctx.textAlign = 'center';
-  ctx.fillText(emoji, 400, 330);
-  // caption
-  ctx.fillStyle = 'rgba(255,255,255,.92)';
-  ctx.font = 'bold 44px sans-serif';
-  ctx.direction = 'rtl';
-  ctx.fillText(species, 400, 460);
-  ctx.font = '26px sans-serif';
-  ctx.fillStyle = 'rgba(255,255,255,.75)';
-  ctx.fillText('תמונת הדגמה', 400, 505);
-  return new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9));
-}
-
-/* ---------- load / remove ---------- */
-
 export async function loadDemoData() {
   let created = 0;
   for (const [i, item] of DEMO.entries()) {
-    const id = 'demo-' + i;
-    const images = [];
-    // an image for roughly every second observation
-    if (i % 2 === 0) {
-      const blob = await makeDemoImage(item.sp, item.emoji, i);
-      const mediaId = 'demo-img-' + i;
-      await saveMedia({ id: mediaId, obsId: id, name: `demo-${i}.jpg`, mime: 'image/jpeg', blob });
-      images.push({ localId: mediaId, name: `demo-${i}.jpg` });
-    }
     await saveObservation({
-      id,
+      id: 'demo-' + i,
       demo: true,
       dateTime: new Date(item.d).toISOString(),
       locationName: item.loc,
@@ -130,7 +121,7 @@ export async function loadDemoData() {
       project: item.proj,
       species: item.sp,
       quantity: item.q,
-      images,
+      images: [],
       notes: item.notes,
       deleted: false,
     });
@@ -149,9 +140,4 @@ export async function removeDemoData() {
     }
   }
   return removed;
-}
-
-export async function hasDemoData() {
-  const all = await listObservationsRaw();
-  return all.some((o) => o.demo);
 }
