@@ -69,8 +69,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag "v$VER"
           git push origin "v$VER"
+          NOTES=$(printf 'בנייה אוטומטית מ-commit %s.\n\n**התקנה:** מחלצים את ה-ZIP ומעלים לכל אחסון סטטי עם HTTPS (GitHub Pages / Netlify / Cloudflare Pages), או מריצים מקומית עם `npx http-server`.' "${GITHUB_SHA::7}")
           gh release create "v$VER" "dist/birds-app-v$VER.zip" \
             --title "יומן צפרות v$VER" \
-            --notes "בנייה אוטומטית מ-commit ${GITHUB_SHA::7}.
-
-**התקנה:** מחלצים את ה-ZIP ומעלים לכל אחסון סטטי עם HTTPS (GitHub Pages / Netlify / Cloudflare Pages), או מריצים מקומית עם \`npx http-server\`."
+            --notes "$NOTES"
