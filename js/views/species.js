@@ -102,7 +102,7 @@ function cardHtml(name) {
           ${d.en ? `<span class="sp-en">${escapeHtml(d.en)}</span>` : ''}
         </div>
         <div class="sp-side">
-          ${n ? `<span class="badge">${n} תצפיות</span>` : ''}
+          ${n ? `<button class="badge badge-link act-obs" data-name="${escapeHtml(name)}" title="הצגת התצפיות של המין">${n} תצפיות ›</button>` : ''}
           <span class="sp-caret">${open ? '▲' : '▼'}</span>
         </div>
       </div>
@@ -113,6 +113,7 @@ function cardHtml(name) {
           ${d.family ? `<div><b>משפחה:</b> ${escapeHtml(d.family)}</div>` : ''}
           ${!d.en && !d.sci && !d.family ? '<div style="color:var(--ink-soft)">אין פרטים נוספים למין זה.</div>' : ''}
           <div class="sp-actions">
+            ${n ? `<button class="btn btn-sm btn-primary act-obs" data-name="${escapeHtml(name)}">📋 הצגת ${n} התצפיות</button>` : ''}
             <button class="btn btn-sm act-report" data-name="${escapeHtml(name)}">📝 דיווח תצפית</button>
             <button class="btn btn-sm btn-danger act-remove" data-name="${escapeHtml(name)}">🗑️ הסרה מהרשימה</button>
           </div>
@@ -121,6 +122,13 @@ function cardHtml(name) {
 }
 
 async function onListClick(e) {
+  const obs = e.target.closest('.act-obs');
+  if (obs) {
+    e.stopPropagation();
+    const { navigate } = await import('../app.js');
+    navigate('table', { species: obs.dataset.name });
+    return;
+  }
   const report = e.target.closest('.act-report');
   if (report) {
     const { navigate } = await import('../app.js');

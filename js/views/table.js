@@ -95,6 +95,17 @@ export function init(el) {
   setupExportMenu();
 }
 
+/** Preset filters when navigated to from another view (e.g. a species link). */
+export function setParams(params) {
+  if (params && 'species' in params) {
+    filters.q = ''; filters.project = ''; filters.from = ''; filters.to = '';
+    filters.species = params.species || '';
+    const q = container?.querySelector('#flt-q'); if (q) q.value = '';
+    const from = container?.querySelector('#flt-from'); if (from) from.value = '';
+    const to = container?.querySelector('#flt-to'); if (to) to.value = '';
+  }
+}
+
 export async function activate() {
   observations = await listObservations(); // already sorted: newest first
   selected = new Set([...selected].filter((id) => observations.some((o) => o.id === id)));

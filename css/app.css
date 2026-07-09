@@ -388,6 +388,8 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
 .sp-en { color: var(--ink-soft); font-size: .85rem; direction: ltr; text-align: right; }
 .sp-side { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .sp-caret { color: var(--green-700); font-size: .75rem; }
+.badge-link { border: 0; cursor: pointer; font: inherit; font-size: .78rem; font-weight: 600; }
+.badge-link:hover { background: var(--green-600); color: #fff; }
 .sp-details { padding: 0 14px 14px; font-size: .92rem; line-height: 1.7; }
 .sp-details b { color: var(--green-900); }
 .sp-details i { color: var(--ink-soft); }
