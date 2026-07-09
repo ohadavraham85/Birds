@@ -238,6 +238,58 @@ textarea { min-height: 130px; resize: vertical; white-space: pre-wrap; line-heig
 .table-toolbar .spacer { flex: 1; }
 .sel-count { color: var(--ink-soft); font-size: .9rem; }
 
+/* ---------- filter bar ---------- */
+
+.filter-bar {
+  display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+  margin-bottom: 10px;
+}
+.filter-search {
+  flex: 1 1 220px;
+  min-width: 160px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font: inherit;
+}
+.filter-sel {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  font: inherit;
+  color: var(--ink);
+  max-width: 46vw;
+}
+
+/* ---------- export dropdown ---------- */
+
+.export-wrap { position: relative; display: inline-block; }
+.export-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 20px rgba(27,67,50,.18);
+  z-index: 800;
+  overflow: hidden;
+  min-width: 160px;
+}
+.export-menu[hidden] { display: none; }
+.export-menu button {
+  display: block; width: 100%; text-align: right;
+  padding: 10px 14px; border: 0; background: none; font: inherit; cursor: pointer;
+}
+.export-menu button:hover { background: var(--green-50); }
+
+/* ---------- group headers ---------- */
+
+.obs-table tr.group-head td { background: var(--green-100); }
+.obs-table tr.group-head .group-title { font-weight: 700; color: var(--green-900); }
+.obs-table tr.group-head .group-meta { color: var(--green-700); font-size: .82rem; margin-inline-start: 10px; }
+
 .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); }
 table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font-size: .92rem; }
 .obs-table th, .obs-table td { padding: 9px 10px; text-align: right; border-bottom: 1px solid var(--line); vertical-align: top; }

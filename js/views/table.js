@@ -1,6 +1,6 @@
 /* views/table.js — מסך רשימת התצפיות (סעיפים 7.3, 8א, 8ב):
- * טבלה ממוינת כרונולוגית (חדש למעלה), סימון מרובה עם תיבות סימון,
- * ייצוא PDF מרוכז של הנבחרות, ייבוא CSV מרוכז וייצוא CSV.
+ * טבלה עם סינון (חיפוש חופשי + מין + פרויקט), קיבוץ (לפי פרויקט / מין),
+ * סימון מרובה, וייצוא (Excel/CSV או PDF) של המסומנים — ואם אין סימון, של הכל.
  */
 
 import { listObservations, deleteObservation, saveObservation, listSpecies, addSpecies } from '../db.js';
@@ -11,28 +11,50 @@ import { exportObservationsPdf } from '../pdf.js';
 
 let container = null;
 let selected = new Set();
-let observations = [];
+let observations = [];      // all, newest first
+let filtered = [];          // after filters
+const filters = { q: '', species: '', project: '' };
+let groupBy = 'none';       // 'none' | 'project' | 'species'
 
 export function init(el) {
   container = el;
   container.innerHTML = `
     <h2>רשימת תצפיות</h2>
+
+    <div class="filter-bar">
+      <input type="search" id="flt-q" class="filter-search" placeholder="🔍 חיפוש (מין, מיקום, פרויקט, הערות)...">
+      <select id="flt-species" class="filter-sel"><option value="">כל המינים</option></select>
+      <select id="flt-project" class="filter-sel"><option value="">כל הפרויקטים</option></select>
+      <select id="flt-group" class="filter-sel">
+        <option value="none">ללא קיבוץ</option>
+        <option value="project">קיבוץ לפי פרויקט</option>
+        <option value="species">קיבוץ לפי מין</option>
+      </select>
+      <button class="btn btn-sm" id="flt-clear" title="ניקוי סינון">נקה</button>
+    </div>
+
     <div class="table-toolbar">
       <label class="btn btn-sm" style="cursor:pointer">
         ⬆️ ייבוא CSV
         <input type="file" id="csv-input" accept=".csv,text/csv" hidden>
       </label>
-      <button class="btn btn-sm" id="csv-export-btn">⬇️ ייצוא CSV</button>
+      <div class="export-wrap">
+        <button class="btn btn-sm btn-primary" id="export-btn">⬇️ ייצוא ▾</button>
+        <div class="export-menu" id="export-menu" hidden>
+          <button data-fmt="excel">📊 Excel (CSV)</button>
+          <button data-fmt="pdf">🧾 PDF</button>
+        </div>
+      </div>
+      <button class="btn btn-sm btn-danger" id="del-btn" disabled>🗑️ מחיקה</button>
       <span class="spacer"></span>
       <span class="sel-count" id="sel-count"></span>
-      <button class="btn btn-sm btn-primary" id="pdf-btn" disabled>🧾 ייצוא ל-PDF</button>
-      <button class="btn btn-sm btn-danger" id="del-btn" disabled>🗑️ מחיקה</button>
     </div>
+
     <div class="table-wrap">
       <table class="obs-table">
         <thead>
           <tr>
-            <th style="width:36px"><input type="checkbox" id="sel-all" title="בחירת הכל"></th>
+            <th style="width:36px"><input type="checkbox" id="sel-all" title="בחירת כל המוצג"></th>
             <th>תאריך ושעה</th>
             <th>מין הציפור</th>
             <th>כמות</th>
@@ -46,60 +68,150 @@ export function init(el) {
         <tbody id="obs-tbody"></tbody>
       </table>
     </div>
-    <p id="table-empty" style="color:var(--ink-soft)" hidden>אין עדיין תצפיות.</p>
+    <p id="table-empty" style="color:var(--ink-soft)" hidden>אין תצפיות להצגה.</p>
   `;
 
+  container.querySelector('#flt-q').addEventListener('input', (e) => { filters.q = e.target.value; applyFilters(); });
+  container.querySelector('#flt-species').addEventListener('change', (e) => { filters.species = e.target.value; applyFilters(); });
+  container.querySelector('#flt-project').addEventListener('change', (e) => { filters.project = e.target.value; applyFilters(); });
+  container.querySelector('#flt-group').addEventListener('change', (e) => { groupBy = e.target.value; renderRows(); });
+  container.querySelector('#flt-clear').addEventListener('click', clearFilters);
+
   container.querySelector('#sel-all').addEventListener('change', (e) => {
-    selected = e.target.checked ? new Set(observations.map((o) => o.id)) : new Set();
+    if (e.target.checked) filtered.forEach((o) => selected.add(o.id));
+    else filtered.forEach((o) => selected.delete(o.id));
     renderRows();
   });
-  container.querySelector('#pdf-btn').addEventListener('click', onExportPdf);
   container.querySelector('#del-btn').addEventListener('click', onBulkDelete);
   container.querySelector('#csv-input').addEventListener('change', onImportCsv);
-  container.querySelector('#csv-export-btn').addEventListener('click', onExportCsv);
   container.querySelector('#obs-tbody').addEventListener('click', onRowClick);
+  setupExportMenu();
 }
 
 export async function activate() {
   observations = await listObservations(); // already sorted: newest first
   selected = new Set([...selected].filter((id) => observations.some((o) => o.id === id)));
+  populateFilterOptions();
+  applyFilters();
+}
+
+/* ---------- filtering ---------- */
+
+function populateFilterOptions() {
+  const species = [...new Set(observations.map((o) => o.species).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'he'));
+  const projects = [...new Set(observations.map((o) => o.project).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'he'));
+  const fill = (sel, items, keep) => {
+    const cur = keep;
+    sel.innerHTML = `<option value="">${sel.id === 'flt-species' ? 'כל המינים' : 'כל הפרויקטים'}</option>`
+      + items.map((v) => `<option value="${escapeHtml(v)}"${v === cur ? ' selected' : ''}>${escapeHtml(v)}</option>`).join('');
+  };
+  fill(container.querySelector('#flt-species'), species, filters.species);
+  fill(container.querySelector('#flt-project'), projects, filters.project);
+}
+
+function applyFilters() {
+  const q = filters.q.trim().toLowerCase();
+  filtered = observations.filter((o) => {
+    if (filters.species && o.species !== filters.species) return false;
+    if (filters.project && (o.project || '') !== filters.project) return false;
+    if (q) {
+      const hay = `${o.species} ${o.locationName || ''} ${o.project || ''} ${o.notes || ''}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
   renderRows();
+}
+
+function clearFilters() {
+  filters.q = ''; filters.species = ''; filters.project = '';
+  container.querySelector('#flt-q').value = '';
+  container.querySelector('#flt-species').value = '';
+  container.querySelector('#flt-project').value = '';
+  applyFilters();
+}
+
+/* ---------- rendering ---------- */
+
+function rowHtml(o) {
+  return `
+    <tr data-id="${o.id}" class="${selected.has(o.id) ? 'selected' : ''}">
+      <td><input type="checkbox" class="row-sel" ${selected.has(o.id) ? 'checked' : ''}></td>
+      <td class="num">${fmtDateTime(o.dateTime)}</td>
+      <td><strong>${escapeHtml(o.species)}</strong></td>
+      <td>${o.quantity ?? 1}</td>
+      <td>${escapeHtml(o.locationName || '')}</td>
+      <td class="num">${fmtCoords(o.lat, o.lng)}</td>
+      <td>${o.project ? `<span class="badge">${escapeHtml(o.project)}</span>` : ''}</td>
+      <td class="notes-cell" title="${escapeHtml(o.notes || '')}">${escapeHtml((o.notes || '').replace(/\s+/g, ' '))}</td>
+      <td class="row-actions">
+        <button class="btn btn-sm act-edit" title="עריכה">✏️</button>
+        <button class="btn btn-sm act-del" title="מחיקה">🗑️</button>
+      </td>
+    </tr>`;
+}
+
+function groupKey(o) {
+  if (groupBy === 'project') return o.project || '(ללא פרויקט)';
+  if (groupBy === 'species') return o.species || '(ללא מין)';
+  return '';
 }
 
 function renderRows() {
   const tbody = container.querySelector('#obs-tbody');
-  container.querySelector('#table-empty').hidden = observations.length > 0;
-  tbody.innerHTML = observations
-    .map((o) => `
-      <tr data-id="${o.id}" class="${selected.has(o.id) ? 'selected' : ''}">
-        <td><input type="checkbox" class="row-sel" ${selected.has(o.id) ? 'checked' : ''}></td>
-        <td class="num">${fmtDateTime(o.dateTime)}</td>
-        <td><strong>${escapeHtml(o.species)}</strong></td>
-        <td>${o.quantity ?? 1}</td>
-        <td>${escapeHtml(o.locationName || '')}</td>
-        <td class="num">${fmtCoords(o.lat, o.lng)}</td>
-        <td>${o.project ? `<span class="badge">${escapeHtml(o.project)}</span>` : ''}</td>
-        <td class="notes-cell" title="${escapeHtml(o.notes || '')}">${escapeHtml((o.notes || '').replace(/\s+/g, ' '))}</td>
-        <td class="row-actions">
-          <button class="btn btn-sm act-edit" title="עריכה">✏️</button>
-          <button class="btn btn-sm act-del" title="מחיקה">🗑️</button>
-        </td>
-      </tr>`)
-    .join('');
+  container.querySelector('#table-empty').hidden = filtered.length > 0;
+
+  if (groupBy === 'none') {
+    tbody.innerHTML = filtered.map(rowHtml).join('');
+  } else {
+    const groups = new Map();
+    for (const o of filtered) {
+      const k = groupKey(o);
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(o);
+    }
+    const keys = [...groups.keys()].sort((a, b) => a.localeCompare(b, 'he'));
+    tbody.innerHTML = keys.map((k) => {
+      const rows = groups.get(k);
+      const totalQty = rows.reduce((s, o) => s + (o.quantity ?? 1), 0);
+      const allSel = rows.every((o) => selected.has(o.id));
+      return `
+        <tr class="group-head" data-group="${escapeHtml(k)}">
+          <td><input type="checkbox" class="group-sel" ${allSel ? 'checked' : ''}></td>
+          <td colspan="8">
+            <span class="group-title">${escapeHtml(k)}</span>
+            <span class="group-meta">${rows.length} תצפיות · ${totalQty} פרטים</span>
+          </td>
+        </tr>` + rows.map(rowHtml).join('');
+    }).join('');
+  }
   updateToolbar();
 }
 
 function updateToolbar() {
   const n = selected.size;
-  container.querySelector('#sel-count').textContent = n ? `${n} נבחרו` : '';
-  container.querySelector('#pdf-btn').disabled = n === 0;
+  container.querySelector('#sel-count').textContent =
+    n ? `${n} מסומנות` : (filtered.length !== observations.length ? `${filtered.length} מוצגות` : '');
   container.querySelector('#del-btn').disabled = n === 0;
   const all = container.querySelector('#sel-all');
-  all.checked = n > 0 && n === observations.length;
-  all.indeterminate = n > 0 && n < observations.length;
+  const selInView = filtered.filter((o) => selected.has(o.id)).length;
+  all.checked = filtered.length > 0 && selInView === filtered.length;
+  all.indeterminate = selInView > 0 && selInView < filtered.length;
 }
 
+/* ---------- selection & row actions ---------- */
+
 async function onRowClick(e) {
+  const groupHead = e.target.closest('tr.group-head');
+  if (groupHead && e.target.classList.contains('group-sel')) {
+    const key = groupHead.dataset.group;
+    const rows = filtered.filter((o) => groupKey(o) === key);
+    if (e.target.checked) rows.forEach((o) => selected.add(o.id));
+    else rows.forEach((o) => selected.delete(o.id));
+    renderRows();
+    return;
+  }
+
   const tr = e.target.closest('tr[data-id]');
   if (!tr) return;
   const id = tr.dataset.id;
@@ -108,6 +220,8 @@ async function onRowClick(e) {
     e.target.checked ? selected.add(id) : selected.delete(id);
     tr.classList.toggle('selected', e.target.checked);
     updateToolbar();
+    // keep group checkbox in sync
+    if (groupBy !== 'none') renderRows();
     return;
   }
   if (e.target.closest('.act-edit')) {
@@ -134,23 +248,74 @@ async function onBulkDelete() {
   toast('התצפיות נמחקו');
 }
 
-/* ---------- bulk export to PDF (סעיף 8ב) ---------- */
+/* ---------- export (Excel / PDF) of selected — or all shown if none selected ---------- */
 
-async function onExportPdf() {
-  const chosen = observations.filter((o) => selected.has(o.id));
-  if (!chosen.length) return;
-  const btn = container.querySelector('#pdf-btn');
+/** The set to export: selected rows, or the currently filtered rows if none selected. */
+function exportSet() {
+  if (selected.size) {
+    // preserve current (filtered) order
+    const chosen = filtered.filter((o) => selected.has(o.id));
+    // include selected rows that are filtered out too, appended by date
+    const extra = observations.filter((o) => selected.has(o.id) && !filtered.includes(o));
+    return [...chosen, ...extra];
+  }
+  return filtered;
+}
+
+function setupExportMenu() {
+  const btn = container.querySelector('#export-btn');
+  const menu = container.querySelector('#export-menu');
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    menu.hidden = !menu.hidden;
+  });
+  menu.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-fmt]');
+    if (!b) return;
+    menu.hidden = true;
+    if (b.dataset.fmt === 'excel') exportExcel();
+    else exportPdf();
+  });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.export-wrap')) menu.hidden = true;
+  });
+}
+
+async function exportPdf() {
+  const source = exportSet();
+  if (!source.length) { toast('אין תצפיות לייצוא', true); return; }
+  const btn = container.querySelector('#export-btn');
+  const label = btn.textContent;
   btn.disabled = true;
   btn.textContent = '⏳ מפיק דו"ח...';
   try {
-    await exportObservationsPdf(chosen);
+    await exportObservationsPdf(source);
   } catch (err) {
     console.error(err);
     toast('הפקת ה-PDF נכשלה: ' + err.message, true, 5000);
   } finally {
-    btn.textContent = '🧾 ייצוא ל-PDF';
-    updateToolbar();
+    btn.disabled = false;
+    btn.textContent = label;
   }
+}
+
+function exportExcel() {
+  const source = exportSet();
+  if (!source.length) { toast('אין תצפיות לייצוא', true); return; }
+  const rows = [
+    ['תאריך ושעה', 'מיקום', 'קו רוחב', 'קו אורך', 'פרויקט', 'מין הציפור', 'מספר פרטים', 'הערות'],
+    ...source.map((o) => [
+      o.dateTime, o.locationName || '', o.lat ?? '', o.lng ?? '',
+      o.project || '', o.species, o.quantity ?? 1, o.notes || '',
+    ]),
+  ];
+  const blob = new Blob([toCsv(rows)], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `תצפיות-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast(`יוצאו ${source.length} תצפיות ל-Excel/CSV ✓`);
 }
 
 /* ---------- CSV import (סעיף 8א) ---------- */
@@ -213,24 +378,4 @@ async function onImportCsv(e) {
   }
   await activate();
   toast(`יובאו ${imported} תצפיות` + (newSpecies ? ` (נוספו ${newSpecies} מינים חדשים לרשימת המאסטר)` : ''), false, 5000);
-}
-
-/* ---------- CSV export ---------- */
-
-async function onExportCsv() {
-  const source = selected.size ? observations.filter((o) => selected.has(o.id)) : observations;
-  if (!source.length) { toast('אין תצפיות לייצוא', true); return; }
-  const rows = [
-    ['תאריך ושעה', 'מיקום', 'קו רוחב', 'קו אורך', 'פרויקט', 'מין הציפור', 'מספר פרטים', 'הערות'],
-    ...source.map((o) => [
-      o.dateTime, o.locationName || '', o.lat ?? '', o.lng ?? '',
-      o.project || '', o.species, o.quantity ?? 1, o.notes || '',
-    ]),
-  ];
-  const blob = new Blob([toCsv(rows)], { type: 'text/csv;charset=utf-8' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `תצפיות-${new Date().toISOString().slice(0, 10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(a.href);
 }
