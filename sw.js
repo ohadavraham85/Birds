@@ -18,6 +18,7 @@ const APP_SHELL = [
   './js/pdf.js',
   './js/markdown.js',
   './js/species-seed.js',
+  './js/demo-data.js',
   './js/views/form.js',
   './js/views/map.js',
   './js/views/table.js',

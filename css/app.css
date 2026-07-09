@@ -87,6 +87,7 @@ body {
   background: rgba(251,253,251,.85); z-index: 500; text-align: center; padding: 24px;
   color: var(--ink-soft); font-size: 1.05rem; pointer-events: none;
 }
+.map-empty[hidden] { display: none; }
 
 /* ---------- tab bar ---------- */
 

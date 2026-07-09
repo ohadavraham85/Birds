@@ -53,6 +53,18 @@ export async function activate() {
     </div>
 
     <div class="settings-card">
+      <h3>🎬 נתוני הדגמה</h3>
+      <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
+        רוצים לראות איך האפליקציה נראית מלאה? טענו 12 תצפיות לדוגמה (עם מפה,
+        תמונות והערות). אפשר להסיר אותן בלחיצה בלי לפגוע בתצפיות אמיתיות.
+      </p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary" id="s-demo-load">🎬 טעינת נתוני דמה</button>
+        <button class="btn" id="s-demo-remove">🧹 הסרת נתוני הדמה</button>
+      </div>
+    </div>
+
+    <div class="settings-card">
       <h3>🗄️ נתונים מקומיים</h3>
       <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
         במכשיר זה שמורות כרגע ${obsCount} תצפיות.
@@ -69,6 +81,8 @@ export async function activate() {
   container.querySelector('#s-backup').addEventListener('click', onBackup);
   container.querySelector('#s-restore').addEventListener('change', onRestore);
   container.querySelector('#s-clear').addEventListener('click', onClearData);
+  container.querySelector('#s-demo-load').addEventListener('click', onLoadDemo);
+  container.querySelector('#s-demo-remove').addEventListener('click', onRemoveDemo);
   await renderSpeciesList();
 }
 
@@ -179,6 +193,26 @@ async function onRestore(e) {
     });
   }
   toast('השחזור הושלם ✓');
+  await activate();
+}
+
+async function onLoadDemo() {
+  const btn = container.querySelector('#s-demo-load');
+  btn.disabled = true;
+  try {
+    const { loadDemoData } = await import('../demo-data.js');
+    const n = await loadDemoData();
+    toast(`נטענו ${n} תצפיות לדוגמה — עברו למסכי היומן, הרשימה והמפה 🎉`, false, 5000);
+    await activate();
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function onRemoveDemo() {
+  const { removeDemoData } = await import('../demo-data.js');
+  const n = await removeDemoData();
+  toast(n ? `הוסרו ${n} תצפיות דמה` : 'אין נתוני דמה להסרה');
   await activate();
 }
 
