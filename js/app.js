@@ -8,6 +8,7 @@ import * as formView from './views/form.js';
 import * as mapView from './views/map.js';
 import * as tableView from './views/table.js';
 import * as cardsView from './views/cards.js';
+import * as speciesView from './views/species.js';
 import * as settingsView from './views/settings.js';
 
 const VIEWS = {
@@ -15,6 +16,7 @@ const VIEWS = {
   map: mapView,
   table: tableView,
   cards: cardsView,
+  species: speciesView,
   settings: settingsView,
 };
 

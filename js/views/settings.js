@@ -2,9 +2,9 @@
  * וניהול הנתונים המקומיים. הכול בקליינט — ללא שום צד שרת. */
 
 import {
-  listSpecies, addSpecies, removeSpecies,
+  listSpecies, addSpecies,
   clearAllData, listObservations, listObservationsRaw,
-  putObservationRaw, saveMedia, mediaForObservation, seedSpeciesIfEmpty,
+  putObservationRaw, saveMedia, mediaForObservation,
 } from '../db.js';
 import { toast, confirmDialog } from '../ui.js';
 import { escapeHtml } from '../markdown.js';
@@ -24,18 +24,6 @@ export async function activate() {
 
   container.innerHTML = `
     <h2>הגדרות</h2>
-
-    <div class="settings-card">
-      <h3>🐦 רשימת מינים (רשימת המאסטר)</h3>
-      <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
-        הרשימה משמשת את תיבת הבחירה בטופס הדיווח — הדיווח מוגבל למינים שבה בלבד.
-      </p>
-      <div class="add-species-row">
-        <input type="text" id="s-new-species" placeholder="שם מין חדש...">
-        <button class="btn" id="s-add-species">➕ הוספה</button>
-      </div>
-      <div class="species-list" id="s-species-list"></div>
-    </div>
 
     <div class="settings-card">
       <h3>💾 גיבוי ושחזור</h3>
@@ -75,46 +63,11 @@ export async function activate() {
     </div>
   `;
 
-  container.querySelector('#s-add-species').addEventListener('click', onAddSpecies);
-  container.querySelector('#s-new-species').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); onAddSpecies(); }
-  });
   container.querySelector('#s-backup').addEventListener('click', onBackup);
   container.querySelector('#s-restore').addEventListener('change', onRestore);
   container.querySelector('#s-clear').addEventListener('click', onClearData);
   container.querySelector('#s-demo-load').addEventListener('click', onLoadDemo);
   container.querySelector('#s-demo-remove').addEventListener('click', onRemoveDemo);
-  await renderSpeciesList();
-}
-
-async function renderSpeciesList() {
-  const listEl = container.querySelector('#s-species-list');
-  const species = await listSpecies();
-  listEl.innerHTML = species
-    .map((s) => `
-      <div class="sp-row">
-        <span>${escapeHtml(s)}</span>
-        <button data-name="${escapeHtml(s)}" title="הסרה">✕</button>
-      </div>`)
-    .join('');
-  listEl.querySelectorAll('button[data-name]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      if (await confirmDialog(`להסיר את "${btn.dataset.name}" מרשימת המינים?`, 'הסרה')) {
-        await removeSpecies(btn.dataset.name);
-        await renderSpeciesList();
-      }
-    });
-  });
-}
-
-async function onAddSpecies() {
-  const input = container.querySelector('#s-new-species');
-  const name = input.value.trim();
-  if (!name) return;
-  await addSpecies(name);
-  input.value = '';
-  toast(`"${name}" נוסף לרשימת המינים`);
-  await renderSpeciesList();
 }
 
 /* ---------- full backup / restore (JSON, images as base64) ---------- */

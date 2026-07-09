@@ -360,6 +360,39 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
 .add-species-row { display: flex; gap: 8px; margin-top: 10px; }
 .add-species-row input { flex: 1; }
 
+/* ---------- species tab ---------- */
+
+.sp-summary { color: var(--ink-soft); font-size: .88rem; margin: 4px 0 12px; }
+.sp-cards { display: flex; flex-direction: column; gap: 8px; }
+.sp-group { margin-bottom: 10px; }
+.sp-group-head {
+  font-weight: 700; color: var(--green-900);
+  background: var(--green-50); border-radius: var(--radius);
+  padding: 7px 12px; margin-bottom: 6px;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.sp-group-n { background: var(--green-100); color: var(--green-900); border-radius: 999px; padding: 1px 10px; font-size: .8rem; }
+
+.sp-card {
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.sp-card .sp-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; padding: 11px 14px; cursor: pointer;
+}
+.sp-card.open .sp-row { background: var(--green-50); }
+.sp-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sp-he { font-weight: 700; color: var(--green-900); }
+.sp-en { color: var(--ink-soft); font-size: .85rem; direction: ltr; text-align: right; }
+.sp-side { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.sp-caret { color: var(--green-700); font-size: .75rem; }
+.sp-details { padding: 0 14px 14px; font-size: .92rem; line-height: 1.7; }
+.sp-details b { color: var(--green-900); }
+.sp-details i { color: var(--ink-soft); }
+.sp-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+
 /* ---------- toast & modal ---------- */
 
 .toast {

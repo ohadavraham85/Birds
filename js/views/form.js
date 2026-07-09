@@ -87,8 +87,11 @@ export function init(el) {
   container.querySelector('#cancel-edit-btn').addEventListener('click', () => resetForm());
 }
 
+let prefillSpecies = null;
+
 export function setParams(params) {
   editId = params?.editId || null;
+  prefillSpecies = params?.species || null;
 }
 
 export async function activate() {
@@ -96,6 +99,10 @@ export async function activate() {
   await fillProjectSuggestions();
   if (editId) {
     await loadForEdit(editId);
+  } else if (prefillSpecies) {
+    resetForm();
+    container.querySelector('#f-species').value = prefillSpecies;
+    prefillSpecies = null;
   } else if (!container.querySelector('#f-datetime').value) {
     resetForm();
   }
