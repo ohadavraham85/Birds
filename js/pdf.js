@@ -1,12 +1,11 @@
 /* pdf.js — הפקת דו"ח PDF מרוכז מתצפיות שנבחרו (סעיף 8ב).
- * הדו"ח נבנה כתבנית HTML מעוצבת (RTL מלא), מומר ל-PDF בצד הלקוח,
- * מוצע להורדה מקומית ומועלה ל-Google Drive כשמוגדר חיבור.
+ * POC בקליינט בלבד: הדו"ח נבנה כתבנית HTML מעוצבת (RTL מלא), מומר ל-PDF
+ * בצד הלקוח ומורד ישירות למכשיר.
  */
 
 import { fmtDateTime, fmtCoords, toast } from './ui.js';
 import { renderMarkdown, escapeHtml } from './markdown.js';
 import { getMedia } from './db.js';
-import { hasClientId, uploadReportPdf } from './drive.js';
 
 function buildReportElement(observations) {
   const el = document.createElement('div');
@@ -37,14 +36,13 @@ function buildReportElement(observations) {
   return el;
 }
 
-/** Attach locally available images (as data URLs) so they render into the PDF. */
+/** Attach stored images (as data URLs) so they render into the PDF. */
 async function attachImages(el, observations) {
   for (const o of observations) {
     const wrap = el.querySelector(`.rpt-imgs[data-obs="${o.id}"]`);
     if (!wrap || !o.images?.length) continue;
     for (const img of o.images.slice(0, 3)) {
-      const media = (img.localId && await getMedia(img.localId))
-        || (img.driveId && await getMedia('drive-' + img.driveId));
+      const media = img.localId && await getMedia(img.localId);
       if (!media?.blob) continue;
       const dataUrl = await blobToDataUrl(media.blob);
       const im = document.createElement('img');
@@ -88,27 +86,12 @@ export async function exportObservationsPdf(observations) {
       .from(el);
 
     const blob = await worker.output('blob');
-
-    // local download
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = fileName;
     a.click();
     URL.revokeObjectURL(a.href);
-
-    // save to Google Drive when connected (סעיף 8ב — שמירה ישירות בדרייב)
-    if (navigator.onLine && (await hasClientId())) {
-      try {
-        toast('שומר את הדו"ח ב-Google Drive...', false, 8000);
-        await uploadReportPdf(blob, fileName);
-        toast('הדו"ח נשמר ב-Google Drive ✓');
-      } catch (err) {
-        console.error(err);
-        toast('הדו"ח הורד למכשיר, אך השמירה לדרייב נכשלה: ' + err.message, true, 6000);
-      }
-    } else {
-      toast('הדו"ח הופק והורד למכשיר ✓');
-    }
+    toast('הדו"ח הופק והורד למכשיר ✓');
   } finally {
     host.remove();
   }

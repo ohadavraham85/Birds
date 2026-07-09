@@ -263,8 +263,8 @@ async function renderPreviews() {
     const el = document.createElement('img');
     el.alt = img.name || 'תמונה';
     div.appendChild(el);
-    const { getImageObjectUrl } = await import('../drive.js');
-    getImageObjectUrl(img, editId).then((url) => { if (url) el.src = url; });
+    const { getImageObjectUrl } = await import('../media.js');
+    getImageObjectUrl(img).then((url) => { if (url) el.src = url; });
     const rm = document.createElement('button');
     rm.type = 'button';
     rm.className = 'rm';
@@ -324,16 +324,15 @@ async function onSave(e) {
       name: p.file.name || 'image',
       mime: p.file.type,
       blob: p.file,
-      driveId: null,
     });
-    images.push({ localId: p.id, name: p.file.name || 'image', driveId: null });
+    images.push({ localId: p.id, name: p.file.name || 'image' });
   }
 
   // while editing: delete local blobs for images the user removed
   if (editId) {
     const existing = await mediaForObservation(editId);
     for (const m of existing) {
-      const kept = images.some((i) => i.localId === m.id || ('drive-' + i.driveId) === m.id);
+      const kept = images.some((i) => i.localId === m.id);
       if (!kept) await deleteMedia(m.id);
     }
   }

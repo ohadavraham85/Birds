@@ -12,7 +12,7 @@ const APP_SHELL = [
   './css/app.css',
   './js/app.js',
   './js/db.js',
-  './js/drive.js',
+  './js/media.js',
   './js/ui.js',
   './js/csv.js',
   './js/pdf.js',
@@ -52,7 +52,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if (event.request.method !== 'GET') return;
 
-  // cross-origin (Google APIs, OSM tiles, GIS) — network only
+  // cross-origin (OSM map tiles) — network only
   if (url.origin !== location.origin) return;
 
   // navigation / index: network-first so new versions land, cache fallback offline

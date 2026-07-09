@@ -1,10 +1,10 @@
-/* db.js — IndexedDB storage layer (offline-first)
+/* db.js — IndexedDB storage layer. POC: everything lives client-side.
  *
  * Stores:
- *  - observations: full observation rows (mirrors the "תצפיות" sheet)
- *  - species:      master species list (mirrors the "רשימת מינים" sheet)
- *  - media:        original image blobs, linked to observations
- *  - settings:     key/value app settings (OAuth client id, Drive ids, ...)
+ *  - observations: full observation rows (גיליון "תצפיות")
+ *  - species:      master species list (גיליון "רשימת מינים")
+ *  - media:        original-quality image blobs, linked to observations
+ *  - settings:     key/value app settings
  */
 
 const DB_NAME = 'birds-db';
@@ -95,20 +95,15 @@ export async function listObservations() {
     .sort((a, b) => (a.dateTime < b.dateTime ? 1 : -1));
 }
 
-/** Everything including tombstones — used by sync. */
+/** Everything, unsorted — used by backup/restore. */
 export async function listObservationsRaw() {
   return getAll('observations');
 }
 
-/** Soft-delete so the deletion propagates to Drive on next sync. */
 export async function deleteObservation(id) {
-  const obs = await get('observations', id);
-  if (!obs) return;
-  obs.deleted = true;
-  obs.updatedAt = new Date().toISOString();
-  await put('observations', obs);
   const media = await mediaForObservation(id);
   for (const m of media) await del('media', m.id);
+  await del('observations', id);
 }
 
 export async function putObservationRaw(obs) {
@@ -164,11 +159,6 @@ export async function mediaForObservation(obsId) {
   const db = await openDb();
   const idx = txStore(db, 'media', 'readonly').index('obsId');
   return reqAsPromise(idx.getAll(obsId));
-}
-
-export async function listPendingMedia() {
-  const all = await getAll('media');
-  return all.filter((m) => !m.driveId);
 }
 
 export async function deleteMedia(id) {

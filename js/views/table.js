@@ -116,7 +116,7 @@ async function onRowClick(e) {
     return;
   }
   if (e.target.closest('.act-del')) {
-    if (await confirmDialog('למחוק את התצפית? המחיקה תסונכרן גם ל-Google Drive.', 'מחיקה')) {
+    if (await confirmDialog('למחוק את התצפית?', 'מחיקה')) {
       await deleteObservation(id);
       selected.delete(id);
       await activate();

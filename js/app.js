@@ -1,10 +1,9 @@
-/* app.js — entry point: routing between the 4 main views (+settings),
- * service-worker registration, species seeding, global sync button. */
+/* app.js — entry point: routing between the 4 main views (+settings)
+ * and service-worker registration. POC: fully client-side, no server. */
 
-import { seedSpeciesIfEmpty, getSetting, setSetting } from './db.js';
+import { seedSpeciesIfEmpty } from './db.js';
 import { SPECIES_SEED } from './species-seed.js';
 import { toast } from './ui.js';
-import { syncNow, hasClientId } from './drive.js';
 import * as formView from './views/form.js';
 import * as mapView from './views/map.js';
 import * as tableView from './views/table.js';
@@ -41,11 +40,6 @@ export function navigate(name, params) {
   showView(name);
 }
 
-/** Refresh the visible view after data changes (e.g. post-sync). */
-export function refreshCurrentView() {
-  if (currentView) VIEWS[currentView].activate();
-}
-
 function setupNav() {
   document.querySelectorAll('.tab').forEach((tab) => {
     tab.addEventListener('click', () => showView(tab.dataset.view));
@@ -59,39 +53,11 @@ function setupNetStatus() {
   const el = document.getElementById('net-status');
   const update = () => {
     el.classList.toggle('offline', !navigator.onLine);
-    el.title = navigator.onLine ? 'מחובר לרשת' : 'ללא רשת — הנתונים נשמרים מקומית';
+    el.title = navigator.onLine ? 'מחובר לרשת' : 'ללא רשת — הכול ממשיך לעבוד מקומית';
   };
   window.addEventListener('online', update);
   window.addEventListener('offline', update);
   update();
-}
-
-function setupSyncButton() {
-  const btn = document.getElementById('sync-btn');
-  btn.addEventListener('click', async () => {
-    if (!(await hasClientId())) {
-      toast('כדי לסנכרן יש להגדיר חיבור ל-Google Drive במסך ההגדרות', true, 4000);
-      navigate('settings');
-      return;
-    }
-    if (!navigator.onLine) {
-      toast('אין חיבור לרשת — הסנכרון יתאפשר כשתחזרו לקליטה', true);
-      return;
-    }
-    btn.classList.add('syncing');
-    btn.disabled = true;
-    try {
-      const res = await syncNow((msg) => toast(msg, false, 10000));
-      toast(`הסנכרון הושלם — ${res.count} תצפיות בענן`);
-      refreshCurrentView();
-    } catch (err) {
-      console.error(err);
-      toast(err.message || 'הסנכרון נכשל', true, 5000);
-    } finally {
-      btn.classList.remove('syncing');
-      btn.disabled = false;
-    }
-  });
 }
 
 function registerServiceWorker() {
@@ -109,17 +75,8 @@ async function init() {
   }
   setupNav();
   setupNetStatus();
-  setupSyncButton();
   registerServiceWorker();
-
-  const first = location.hash.replace('#', '');
-  await showView(first || 'form');
-
-  // gentle first-run pointer to Drive setup
-  if (!(await getSetting('googleClientId')) && !(await getSetting('setupHintShown'))) {
-    setTimeout(() => toast('טיפ: חברו את האפליקציה ל-Google Drive דרך מסך ההגדרות', false, 5000), 1500);
-    await setSetting('setupHintShown', true);
-  }
+  await showView(location.hash.replace('#', '') || 'form');
 }
 
 init().catch((err) => {

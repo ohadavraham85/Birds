@@ -4,7 +4,7 @@
 import { listObservations } from '../db.js';
 import { fmtDateTime, fmtCoords, showImageModal } from '../ui.js';
 import { renderMarkdown, escapeHtml } from '../markdown.js';
-import { getImageObjectUrl } from '../drive.js';
+import { getImageObjectUrl } from '../media.js';
 
 let container = null;
 
@@ -47,7 +47,7 @@ export async function activate() {
         el.alt = img.name || 'תמונת תצפית';
         el.loading = 'lazy';
         imgWrap.appendChild(el);
-        getImageObjectUrl(img, o.id).then((url) => {
+        getImageObjectUrl(img).then((url) => {
           if (url) {
             el.src = url;
             el.onclick = () => showImageModal(url, o.species);
