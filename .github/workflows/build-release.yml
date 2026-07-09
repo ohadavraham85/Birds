@@ -13,6 +13,8 @@ permissions:
 jobs:
   build-release:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -73,3 +75,35 @@ jobs:
           gh release create "v$VER" "dist/birds-app-v$VER.zip" \
             --title "יומן צפרות v$VER" \
             --notes "$NOTES"
+
+  # פרסום ל-GitHub Pages — האפליקציה זמינה להתקנה כ-PWA בטלפון
+  deploy-pages:
+    needs: build-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Download build
+        uses: actions/download-artifact@v4
+        with:
+          name: birds-app-v${{ needs.build-release.outputs.version }}
+          path: site
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
