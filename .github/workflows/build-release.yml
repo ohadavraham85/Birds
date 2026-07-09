@@ -1,0 +1,76 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [claude/bird-observation-pwa-kqedtw, main]
+    paths-ignore:
+      - '**.md'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify JavaScript syntax
+        run: |
+          set -e
+          for f in $(find js sw.js -name '*.js'); do
+            node --check "$f"
+            echo "OK $f"
+          done
+
+      - name: Compute next version
+        id: ver
+        run: |
+          latest=$(git tag -l 'v*' --sort=-v:refname | head -1)
+          if [ -z "$latest" ]; then
+            next="1.0.0"
+          else
+            IFS=. read -r major minor patch <<< "${latest#v}"
+            next="$major.$minor.$((patch + 1))"
+          fi
+          echo "version=$next" >> "$GITHUB_OUTPUT"
+          echo "Next version: v$next (previous: ${latest:-none})"
+
+      - name: Build package
+        run: |
+          VER="${{ steps.ver.outputs.version }}"
+          mkdir -p dist/birds-app
+          rsync -a --exclude dist --exclude .git --exclude .github ./ dist/birds-app/
+          # stamp the version into the app
+          echo "{\"version\": \"$VER\", \"builtAt\": \"$(date -u +%FT%TZ)\", \"commit\": \"$GITHUB_SHA\"}" > dist/birds-app/version.json
+          # bust the service-worker cache so installed clients pick up the new version
+          sed -i "s/const CACHE = 'birds-app-v[^']*'/const CACHE = 'birds-app-v$VER'/" dist/birds-app/sw.js
+          grep "const CACHE" dist/birds-app/sw.js
+          cd dist
+          zip -qr "birds-app-v$VER.zip" birds-app
+          ls -la *.zip
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: birds-app-v${{ steps.ver.outputs.version }}
+          path: dist/birds-app
+
+      - name: Tag and create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VER="${{ steps.ver.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "v$VER"
+          git push origin "v$VER"
+          gh release create "v$VER" "dist/birds-app-v$VER.zip" \
+            --title "יומן צפרות v$VER" \
+            --notes "בנייה אוטומטית מ-commit ${GITHUB_SHA::7}.
+
+**התקנה:** מחלצים את ה-ZIP ומעלים לכל אחסון סטטי עם HTTPS (GitHub Pages / Netlify / Cloudflare Pages), או מריצים מקומית עם \`npx http-server\`."
