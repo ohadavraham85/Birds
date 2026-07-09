@@ -12,9 +12,11 @@ import { exportObservationsPdf } from '../pdf.js';
 let container = null;
 let selected = new Set();
 let observations = [];      // all, newest first
-let filtered = [];          // after filters
-const filters = { q: '', species: '', project: '' };
+let filtered = [];          // after filters, then sorted
+const filters = { q: '', species: '', project: '', from: '', to: '' };
 let groupBy = 'none';       // 'none' | 'project' | 'species'
+let sortBy = 'dateTime';    // column key
+let sortDir = 'desc';       // 'asc' | 'desc'
 
 export function init(el) {
   container = el;
@@ -30,6 +32,8 @@ export function init(el) {
         <option value="project">קיבוץ לפי פרויקט</option>
         <option value="species">קיבוץ לפי מין</option>
       </select>
+      <label class="date-range">מ־<input type="date" id="flt-from" title="מתאריך"></label>
+      <label class="date-range">עד<input type="date" id="flt-to" title="עד תאריך"></label>
       <button class="btn btn-sm" id="flt-clear" title="ניקוי סינון">נקה</button>
     </div>
 
@@ -53,14 +57,14 @@ export function init(el) {
     <div class="table-wrap">
       <table class="obs-table">
         <thead>
-          <tr>
+          <tr id="obs-head">
             <th style="width:36px"><input type="checkbox" id="sel-all" title="בחירת כל המוצג"></th>
-            <th>תאריך ושעה</th>
-            <th>מין הציפור</th>
-            <th>כמות</th>
-            <th>מיקום</th>
+            <th class="sortable" data-sort="dateTime">תאריך ושעה<span class="sort-ind"></span></th>
+            <th class="sortable" data-sort="species">מין הציפור<span class="sort-ind"></span></th>
+            <th class="sortable" data-sort="quantity">כמות<span class="sort-ind"></span></th>
+            <th class="sortable" data-sort="locationName">מיקום<span class="sort-ind"></span></th>
             <th>קואורדינטות</th>
-            <th>פרויקט</th>
+            <th class="sortable" data-sort="project">פרויקט<span class="sort-ind"></span></th>
             <th>הערות</th>
             <th></th>
           </tr>
@@ -75,7 +79,10 @@ export function init(el) {
   container.querySelector('#flt-species').addEventListener('change', (e) => { filters.species = e.target.value; applyFilters(); });
   container.querySelector('#flt-project').addEventListener('change', (e) => { filters.project = e.target.value; applyFilters(); });
   container.querySelector('#flt-group').addEventListener('change', (e) => { groupBy = e.target.value; renderRows(); });
+  container.querySelector('#flt-from').addEventListener('change', (e) => { filters.from = e.target.value; applyFilters(); });
+  container.querySelector('#flt-to').addEventListener('change', (e) => { filters.to = e.target.value; applyFilters(); });
   container.querySelector('#flt-clear').addEventListener('click', clearFilters);
+  container.querySelector('#obs-head').addEventListener('click', onHeaderClick);
 
   container.querySelector('#sel-all').addEventListener('change', (e) => {
     if (e.target.checked) filtered.forEach((o) => selected.add(o.id));
@@ -109,25 +116,85 @@ function populateFilterOptions() {
   fill(container.querySelector('#flt-project'), projects, filters.project);
 }
 
+function localDay(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
 function applyFilters() {
   const q = filters.q.trim().toLowerCase();
   filtered = observations.filter((o) => {
     if (filters.species && o.species !== filters.species) return false;
     if (filters.project && (o.project || '') !== filters.project) return false;
+    if (filters.from || filters.to) {
+      const day = localDay(o.dateTime);
+      if (filters.from && day && day < filters.from) return false;
+      if (filters.to && day && day > filters.to) return false;
+    }
     if (q) {
       const hay = `${o.species} ${o.locationName || ''} ${o.project || ''} ${o.notes || ''}`.toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
   });
+  sortFiltered();
   renderRows();
 }
 
+function sortFiltered() {
+  const dir = sortDir === 'asc' ? 1 : -1;
+  filtered.sort((a, b) => {
+    let r;
+    if (sortBy === 'quantity') {
+      r = (a.quantity ?? 1) - (b.quantity ?? 1);
+    } else if (sortBy === 'dateTime') {
+      r = (a.dateTime || '') < (b.dateTime || '') ? -1 : (a.dateTime || '') > (b.dateTime || '') ? 1 : 0;
+    } else {
+      r = String(a[sortBy] || '').localeCompare(String(b[sortBy] || ''), 'he');
+    }
+    if (r === 0) { // stable tiebreaker: newest first
+      r = (a.dateTime || '') < (b.dateTime || '') ? -1 : (a.dateTime || '') > (b.dateTime || '') ? 1 : 0;
+    }
+    return r * dir;
+  });
+}
+
+function onHeaderClick(e) {
+  const th = e.target.closest('th.sortable');
+  if (!th) return;
+  const key = th.dataset.sort;
+  if (sortBy === key) {
+    sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    sortBy = key;
+    sortDir = key === 'dateTime' ? 'desc' : 'asc'; // dates default newest-first, text A→Z
+  }
+  sortFiltered();
+  renderRows();
+}
+
+function updateSortIndicators() {
+  container.querySelectorAll('#obs-head th.sortable').forEach((th) => {
+    const ind = th.querySelector('.sort-ind');
+    if (th.dataset.sort === sortBy) {
+      th.classList.add('sorted');
+      ind.textContent = sortDir === 'asc' ? ' ▲' : ' ▼';
+    } else {
+      th.classList.remove('sorted');
+      ind.textContent = '';
+    }
+  });
+}
+
 function clearFilters() {
-  filters.q = ''; filters.species = ''; filters.project = '';
+  filters.q = ''; filters.species = ''; filters.project = ''; filters.from = ''; filters.to = '';
   container.querySelector('#flt-q').value = '';
   container.querySelector('#flt-species').value = '';
   container.querySelector('#flt-project').value = '';
+  container.querySelector('#flt-from').value = '';
+  container.querySelector('#flt-to').value = '';
   applyFilters();
 }
 
@@ -185,6 +252,7 @@ function renderRows() {
         </tr>` + rows.map(rowHtml).join('');
     }).join('');
   }
+  updateSortIndicators();
   updateToolbar();
 }
 

@@ -261,6 +261,16 @@ textarea { min-height: 130px; resize: vertical; white-space: pre-wrap; line-heig
   color: var(--ink);
   max-width: 46vw;
 }
+.date-range {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: .85rem; color: var(--ink-soft);
+}
+.date-range input {
+  padding: 7px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font: inherit;
+}
 
 /* ---------- export dropdown ---------- */
 
@@ -294,6 +304,10 @@ textarea { min-height: 130px; resize: vertical; white-space: pre-wrap; line-heig
 table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font-size: .92rem; }
 .obs-table th, .obs-table td { padding: 9px 10px; text-align: right; border-bottom: 1px solid var(--line); vertical-align: top; }
 .obs-table th { background: var(--green-50); color: var(--green-900); position: sticky; top: 0; }
+.obs-table th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+.obs-table th.sortable:hover { background: var(--green-100); }
+.obs-table th.sorted { background: var(--green-100); }
+.obs-table th .sort-ind { font-size: .8em; color: var(--green-700); }
 .obs-table tbody tr:hover { background: var(--green-50); }
 .obs-table tr.selected { background: var(--green-100); }
 .obs-table .num { direction: ltr; text-align: left; white-space: nowrap; }
