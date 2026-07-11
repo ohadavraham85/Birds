@@ -1,25 +1,10 @@
 /* views/map.ts — מסך מפת השטח: סיכות תצפיות לפי קואורדינטות GPS. */
 
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-import markerIcon from 'leaflet/dist/images/marker-icon.png';
-import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
-import markerShadow from 'leaflet/dist/images/marker-shadow.png';
+import L from '../lib/leaflet-setup';
 import { listObservations } from '../db/repository';
 import { fmtDateTime } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
-
-// Fix Leaflet's default marker asset URLs for bundlers.
-const DefaultIcon = L.icon({
-  iconUrl: markerIcon,
-  iconRetinaUrl: markerIcon2x,
-  shadowUrl: markerShadow,
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41],
-});
-L.Marker.prototype.options.icon = DefaultIcon;
+import { speciesLabel } from '../lib/observation';
 
 let container: HTMLElement;
 let map: L.Map | undefined;
@@ -56,7 +41,7 @@ export async function activate(): Promise<void> {
   for (const o of withCoords) {
     const marker = L.marker([o.lat!, o.lng!]);
     marker.bindPopup(`
-      <div class="species">${escapeHtml(o.species)}${o.quantity > 1 ? ` × ${o.quantity}` : ''}</div>
+      <div class="species">${escapeHtml(speciesLabel(o))}</div>
       <div>${fmtDateTime(o.dateTime)}</div>
       ${o.locationName ? `<div>📍 ${escapeHtml(o.locationName)}</div>` : ''}
       ${o.project ? `<div>🏷️ ${escapeHtml(o.project)}</div>` : ''}

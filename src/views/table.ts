@@ -9,6 +9,7 @@ import { escapeHtml } from '../lib/markdown';
 import { parseCsv, toCsv, mapHeaders, parseCoordinates, parseDateTime, type HeaderMap, type CsvField } from '../lib/csv';
 import { exportObservationsPdf } from '../lib/pdf';
 import { qs, input, select } from '../lib/dom';
+import { speciesNames, totalQuantity, hasSpecies, primarySpecies, speciesLabel, entriesOf } from '../lib/observation';
 import { navigate } from '../main';
 import type { ViewParams } from './view';
 import type { Observation } from '../types';
@@ -118,7 +119,7 @@ export async function activate(): Promise<void> {
 /* ---------- filtering ---------- */
 
 function populateFilterOptions(): void {
-  const species = [...new Set(observations.map((o) => o.species).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'he'));
+  const species = [...new Set(observations.flatMap(speciesNames))].sort((a, b) => a.localeCompare(b, 'he'));
   const projects = [...new Set(observations.map((o) => o.project).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'he'));
   const fill = (sel: HTMLSelectElement, items: string[], keep: string, allLabel: string): void => {
     sel.innerHTML = `<option value="">${allLabel}</option>`
@@ -138,7 +139,7 @@ function localDay(iso: string): string {
 function applyFilters(): void {
   const q = filters.q.trim().toLowerCase();
   filtered = observations.filter((o) => {
-    if (filters.species && o.species !== filters.species) return false;
+    if (filters.species && !hasSpecies(o, filters.species)) return false;
     if (filters.project && (o.project || '') !== filters.project) return false;
     if (filters.from || filters.to) {
       const day = localDay(o.dateTime);
@@ -146,7 +147,7 @@ function applyFilters(): void {
       if (filters.to && day && day > filters.to) return false;
     }
     if (q) {
-      const hay = `${o.species} ${o.locationName || ''} ${o.project || ''} ${o.notes || ''}`.toLowerCase();
+      const hay = `${speciesNames(o).join(' ')} ${o.locationName || ''} ${o.project || ''} ${o.notes || ''}`.toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
@@ -161,8 +162,9 @@ function sortFiltered(): void {
     (a.dateTime || '') < (b.dateTime || '') ? -1 : (a.dateTime || '') > (b.dateTime || '') ? 1 : 0;
   filtered.sort((a, b) => {
     let r: number;
-    if (sortBy === 'quantity') r = (a.quantity ?? 1) - (b.quantity ?? 1);
+    if (sortBy === 'quantity') r = totalQuantity(a) - totalQuantity(b);
     else if (sortBy === 'dateTime') r = byDate(a, b);
+    else if (sortBy === 'species') r = primarySpecies(a).localeCompare(primarySpecies(b), 'he');
     else r = String(a[sortBy] || '').localeCompare(String(b[sortBy] || ''), 'he');
     if (r === 0) r = byDate(a, b);
     return r * dir;
@@ -204,8 +206,8 @@ function rowHtml(o: Observation): string {
     <tr data-id="${o.id}" class="${selected.has(o.id) ? 'selected' : ''}">
       <td><input type="checkbox" class="row-sel" ${selected.has(o.id) ? 'checked' : ''}></td>
       <td class="num">${fmtDateTime(o.dateTime)}</td>
-      <td><strong>${escapeHtml(o.species)}</strong></td>
-      <td>${o.quantity ?? 1}</td>
+      <td><strong>${escapeHtml(speciesLabel(o))}</strong></td>
+      <td>${totalQuantity(o)}</td>
       <td>${escapeHtml(o.locationName || '')}</td>
       <td class="num">${fmtCoords(o.lat, o.lng)}</td>
       <td>${o.project ? `<span class="badge">${escapeHtml(o.project)}</span>` : ''}</td>
@@ -217,10 +219,10 @@ function rowHtml(o: Observation): string {
     </tr>`;
 }
 
-function groupKey(o: Observation): string {
-  if (groupBy === 'project') return o.project || '(ללא פרויקט)';
-  if (groupBy === 'species') return o.species || '(ללא מין)';
-  return '';
+function groupKeys(o: Observation): string[] {
+  if (groupBy === 'project') return [o.project || '(ללא פרויקט)'];
+  if (groupBy === 'species') return speciesNames(o).length ? speciesNames(o) : ['(ללא מין)'];
+  return [];
 }
 
 function renderRows(): void {
@@ -232,13 +234,12 @@ function renderRows(): void {
   } else {
     const groups = new Map<string, Observation[]>();
     for (const o of filtered) {
-      const k = groupKey(o);
-      (groups.get(k) ?? groups.set(k, []).get(k)!).push(o);
+      for (const k of groupKeys(o)) (groups.get(k) ?? groups.set(k, []).get(k)!).push(o);
     }
     const keys = [...groups.keys()].sort((a, b) => a.localeCompare(b, 'he'));
     tbody.innerHTML = keys.map((k) => {
       const rows = groups.get(k)!;
-      const totalQty = rows.reduce((s, o) => s + (o.quantity ?? 1), 0);
+      const totalQty = rows.reduce((s, o) => s + totalQuantity(o), 0);
       const allSel = rows.every((o) => selected.has(o.id));
       return `
         <tr class="group-head" data-group="${escapeHtml(k)}">
@@ -272,7 +273,7 @@ async function onRowClick(e: Event): Promise<void> {
   const groupHead = target.closest<HTMLElement>('tr.group-head');
   if (groupHead && target.classList.contains('group-sel')) {
     const key = groupHead.dataset.group!;
-    const rows = filtered.filter((o) => groupKey(o) === key);
+    const rows = filtered.filter((o) => groupKeys(o).includes(key));
     const checked = (target as HTMLInputElement).checked;
     rows.forEach((o) => (checked ? selected.add(o.id) : selected.delete(o.id)));
     renderRows();
@@ -356,9 +357,13 @@ async function exportPdf(): Promise<void> {
 function exportExcel(): void {
   const source = exportSet();
   if (!source.length) { toast('אין תצפיות לייצוא', true); return; }
+  // one row per species entry so multi-species observations expand cleanly
   const rows: unknown[][] = [
     ['תאריך ושעה', 'מיקום', 'קו רוחב', 'קו אורך', 'פרויקט', 'מין הציפור', 'מספר פרטים', 'הערות'],
-    ...source.map((o) => [o.dateTime, o.locationName || '', o.lat ?? '', o.lng ?? '', o.project || '', o.species, o.quantity ?? 1, o.notes || '']),
+    ...source.flatMap((o) => {
+      const entries = entriesOf(o).length ? entriesOf(o) : [{ species: '', quantity: 1 }];
+      return entries.map((e) => [o.dateTime, o.locationName || '', o.lat ?? '', o.lng ?? '', o.project || '', e.species, e.quantity ?? 1, o.notes || '']);
+    }),
   ];
   const blob = new Blob([toCsv(rows)], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
@@ -406,8 +411,7 @@ async function onImportCsv(e: Event): Promise<void> {
       lat: Number.isFinite(lat) ? lat : null,
       lng: Number.isFinite(lng) ? lng : null,
       project: val(r, 'project'),
-      species,
-      quantity: Math.max(1, parseInt(val(r, 'quantity'), 10) || 1),
+      entries: [{ species, quantity: Math.max(1, parseInt(val(r, 'quantity'), 10) || 1) }],
       images: [],
       notes: map.notes != null ? String(r[map.notes] ?? '') : '',
       deleted: false,

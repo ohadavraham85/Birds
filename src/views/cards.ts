@@ -4,6 +4,7 @@ import { listObservations } from '../db/repository';
 import { fmtDateTime, fmtCoords, showImageModal } from '../lib/ui';
 import { renderMarkdown, escapeHtml } from '../lib/markdown';
 import { getImageObjectUrl } from '../lib/media';
+import { speciesLabel, primarySpecies } from '../lib/observation';
 
 let container: HTMLElement;
 
@@ -27,7 +28,7 @@ export async function activate(): Promise<void> {
     card.className = 'obs-card';
     card.innerHTML = `
       <div class="card-head">
-        <span class="species">${escapeHtml(o.species)}<span class="qty"> × ${o.quantity ?? 1}</span></span>
+        <span class="species">${escapeHtml(speciesLabel(o))}</span>
         ${o.project ? `<span class="badge">${escapeHtml(o.project)}</span>` : ''}
       </div>
       <div class="meta">
@@ -49,7 +50,7 @@ export async function activate(): Promise<void> {
         void getImageObjectUrl(img).then((url) => {
           if (url) {
             el.src = url;
-            el.onclick = (): void => showImageModal(url, o.species);
+            el.onclick = (): void => showImageModal(url, primarySpecies(o));
           } else {
             el.remove();
           }

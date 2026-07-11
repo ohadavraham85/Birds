@@ -7,6 +7,7 @@ import html2pdf from 'html2pdf.js';
 import { fmtDateTime, fmtCoords, toast } from './ui';
 import { renderMarkdown, escapeHtml } from './markdown';
 import { getMedia } from '../db/repository';
+import { speciesLabel, totalQuantity } from './observation';
 import type { Observation } from '../types';
 
 function buildReportElement(observations: Observation[]): HTMLElement {
@@ -24,7 +25,7 @@ function buildReportElement(observations: Observation[]): HTMLElement {
     </div>
     ${observations.map((o) => `
       <div class="rpt-obs">
-        <h2>${escapeHtml(o.species)}${(o.quantity ?? 1) > 1 ? ` — ${o.quantity} פרטים` : ''}</h2>
+        <h2>${escapeHtml(speciesLabel(o))}${totalQuantity(o) > 1 ? ` — ${totalQuantity(o)} פרטים` : ''}</h2>
         <div class="rpt-grid">
           <div><b>תאריך ושעה:</b> ${fmtDateTime(o.dateTime)}</div>
           <div><b>מיקום:</b> ${escapeHtml(o.locationName || '—')}</div>

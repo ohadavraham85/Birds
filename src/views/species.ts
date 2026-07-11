@@ -5,6 +5,7 @@ import { listSpecies, addSpecies, removeSpecies, listObservations } from '../db/
 import { SPECIES_DETAILS } from '../data/species-data';
 import { toast, confirmDialog } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
+import { speciesNames } from '../lib/observation';
 import { qs, input, select } from '../lib/dom';
 import { navigate } from '../main';
 import type { SpeciesDetail } from '../types';
@@ -45,7 +46,7 @@ export async function activate(): Promise<void> {
   names = await listSpecies();
   const obs = await listObservations();
   counts = {};
-  for (const o of obs) counts[o.species] = (counts[o.species] || 0) + 1;
+  for (const o of obs) for (const name of speciesNames(o)) counts[name] = (counts[name] || 0) + 1;
   render();
 }
 

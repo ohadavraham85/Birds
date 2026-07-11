@@ -1,5 +1,5 @@
-/* views/form.ts — טופס הדיווח האחוד: מסך אחד רציף (תאריך, מיקום + GPS, פרויקט,
- * מין מרשימת המאסטר עם חיפוש והשלמה, כמות, תמונות באיכות מקור, הערות). */
+/* views/form.ts — טופס הדיווח האחוד: מסך אחד רציף. תומך בכמה מיני ציפור
+ * בתצפית אחת, ובבחירת מיקום על מפה (בררת מחדל: המיקום הנוכחי). */
 
 import {
   saveObservation, getObservation, listObservations, listSpecies,
@@ -8,9 +8,11 @@ import {
 import { toast, toLocalInputValue, fromLocalInputValue } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
 import { getImageObjectUrl } from '../lib/media';
+import { pickLocation } from '../lib/location-picker';
+import { entriesOf } from '../lib/observation';
 import { qs, input } from '../lib/dom';
 import type { ViewParams } from './view';
-import type { Observation, ObservationImage } from '../types';
+import type { Observation, ObservationImage, SpeciesEntry } from '../types';
 
 interface PendingImage { id: string; file: File; url: string }
 
@@ -48,19 +50,15 @@ export function init(el: HTMLElement): void {
         <div class="coords-row">
           <input type="number" step="any" id="f-lat" placeholder="קו רוחב (Lat)" inputmode="decimal">
           <input type="number" step="any" id="f-lng" placeholder="קו אורך (Lng)" inputmode="decimal">
-          <button type="button" class="btn btn-icon" id="gps-btn" title="עדכון מיקום GPS">📍</button>
+          <button type="button" class="btn btn-icon" id="pick-map-btn" title="בחירת מיקום על המפה">📍</button>
         </div>
-      </div>
-
-      <div class="field combo">
-        <label for="f-species">מין הציפור <span class="hint">(בחירה מרשימת המינים בלבד)</span></label>
-        <input type="text" id="f-species" placeholder="הקלידו לחיפוש מהיר..." required>
-        <div class="combo-list" id="species-list" hidden></div>
+        <span class="hint">ברירת מחדל: המיקום הנוכחי · לחצו על הסיכה כדי לבחור על המפה</span>
       </div>
 
       <div class="field">
-        <label for="f-quantity">מספר פרטים</label>
-        <input type="number" id="f-quantity" min="1" step="1" value="1" inputmode="numeric">
+        <label>מיני הציפור <span class="hint">(אפשר להוסיף יותר ממין אחד)</span></label>
+        <div id="species-rows"></div>
+        <button type="button" class="btn btn-sm" id="add-species-row" style="margin-top:6px">➕ הוספת מין</button>
       </div>
 
       <div class="field">
@@ -84,9 +82,9 @@ export function init(el: HTMLElement): void {
     </form>
   `;
 
-  setupSpeciesCombo();
   setupImages();
-  setupGps();
+  qs(container, '#pick-map-btn').addEventListener('click', () => void openPicker());
+  qs(container, '#add-species-row').addEventListener('click', () => addSpeciesRow('', 1, true));
   qs<HTMLFormElement>(container, '#obs-form').addEventListener('submit', (e) => void onSave(e));
   qs(container, '#cancel-edit-btn').addEventListener('click', () => resetForm());
 }
@@ -103,7 +101,7 @@ export async function activate(): Promise<void> {
     await loadForEdit(editId);
   } else if (prefillSpecies) {
     resetForm();
-    input(container, '#f-species').value = prefillSpecies;
+    setEntries([{ species: prefillSpecies, quantity: 1 }]);
     prefillSpecies = null;
   } else if (!input(container, '#f-datetime').value) {
     resetForm();
@@ -117,12 +115,12 @@ function resetForm(): void {
   pendingImages = [];
   qs<HTMLFormElement>(container, '#obs-form').reset();
   input(container, '#f-datetime').value = toLocalInputValue();
-  input(container, '#f-quantity').value = '1';
+  setEntries([{ species: '', quantity: 1 }]);
   qs(container, '#form-title').textContent = 'תצפית חדשה';
   qs(container, '#save-btn').textContent = '💾 שמירת התצפית';
   qs(container, '#cancel-edit-btn').hidden = true;
   void renderPreviews();
-  autoFillGps(false);
+  autoFillGps();
 }
 
 async function loadForEdit(id: string): Promise<void> {
@@ -136,8 +134,7 @@ async function loadForEdit(id: string): Promise<void> {
   input(container, '#f-project').value = obs.project || '';
   input(container, '#f-lat').value = obs.lat == null ? '' : String(obs.lat);
   input(container, '#f-lng').value = obs.lng == null ? '' : String(obs.lng);
-  input(container, '#f-species').value = obs.species || '';
-  input(container, '#f-quantity').value = String(obs.quantity ?? 1);
+  setEntries(entriesOf(obs).length ? entriesOf(obs) : [{ species: '', quantity: 1 }]);
   qs<HTMLTextAreaElement>(container, '#f-notes').value = obs.notes || '';
   editKeptImages = [...(obs.images || [])];
   pendingImages.forEach((p) => URL.revokeObjectURL(p.url));
@@ -151,18 +148,14 @@ async function fillProjectSuggestions(): Promise<void> {
   qs(container, '#project-list').innerHTML = projects.map((p) => `<option value="${escapeHtml(p)}">`).join('');
 }
 
-/* ---------- GPS ---------- */
+/* ---------- location (default = current; pin opens the map picker) ---------- */
 
-function setupGps(): void {
-  qs(container, '#gps-btn').addEventListener('click', () => autoFillGps(true));
-}
-
-function autoFillGps(force: boolean): void {
+function autoFillGps(): void {
   const latEl = input(container, '#f-lat');
   const lngEl = input(container, '#f-lng');
   const status = qs(container, '#gps-status');
-  if (!navigator.geolocation) { status.textContent = '(GPS לא זמין במכשיר זה)'; return; }
-  if (!force && (latEl.value || lngEl.value)) return;
+  if (!navigator.geolocation) { status.textContent = '(GPS לא זמין)'; return; }
+  if (latEl.value || lngEl.value) return;
   status.textContent = '(מאתר מיקום...)';
   navigator.geolocation.getCurrentPosition(
     (pos) => {
@@ -170,34 +163,82 @@ function autoFillGps(force: boolean): void {
       lngEl.value = pos.coords.longitude.toFixed(6);
       status.textContent = `(דיוק ±${Math.round(pos.coords.accuracy)} מ')`;
     },
-    () => { status.textContent = force ? '(איתור המיקום נכשל)' : ''; },
+    () => { status.textContent = ''; },
     { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 },
   );
 }
 
-/* ---------- species combobox ---------- */
+async function openPicker(): Promise<void> {
+  const latEl = input(container, '#f-lat');
+  const lngEl = input(container, '#f-lng');
+  const lat = parseFloat(latEl.value);
+  const lng = parseFloat(lngEl.value);
+  const initial = Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+  const result = await pickLocation(initial);
+  if (result) {
+    latEl.value = result.lat.toFixed(6);
+    lngEl.value = result.lng.toFixed(6);
+    qs(container, '#gps-status').textContent = '(נבחר על המפה)';
+  }
+}
 
-function setupSpeciesCombo(): void {
-  const inp = input(container, '#f-species');
-  const list = qs(container, '#species-list');
+/* ---------- species rows (multi-species) ---------- */
+
+function setEntries(entries: SpeciesEntry[]): void {
+  qs(container, '#species-rows').innerHTML = '';
+  for (const e of entries) addSpeciesRow(e.species, e.quantity, false);
+}
+
+function collectEntries(): SpeciesEntry[] {
+  const rows = Array.from(container.querySelectorAll<HTMLElement>('#species-rows .sp-entry'));
+  const out: SpeciesEntry[] = [];
+  for (const row of rows) {
+    const species = row.querySelector<HTMLInputElement>('.sp-input')!.value.trim();
+    const quantity = Math.max(1, parseInt(row.querySelector<HTMLInputElement>('.sp-qty')!.value, 10) || 1);
+    if (species) out.push({ species, quantity });
+  }
+  return out;
+}
+
+function addSpeciesRow(species: string, quantity: number, focus: boolean): void {
+  const rows = qs(container, '#species-rows');
+  const row = document.createElement('div');
+  row.className = 'sp-entry';
+  row.innerHTML = `
+    <div class="combo sp-combo">
+      <input type="text" class="sp-input" placeholder="הקלידו לחיפוש מין..." value="${escapeHtml(species)}">
+      <div class="combo-list" hidden></div>
+    </div>
+    <input type="number" class="sp-qty" min="1" step="1" inputmode="numeric" value="${quantity}" title="מספר פרטים">
+    <button type="button" class="btn btn-icon sp-remove" title="הסרת מין">✕</button>
+  `;
+  rows.appendChild(row);
+  wireCombo(row);
+  row.querySelector('.sp-remove')!.addEventListener('click', () => {
+    if (container.querySelectorAll('#species-rows .sp-entry').length > 1) row.remove();
+    else { row.querySelector<HTMLInputElement>('.sp-input')!.value = ''; }
+  });
+  if (focus) row.querySelector<HTMLInputElement>('.sp-input')!.focus();
+}
+
+function wireCombo(row: HTMLElement): void {
+  const inp = row.querySelector<HTMLInputElement>('.sp-input')!;
+  const list = row.querySelector<HTMLElement>('.combo-list')!;
   let hlIndex = -1;
 
   const highlight = (s: string, q: string): string => {
     const esc = escapeHtml(s);
-    if (!q) return esc;
-    return esc.replaceAll(escapeHtml(q), `<mark>${escapeHtml(q)}</mark>`);
+    return q ? esc.replaceAll(escapeHtml(q), `<mark>${escapeHtml(q)}</mark>`) : esc;
   };
-
   const render = (): void => {
     const q = inp.value.trim();
     const matches = q ? speciesCache.filter((s) => s.includes(q)).slice(0, 40) : speciesCache.slice(0, 40);
     hlIndex = -1;
     list.innerHTML = matches.length
       ? matches.map((s) => `<button type="button" data-name="${escapeHtml(s)}">${highlight(s, q)}</button>`).join('')
-      : '<div class="combo-empty">אין מין תואם ברשימת המאסטר — ניתן להוסיף מינים בטאב "מינים"</div>';
+      : '<div class="combo-empty">אין מין תואם — ניתן להוסיף מינים בטאב "מינים"</div>';
     list.hidden = false;
   };
-
   inp.addEventListener('focus', render);
   inp.addEventListener('input', render);
   inp.addEventListener('keydown', (e) => {
@@ -212,18 +253,13 @@ function setupSpeciesCombo(): void {
       e.preventDefault();
       inp.value = items[hlIndex]!.dataset.name!;
       list.hidden = true;
-    } else if (e.key === 'Escape') {
-      list.hidden = true;
-    }
+    } else if (e.key === 'Escape') { list.hidden = true; }
   });
   list.addEventListener('mousedown', (e) => {
     const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-name]');
     if (btn) { e.preventDefault(); inp.value = btn.dataset.name!; list.hidden = true; }
   });
-  document.addEventListener('click', (e) => {
-    const t = e.target as HTMLElement;
-    if (!container.contains(t) || !t.closest('.combo')) list.hidden = true;
-  });
+  inp.addEventListener('blur', () => setTimeout(() => { list.hidden = true; }, 150));
 }
 
 /* ---------- images ---------- */
@@ -285,10 +321,11 @@ async function renderPreviews(): Promise<void> {
 
 async function onSave(e: Event): Promise<void> {
   e.preventDefault();
-  const speciesVal = input(container, '#f-species').value.trim();
-  if (!speciesVal) { toast('יש לבחור מין ציפור', true); return; }
-  if (!speciesCache.includes(speciesVal)) {
-    toast('יש לבחור מין מתוך רשימת המאסטר בלבד (ניתן להוסיף מינים בטאב "מינים")', true, 4500);
+  const entries = collectEntries();
+  if (!entries.length) { toast('יש לבחור לפחות מין ציפור אחד', true); return; }
+  const invalid = entries.find((en) => !speciesCache.includes(en.species));
+  if (invalid) {
+    toast(`"${invalid.species}" אינו ברשימת המינים — בחרו מין מהרשימה (ניתן להוסיף בטאב "מינים")`, true, 5000);
     return;
   }
   const iso = fromLocalInputValue(input(container, '#f-datetime').value);
@@ -303,7 +340,6 @@ async function onSave(e: Event): Promise<void> {
     await saveMedia({ id: p.id, obsId: id, name: p.file.name || 'image', mime: p.file.type, blob: p.file });
     images.push({ localId: p.id, name: p.file.name || 'image' });
   }
-
   if (editId) {
     const existing = await mediaForObservation(editId);
     for (const m of existing) {
@@ -320,8 +356,7 @@ async function onSave(e: Event): Promise<void> {
     lat: latRaw === '' ? null : parseFloat(latRaw),
     lng: lngRaw === '' ? null : parseFloat(lngRaw),
     project: input(container, '#f-project').value.trim(),
-    species: speciesVal,
-    quantity: Math.max(1, parseInt(input(container, '#f-quantity').value, 10) || 1),
+    entries,
     images,
     notes: qs<HTMLTextAreaElement>(container, '#f-notes').value,
     deleted: false,

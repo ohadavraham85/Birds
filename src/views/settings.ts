@@ -147,7 +147,14 @@ async function onRestore(e: Event): Promise<void> {
   } catch { toast('קובץ גיבוי לא תקין', true); return; }
   if (!(await confirmDialog(`לשחזר ${backup.observations!.length} תצפיות מהגיבוי?`, 'שחזור'))) return;
   for (const name of backup.species || []) await addSpecies(name, { sync: false });
-  for (const o of backup.observations!) await putObservationRaw({ ...o, updatedAt: o.updatedAt || new Date().toISOString() });
+  for (const o of backup.observations!) {
+    // migrate older backups that used a single species/quantity per row
+    const legacy = o as unknown as { species?: string; quantity?: number };
+    const entries = Array.isArray(o.entries)
+      ? o.entries
+      : [{ species: legacy.species ?? '', quantity: legacy.quantity ?? 1 }];
+    await putObservationRaw({ ...o, entries, updatedAt: o.updatedAt || new Date().toISOString() });
+  }
   for (const m of backup.media || []) {
     await saveMedia({ id: m.id, obsId: m.obsId, name: m.name, mime: m.mime, blob: await dataUrlToBlob(m.data) });
   }

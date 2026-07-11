@@ -18,12 +18,23 @@ export class BirdsDatabase extends Dexie {
 
   constructor() {
     super('birds-db');
-    this.version(1).stores({
+    const stores = {
       observations: 'id, dateTime, updatedAt, synced, deleted',
       species: 'name, updatedAt',
       media: 'id, obsId',
       settings: 'key',
       outbox: '++id, entity, entityId, createdAt',
+    };
+    this.version(1).stores(stores);
+    // v2: multiple species per observation — migrate {species, quantity} → entries[]
+    this.version(2).stores(stores).upgrade(async (tx) => {
+      await tx.table('observations').toCollection().modify((o: Record<string, unknown>) => {
+        if (!Array.isArray(o.entries)) {
+          o.entries = [{ species: (o.species as string) ?? '', quantity: (o.quantity as number) ?? 1 }];
+          delete o.species;
+          delete o.quantity;
+        }
+      });
     });
   }
 }
