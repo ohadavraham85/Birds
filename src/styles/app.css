@@ -196,6 +196,24 @@ textarea { min-height: 130px; resize: vertical; white-space: pre-wrap; line-heig
 /* ---------- species combobox ---------- */
 
 .combo { position: relative; }
+
+/* dropdown-arrow variant (project / location): chevron on the left in RTL */
+.combo.with-arrow input { padding-left: 38px; }
+.combo .combo-toggle {
+  position: absolute;
+  top: 0; left: 0;
+  height: 100%;
+  padding: 0 12px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: .8rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+.combo .combo-toggle:hover { color: var(--green-700); }
+
 .combo-list {
   position: absolute;
   top: calc(100% + 4px);

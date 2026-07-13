@@ -38,8 +38,9 @@ export function init(el: HTMLElement): void {
         </div>
         <div class="field">
           <label for="f-project">פרויקט <span class="hint">(בחירה מרשימה או יצירת חדש)</span></label>
-          <div class="combo">
+          <div class="combo with-arrow">
             <input type="text" id="f-project" placeholder='למשל: "קינון חיוויאים 2026"'>
+            <button type="button" class="combo-toggle" title="פתיחת הרשימה" aria-label="פתיחת הרשימה">▾</button>
             <div class="combo-list" id="project-list" hidden></div>
           </div>
         </div>
@@ -47,8 +48,9 @@ export function init(el: HTMLElement): void {
 
       <div class="field">
         <label for="f-location">מיקום <span class="hint">(בחירה מרשימה או יצירת חדש)</span></label>
-        <div class="combo">
+        <div class="combo with-arrow">
           <input type="text" id="f-location" placeholder='למשל: "בריכות דגים", "נחל שחל"'>
+          <button type="button" class="combo-toggle" title="פתיחת הרשימה" aria-label="פתיחת הרשימה">▾</button>
           <div class="combo-list" id="location-list" hidden></div>
         </div>
       </div>
@@ -194,22 +196,26 @@ async function openPicker(): Promise<void> {
 /** Wire an input + a .combo-list element into an autocomplete that suggests
  * from getSuggestions() but also allows typing any new value. */
 function wireCombo(inp: HTMLInputElement, list: HTMLElement, getSuggestions: () => string[]): void {
+  const toggle = inp.closest('.combo')?.querySelector<HTMLButtonElement>('.combo-toggle');
   let hlIndex = -1;
   const highlight = (s: string, q: string): string => {
     const esc = escapeHtml(s);
     return q ? esc.replaceAll(escapeHtml(q), `<mark>${escapeHtml(q)}</mark>`) : esc;
   };
-  const render = (): void => {
+  /** showAll: ignore the typed text and list everything (used by the ▾ button). */
+  const render = (showAll = false): void => {
     const q = inp.value.trim();
     const all = getSuggestions();
-    const matches = (q ? all.filter((s) => s.includes(q)) : all).slice(0, 40);
+    const matches = (showAll || !q ? all : all.filter((s) => s.includes(q))).slice(0, 60);
     hlIndex = -1;
     if (!matches.length) { list.hidden = true; return; }
-    list.innerHTML = matches.map((s) => `<button type="button" data-name="${escapeHtml(s)}">${highlight(s, q)}</button>`).join('');
+    list.innerHTML = matches
+      .map((s) => `<button type="button" data-name="${escapeHtml(s)}">${highlight(s, showAll ? '' : q)}</button>`)
+      .join('');
     list.hidden = false;
   };
-  inp.addEventListener('focus', render);
-  inp.addEventListener('input', render);
+  inp.addEventListener('focus', () => render());
+  inp.addEventListener('input', () => render());
   inp.addEventListener('keydown', (e) => {
     const items = Array.from(list.querySelectorAll<HTMLButtonElement>('button'));
     if ((e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
@@ -227,6 +233,10 @@ function wireCombo(inp: HTMLInputElement, list: HTMLElement, getSuggestions: () 
   list.addEventListener('mousedown', (e) => {
     const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-name]');
     if (btn) { e.preventDefault(); inp.value = btn.dataset.name!; list.hidden = true; }
+  });
+  toggle?.addEventListener('mousedown', (e) => {
+    e.preventDefault(); // keep focus so blur doesn't immediately close the list
+    if (list.hidden) { inp.focus(); render(true); } else { list.hidden = true; }
   });
   inp.addEventListener('blur', () => setTimeout(() => { list.hidden = true; }, 150));
 }
