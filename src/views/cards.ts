@@ -4,7 +4,7 @@ import { listObservations } from '../db/repository';
 import { fmtDateTime, fmtCoords, showImageModal } from '../lib/ui';
 import { renderMarkdown, escapeHtml } from '../lib/markdown';
 import { getImageObjectUrl } from '../lib/media';
-import { speciesLabel, primarySpecies } from '../lib/observation';
+import { speciesLabel, primarySpecies, entriesOf } from '../lib/observation';
 
 let container: HTMLElement;
 
@@ -36,6 +36,7 @@ export async function activate(): Promise<void> {
         ${o.locationName ? `<span>📍 ${escapeHtml(o.locationName)}</span>` : ''}
         ${fmtCoords(o.lat, o.lng) ? `<span dir="ltr">🧭 ${fmtCoords(o.lat, o.lng)}</span>` : ''}
       </div>
+      ${entriesOf(o).some((e) => e.note) ? `<div class="sp-notes">${entriesOf(o).filter((e) => e.note).map((e) => `<div>🐦 <b>${escapeHtml(e.species)}:</b> ${escapeHtml(e.note!)}</div>`).join('')}</div>` : ''}
       ${o.notes ? `<div class="notes">${renderMarkdown(o.notes)}</div>` : ''}
     `;
     if (o.images?.length) {

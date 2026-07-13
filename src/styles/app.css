@@ -226,13 +226,21 @@ textarea { min-height: 130px; resize: vertical; white-space: pre-wrap; line-heig
 
 .sp-entry {
   display: flex;
-  gap: 8px;
-  align-items: flex-start;
-  margin-bottom: 8px;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed var(--line);
 }
-.sp-entry .sp-combo { flex: 1; min-width: 0; }
-.sp-entry .sp-qty { width: 78px; flex-shrink: 0; text-align: center; }
+.sp-entry:last-of-type { border-bottom: 0; }
+.sp-entry-main { display: flex; gap: 8px; align-items: center; }
+.sp-entry-main .sp-combo { flex: 1; min-width: 0; }
 .sp-entry .sp-remove { flex-shrink: 0; padding: 8px 11px; }
+.sp-entry .sp-note { font-size: .9rem; }
+
+.qty-stepper { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.qty-stepper .sp-qty { width: 54px; text-align: center; padding: 8px 4px; }
+.qty-stepper .btn-icon { padding: 8px 12px; font-weight: 700; font-size: 1.05rem; line-height: 1; }
 
 /* ---------- map picker modal ---------- */
 
@@ -374,6 +382,8 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
 .obs-card .species { font-size: 1.15rem; font-weight: 700; color: var(--green-900); }
 .obs-card .qty { color: var(--green-700); font-weight: 600; font-size: .9rem; }
 .obs-card .meta { color: var(--ink-soft); font-size: .85rem; margin-top: 3px; display: flex; gap: 12px; flex-wrap: wrap; }
+.obs-card .sp-notes { margin-top: 8px; font-size: .9rem; color: var(--ink-soft); }
+.obs-card .sp-notes b { color: var(--green-900); }
 .obs-card .notes { margin-top: 10px; line-height: 1.55; }
 .obs-card .notes p { margin: 0 0 8px; }
 .obs-card .notes h4, .obs-card .notes h5, .obs-card .notes h6 { margin: 10px 0 4px; color: var(--green-700); }

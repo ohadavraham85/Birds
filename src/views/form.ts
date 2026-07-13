@@ -1,5 +1,6 @@
 /* views/form.ts — טופס הדיווח האחוד: מסך אחד רציף. תומך בכמה מיני ציפור
- * בתצפית אחת, ובבחירת מיקום על מפה (בררת מחדל: המיקום הנוכחי). */
+ * (עם כמות והערה לכל מין), בורר מיקום על מפה, ובחירת פרויקט/מיקום מרשימה
+ * נפתחת עם השלמה אוטומטית ואפשרות ליצירת ערך חדש. */
 
 import {
   saveObservation, getObservation, listObservations, listSpecies,
@@ -18,6 +19,8 @@ interface PendingImage { id: string; file: File; url: string }
 
 let container: HTMLElement;
 let speciesCache: string[] = [];
+let projectSuggestions: string[] = [];
+let locationSuggestions: string[] = [];
 let pendingImages: PendingImage[] = [];
 let editId: string | null = null;
 let editKeptImages: ObservationImage[] = [];
@@ -34,15 +37,20 @@ export function init(el: HTMLElement): void {
           <input type="datetime-local" id="f-datetime" required>
         </div>
         <div class="field">
-          <label for="f-project">פרויקט</label>
-          <input type="text" id="f-project" placeholder='למשל: "קינון חיוויאים 2026"' list="project-list">
-          <datalist id="project-list"></datalist>
+          <label for="f-project">פרויקט <span class="hint">(בחירה מרשימה או יצירת חדש)</span></label>
+          <div class="combo">
+            <input type="text" id="f-project" placeholder='למשל: "קינון חיוויאים 2026"'>
+            <div class="combo-list" id="project-list" hidden></div>
+          </div>
         </div>
       </div>
 
       <div class="field">
-        <label for="f-location">מיקום <span class="hint">(שם האתר)</span></label>
-        <input type="text" id="f-location" placeholder='למשל: "בריכות דגים", "נחל שחל"'>
+        <label for="f-location">מיקום <span class="hint">(בחירה מרשימה או יצירת חדש)</span></label>
+        <div class="combo">
+          <input type="text" id="f-location" placeholder='למשל: "בריכות דגים", "נחל שחל"'>
+          <div class="combo-list" id="location-list" hidden></div>
+        </div>
       </div>
 
       <div class="field">
@@ -56,7 +64,7 @@ export function init(el: HTMLElement): void {
       </div>
 
       <div class="field">
-        <label>מיני הציפור <span class="hint">(אפשר להוסיף יותר ממין אחד)</span></label>
+        <label>מיני הציפור <span class="hint">(אפשר להוסיף יותר ממין אחד, עם כמות והערה לכל מין)</span></label>
         <div id="species-rows"></div>
         <button type="button" class="btn btn-sm" id="add-species-row" style="margin-top:6px">➕ הוספת מין</button>
       </div>
@@ -73,7 +81,7 @@ export function init(el: HTMLElement): void {
       </div>
 
       <div class="field">
-        <label for="f-notes">הערות <span class="hint">(פסקאות וירידות שורה נשמרות; אפשר Markdown: **הדגשה**, # כותרת, - רשימה)</span></label>
+        <label for="f-notes">הערות כלליות <span class="hint">(פסקאות וירידות שורה נשמרות; אפשר Markdown)</span></label>
         <textarea id="f-notes" placeholder="סיכום שטח מפורט..."></textarea>
       </div>
 
@@ -83,8 +91,10 @@ export function init(el: HTMLElement): void {
   `;
 
   setupImages();
+  wireCombo(input(container, '#f-project'), qs(container, '#project-list'), () => projectSuggestions);
+  wireCombo(input(container, '#f-location'), qs(container, '#location-list'), () => locationSuggestions);
   qs(container, '#pick-map-btn').addEventListener('click', () => void openPicker());
-  qs(container, '#add-species-row').addEventListener('click', () => addSpeciesRow('', 1, true));
+  qs(container, '#add-species-row').addEventListener('click', () => addSpeciesRow({ species: '', quantity: 1 }, true));
   qs<HTMLFormElement>(container, '#obs-form').addEventListener('submit', (e) => void onSave(e));
   qs(container, '#cancel-edit-btn').addEventListener('click', () => resetForm());
 }
@@ -96,7 +106,9 @@ export function setParams(params: ViewParams): void {
 
 export async function activate(): Promise<void> {
   speciesCache = await listSpecies();
-  await fillProjectSuggestions();
+  const all = await listObservations();
+  projectSuggestions = [...new Set(all.map((o) => o.project).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'he'));
+  locationSuggestions = [...new Set(all.map((o) => o.locationName).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'he'));
   if (editId) {
     await loadForEdit(editId);
   } else if (prefillSpecies) {
@@ -134,18 +146,13 @@ async function loadForEdit(id: string): Promise<void> {
   input(container, '#f-project').value = obs.project || '';
   input(container, '#f-lat').value = obs.lat == null ? '' : String(obs.lat);
   input(container, '#f-lng').value = obs.lng == null ? '' : String(obs.lng);
-  setEntries(entriesOf(obs).length ? entriesOf(obs) : [{ species: '', quantity: 1 }]);
+  const entries = entriesOf(obs);
+  setEntries(entries.length ? entries : [{ species: '', quantity: 1 }]);
   qs<HTMLTextAreaElement>(container, '#f-notes').value = obs.notes || '';
   editKeptImages = [...(obs.images || [])];
   pendingImages.forEach((p) => URL.revokeObjectURL(p.url));
   pendingImages = [];
   await renderPreviews();
-}
-
-async function fillProjectSuggestions(): Promise<void> {
-  const all = await listObservations();
-  const projects = [...new Set(all.map((o) => o.project).filter(Boolean))];
-  qs(container, '#project-list').innerHTML = projects.map((p) => `<option value="${escapeHtml(p)}">`).join('');
 }
 
 /* ---------- location (default = current; pin opens the map picker) ---------- */
@@ -182,70 +189,32 @@ async function openPicker(): Promise<void> {
   }
 }
 
-/* ---------- species rows (multi-species) ---------- */
+/* ---------- generic autocomplete combobox ---------- */
 
-function setEntries(entries: SpeciesEntry[]): void {
-  qs(container, '#species-rows').innerHTML = '';
-  for (const e of entries) addSpeciesRow(e.species, e.quantity, false);
-}
-
-function collectEntries(): SpeciesEntry[] {
-  const rows = Array.from(container.querySelectorAll<HTMLElement>('#species-rows .sp-entry'));
-  const out: SpeciesEntry[] = [];
-  for (const row of rows) {
-    const species = row.querySelector<HTMLInputElement>('.sp-input')!.value.trim();
-    const quantity = Math.max(1, parseInt(row.querySelector<HTMLInputElement>('.sp-qty')!.value, 10) || 1);
-    if (species) out.push({ species, quantity });
-  }
-  return out;
-}
-
-function addSpeciesRow(species: string, quantity: number, focus: boolean): void {
-  const rows = qs(container, '#species-rows');
-  const row = document.createElement('div');
-  row.className = 'sp-entry';
-  row.innerHTML = `
-    <div class="combo sp-combo">
-      <input type="text" class="sp-input" placeholder="הקלידו לחיפוש מין..." value="${escapeHtml(species)}">
-      <div class="combo-list" hidden></div>
-    </div>
-    <input type="number" class="sp-qty" min="1" step="1" inputmode="numeric" value="${quantity}" title="מספר פרטים">
-    <button type="button" class="btn btn-icon sp-remove" title="הסרת מין">✕</button>
-  `;
-  rows.appendChild(row);
-  wireCombo(row);
-  row.querySelector('.sp-remove')!.addEventListener('click', () => {
-    if (container.querySelectorAll('#species-rows .sp-entry').length > 1) row.remove();
-    else { row.querySelector<HTMLInputElement>('.sp-input')!.value = ''; }
-  });
-  if (focus) row.querySelector<HTMLInputElement>('.sp-input')!.focus();
-}
-
-function wireCombo(row: HTMLElement): void {
-  const inp = row.querySelector<HTMLInputElement>('.sp-input')!;
-  const list = row.querySelector<HTMLElement>('.combo-list')!;
+/** Wire an input + a .combo-list element into an autocomplete that suggests
+ * from getSuggestions() but also allows typing any new value. */
+function wireCombo(inp: HTMLInputElement, list: HTMLElement, getSuggestions: () => string[]): void {
   let hlIndex = -1;
-
   const highlight = (s: string, q: string): string => {
     const esc = escapeHtml(s);
     return q ? esc.replaceAll(escapeHtml(q), `<mark>${escapeHtml(q)}</mark>`) : esc;
   };
   const render = (): void => {
     const q = inp.value.trim();
-    const matches = q ? speciesCache.filter((s) => s.includes(q)).slice(0, 40) : speciesCache.slice(0, 40);
+    const all = getSuggestions();
+    const matches = (q ? all.filter((s) => s.includes(q)) : all).slice(0, 40);
     hlIndex = -1;
-    list.innerHTML = matches.length
-      ? matches.map((s) => `<button type="button" data-name="${escapeHtml(s)}">${highlight(s, q)}</button>`).join('')
-      : '<div class="combo-empty">אין מין תואם — ניתן להוסיף מינים בטאב "מינים"</div>';
+    if (!matches.length) { list.hidden = true; return; }
+    list.innerHTML = matches.map((s) => `<button type="button" data-name="${escapeHtml(s)}">${highlight(s, q)}</button>`).join('');
     list.hidden = false;
   };
   inp.addEventListener('focus', render);
   inp.addEventListener('input', render);
   inp.addEventListener('keydown', (e) => {
     const items = Array.from(list.querySelectorAll<HTMLButtonElement>('button'));
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    if ((e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      if (list.hidden || !items.length) { render(); if (list.hidden) return; }
       e.preventDefault();
-      if (list.hidden) { render(); return; }
       hlIndex = e.key === 'ArrowDown' ? Math.min(hlIndex + 1, items.length - 1) : Math.max(hlIndex - 1, 0);
       items.forEach((b, i) => b.classList.toggle('hl', i === hlIndex));
       items[hlIndex]?.scrollIntoView({ block: 'nearest' });
@@ -260,6 +229,66 @@ function wireCombo(row: HTMLElement): void {
     if (btn) { e.preventDefault(); inp.value = btn.dataset.name!; list.hidden = true; }
   });
   inp.addEventListener('blur', () => setTimeout(() => { list.hidden = true; }, 150));
+}
+
+/* ---------- species rows (multi-species, per-species quantity + note) ---------- */
+
+function setEntries(entries: SpeciesEntry[]): void {
+  qs(container, '#species-rows').innerHTML = '';
+  for (const e of entries) addSpeciesRow(e, false);
+}
+
+function collectEntries(): SpeciesEntry[] {
+  const rows = Array.from(container.querySelectorAll<HTMLElement>('#species-rows .sp-entry'));
+  const out: SpeciesEntry[] = [];
+  for (const row of rows) {
+    const species = row.querySelector<HTMLInputElement>('.sp-input')!.value.trim();
+    const quantity = Math.max(1, parseInt(row.querySelector<HTMLInputElement>('.sp-qty')!.value, 10) || 1);
+    const note = row.querySelector<HTMLInputElement>('.sp-note')!.value.trim();
+    if (species) out.push(note ? { species, quantity, note } : { species, quantity });
+  }
+  return out;
+}
+
+function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
+  const rows = qs(container, '#species-rows');
+  const row = document.createElement('div');
+  row.className = 'sp-entry';
+  row.innerHTML = `
+    <div class="sp-entry-main">
+      <div class="combo sp-combo">
+        <input type="text" class="sp-input" placeholder="הקלידו לחיפוש מין..." value="${escapeHtml(entry.species)}">
+        <div class="combo-list" hidden></div>
+      </div>
+      <div class="qty-stepper">
+        <button type="button" class="btn btn-icon qty-minus" title="פחות">−</button>
+        <input type="number" class="sp-qty" min="1" step="1" inputmode="numeric" value="${entry.quantity}" title="מספר פרטים">
+        <button type="button" class="btn btn-icon qty-plus" title="עוד">+</button>
+      </div>
+      <button type="button" class="btn btn-icon sp-remove" title="הסרת מין">✕</button>
+    </div>
+    <input type="text" class="sp-note" placeholder="הערה למין זה (לא חובה)" value="${escapeHtml(entry.note || '')}">
+  `;
+  rows.appendChild(row);
+
+  const qtyInput = row.querySelector<HTMLInputElement>('.sp-qty')!;
+  const step = (delta: number): void => {
+    qtyInput.value = String(Math.max(1, (parseInt(qtyInput.value, 10) || 1) + delta));
+  };
+  row.querySelector('.qty-minus')!.addEventListener('click', () => step(-1));
+  row.querySelector('.qty-plus')!.addEventListener('click', () => step(1));
+
+  wireCombo(row.querySelector<HTMLInputElement>('.sp-input')!, row.querySelector<HTMLElement>('.sp-combo .combo-list')!, () => speciesCache);
+
+  row.querySelector('.sp-remove')!.addEventListener('click', () => {
+    if (container.querySelectorAll('#species-rows .sp-entry').length > 1) row.remove();
+    else {
+      row.querySelector<HTMLInputElement>('.sp-input')!.value = '';
+      row.querySelector<HTMLInputElement>('.sp-note')!.value = '';
+      qtyInput.value = '1';
+    }
+  });
+  if (focus) row.querySelector<HTMLInputElement>('.sp-input')!.focus();
 }
 
 /* ---------- images ---------- */

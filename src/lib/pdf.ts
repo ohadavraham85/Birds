@@ -7,7 +7,7 @@ import html2pdf from 'html2pdf.js';
 import { fmtDateTime, fmtCoords, toast } from './ui';
 import { renderMarkdown, escapeHtml } from './markdown';
 import { getMedia } from '../db/repository';
-import { speciesLabel, totalQuantity } from './observation';
+import { speciesLabel, totalQuantity, entriesOf } from './observation';
 import type { Observation } from '../types';
 
 function buildReportElement(observations: Observation[]): HTMLElement {
@@ -32,6 +32,7 @@ function buildReportElement(observations: Observation[]): HTMLElement {
           <div><b>קואורדינטות:</b> <span dir="ltr">${fmtCoords(o.lat, o.lng) || '—'}</span></div>
           <div><b>פרויקט:</b> ${escapeHtml(o.project || '—')}</div>
         </div>
+        ${entriesOf(o).some((e) => e.note) ? `<div class="rpt-notes">${entriesOf(o).filter((e) => e.note).map((e) => `<div><b>${escapeHtml(e.species)}:</b> ${escapeHtml(e.note!)}</div>`).join('')}</div>` : ''}
         ${o.notes ? `<div class="rpt-notes">${renderMarkdown(o.notes)}</div>` : ''}
         <div class="rpt-imgs" data-obs="${o.id}"></div>
       </div>`).join('')}
