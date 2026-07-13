@@ -260,14 +260,16 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
         <input type="text" class="sp-input" placeholder="הקלידו לחיפוש מין..." value="${escapeHtml(entry.species)}">
         <div class="combo-list" hidden></div>
       </div>
+      <button type="button" class="btn btn-icon sp-remove" title="הסרת מין">✕</button>
+    </div>
+    <div class="sp-entry-second">
       <div class="qty-stepper">
         <button type="button" class="btn btn-icon qty-minus" title="פחות">−</button>
         <input type="number" class="sp-qty" min="1" step="1" inputmode="numeric" value="${entry.quantity}" title="מספר פרטים">
         <button type="button" class="btn btn-icon qty-plus" title="עוד">+</button>
       </div>
-      <button type="button" class="btn btn-icon sp-remove" title="הסרת מין">✕</button>
+      <input type="text" class="sp-note" placeholder="הערה למין זה (לא חובה)" value="${escapeHtml(entry.note || '')}">
     </div>
-    <input type="text" class="sp-note" placeholder="הערה למין זה (לא חובה)" value="${escapeHtml(entry.note || '')}">
   `;
   rows.appendChild(row);
 

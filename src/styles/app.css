@@ -236,7 +236,8 @@ textarea { min-height: 130px; resize: vertical; white-space: pre-wrap; line-heig
 .sp-entry-main { display: flex; gap: 8px; align-items: center; }
 .sp-entry-main .sp-combo { flex: 1; min-width: 0; }
 .sp-entry .sp-remove { flex-shrink: 0; padding: 8px 11px; }
-.sp-entry .sp-note { font-size: .9rem; }
+.sp-entry-second { display: flex; gap: 8px; align-items: center; }
+.sp-entry-second .sp-note { flex: 1; min-width: 0; font-size: .9rem; }
 
 .qty-stepper { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
 .qty-stepper .sp-qty { width: 54px; text-align: center; padding: 8px 4px; }
