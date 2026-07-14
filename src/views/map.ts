@@ -5,15 +5,18 @@ import { listObservations } from '../db/repository';
 import { fmtDateTime } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
 import { speciesLabel } from '../lib/observation';
+import { navigate } from '../main';
 
 let container: HTMLElement;
 let map: L.Map | undefined;
 let markersLayer: L.LayerGroup | undefined;
+let dropMarker: L.Marker | undefined;
 
 export function init(el: HTMLElement): void {
   container = el;
   container.innerHTML = `
     <div id="map-container"></div>
+    <div class="map-hint">לחיצה ארוכה על המפה מוסיפה תצפית במיקום שנבחר</div>
     <div class="map-empty" id="map-empty" hidden>אין עדיין תצפיות עם קואורדינטות.<br>הוסיפו תצפית עם מיקום GPS והיא תופיע כאן.</div>
   `;
 }
@@ -26,6 +29,17 @@ function ensureMap(): void {
     attribution: '&copy; OpenStreetMap',
   }).addTo(map);
   markersLayer = L.layerGroup().addTo(map);
+
+  // long-press (contextmenu on touch) drops a pin; clicking it opens the form
+  map.on('contextmenu', (e: L.LeafletMouseEvent) => dropPin(e.latlng));
+}
+
+function dropPin(latlng: L.LatLng): void {
+  const params = { lat: +latlng.lat.toFixed(6), lng: +latlng.lng.toFixed(6) };
+  dropMarker?.remove();
+  dropMarker = L.marker(latlng).addTo(map!);
+  dropMarker.bindTooltip('לחצו על הסיכה להוספת תצפית כאן', { permanent: true, direction: 'top', offset: [0, -36] }).openTooltip();
+  dropMarker.on('click', () => navigate('form', params));
 }
 
 export async function activate(): Promise<void> {

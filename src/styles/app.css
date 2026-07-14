@@ -75,6 +75,45 @@ body {
 .sync-pill.offline { background: rgba(232, 161, 60, 0.9); }
 .sync-pill.error { background: rgba(193, 68, 60, 0.95); }
 
+.topbar-btn {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  border: 0;
+  border-radius: 10px;
+  width: 36px;
+  height: 32px;
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.topbar-btn:hover { background: rgba(255, 255, 255, 0.28); }
+
+/* ---------- floating action button ---------- */
+
+.fab {
+  position: fixed;
+  bottom: calc(var(--tabbar-h) + 16px + env(safe-area-inset-bottom));
+  inset-inline-start: 18px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 0;
+  background: var(--green-700);
+  color: #fff;
+  font-size: 1.6rem;
+  line-height: 1;
+  box-shadow: 0 4px 14px rgba(27, 67, 50, 0.4);
+  cursor: pointer;
+  z-index: 1050;
+}
+.fab[hidden] { display: none; }
+.fab:hover { background: var(--green-600); }
+
+/* ---------- form header (back + title) ---------- */
+
+.form-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.form-head h2 { margin: 0; }
+
 /* ---------- main / views ---------- */
 
 #main {
@@ -102,6 +141,12 @@ body {
   color: var(--ink-soft); font-size: 1.05rem; pointer-events: none;
 }
 .map-empty[hidden] { display: none; }
+.map-hint {
+  position: absolute; top: 10px; right: 50%; transform: translateX(50%);
+  background: rgba(27, 67, 50, 0.85); color: #fff;
+  font-size: .8rem; padding: 5px 12px; border-radius: 999px;
+  z-index: 600; pointer-events: none; max-width: 92%; text-align: center;
+}
 
 /* ---------- tab bar ---------- */
 
@@ -261,6 +306,10 @@ textarea { min-height: 130px; resize: vertical; white-space: pre-wrap; line-heig
 .qty-stepper .sp-qty { width: 54px; text-align: center; padding: 8px 4px; }
 .qty-stepper .btn-icon { padding: 8px 12px; font-weight: 700; font-size: 1.05rem; line-height: 1; }
 
+.sp-entry-images { display: flex; flex-direction: column; gap: 6px; }
+.sp-entry-images .sp-thumbs { display: flex; gap: 8px; flex-wrap: wrap; }
+.sp-entry-images .sp-thumbs:empty { display: none; }
+
 /* ---------- map picker modal ---------- */
 
 .map-picker { width: min(92vw, 640px); max-width: 640px; }
@@ -397,10 +446,27 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
   box-shadow: var(--shadow);
   padding: 14px 16px;
 }
-.obs-card .card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.obs-card .card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.obs-card .card-place { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.obs-card .place-link { color: var(--green-700); font-weight: 700; text-decoration: none; }
+.obs-card .place-link:hover { text-decoration: underline; }
+.obs-card .act-pdf { flex-shrink: 0; }
 .obs-card .species { font-size: 1.15rem; font-weight: 700; color: var(--green-900); }
 .obs-card .qty { color: var(--green-700); font-weight: 600; font-size: .9rem; }
 .obs-card .meta { color: var(--ink-soft); font-size: .85rem; margin-top: 3px; display: flex; gap: 12px; flex-wrap: wrap; }
+
+.species-ol { margin: 10px 0 0; padding-inline-start: 22px; }
+.species-li { margin-bottom: 8px; }
+.species-line { display: flex; gap: 8px; align-items: baseline; }
+.species-line .species-name { font-weight: 700; color: var(--green-900); }
+.species-line .species-qty { color: var(--green-700); font-weight: 600; font-size: .9rem; }
+.species-note { color: var(--ink-soft); font-size: .9rem; margin-top: 2px; }
+.species-imgs { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.species-imgs:empty { display: none; }
+.species-imgs img {
+  width: 96px; height: 96px; object-fit: cover;
+  border-radius: 10px; border: 1px solid var(--line); cursor: pointer;
+}
 .obs-card .sp-notes { margin-top: 8px; font-size: .9rem; color: var(--ink-soft); }
 .obs-card .sp-notes b { color: var(--green-900); }
 .obs-card .notes { margin-top: 10px; line-height: 1.55; }
@@ -517,6 +583,14 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
 .pdf-report .rpt-grid b { color: #1b4332; }
 .pdf-report .rpt-notes { font-size: 12px; line-height: 1.55; border-top: 1px dashed #dce7df; padding-top: 6px; margin-top: 4px; }
 .pdf-report .rpt-notes p { margin: 0 0 6px; }
+.pdf-report .rpt-contact { text-align: center; margin-bottom: 12px; }
+.pdf-report .rpt-birder { font-weight: 700; color: #1b4332; font-size: 14px; }
+.pdf-report .rpt-birder-line { color: #5b6d62; font-size: 11px; }
+.pdf-report .rpt-species { margin: 6px 0; padding-inline-start: 20px; font-size: 12px; }
+.pdf-report .rpt-species li { margin-bottom: 4px; }
+.pdf-report .rpt-sp-note { color: #5b6d62; font-size: 11px; }
+.pdf-report .rpt-sp-imgs { margin-top: 2px; }
+.pdf-report .rpt-foot { border-top: 2px solid #2d6a4f; margin-top: 16px; padding-top: 8px; text-align: center; font-size: 11px; color: #5b6d62; }
 
 @media print {
   .topbar, .tabbar, .toast { display: none !important; }

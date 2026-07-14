@@ -8,12 +8,13 @@ export interface ObservationImage {
   remoteId?: string | null;
 }
 
-/** One bird species observed, with its count and an optional per-species note.
- * An observation may have several. */
+/** One bird species observed, with its count, an optional per-species note,
+ * and its own attached photos. An observation may have several. */
 export interface SpeciesEntry {
   species: string;
   quantity: number;
   note?: string;
+  images?: ObservationImage[];
 }
 
 /** A single observation row (גיליון "תצפיות"). */
@@ -26,6 +27,7 @@ export interface Observation {
   project: string;
   /** One or more species seen in this observation, each with a count. */
   entries: SpeciesEntry[];
+  /** @deprecated observation-level images — migrated into entries[0].images. */
   images: ObservationImage[];
   notes: string;
   /** Soft-delete tombstone — kept so the deletion propagates on sync. */

@@ -18,6 +18,7 @@
     <div class="topbar-actions">
       <span id="sync-pill" class="sync-pill" hidden></span>
       <span id="net-status" class="net-status" title="מצב חיבור"></span>
+      <button id="nav-action" class="topbar-btn" title="הגדרות" aria-label="הגדרות">⋯</button>
     </div>
   </header>
 
@@ -30,13 +31,13 @@
     <section id="view-settings" class="view" hidden></section>
   </main>
 
+  <button id="fab" class="fab" title="הוספת תצפית" aria-label="הוספת תצפית" hidden>➕</button>
+
   <nav class="tabbar" aria-label="ניווט ראשי">
-    <button data-view="form" class="tab"><span class="tab-icon">📝</span><span>טופס</span></button>
-    <button data-view="map" class="tab"><span class="tab-icon">🗺️</span><span>מפה</span></button>
-    <button data-view="table" class="tab"><span class="tab-icon">📋</span><span>רשימה</span></button>
     <button data-view="cards" class="tab"><span class="tab-icon">🗂️</span><span>יומן</span></button>
+    <button data-view="map" class="tab"><span class="tab-icon">🗺️</span><span>מפה</span></button>
     <button data-view="species" class="tab"><span class="tab-icon">🐦</span><span>מינים</span></button>
-    <button data-view="settings" class="tab"><span class="tab-icon">⚙️</span><span>הגדרות</span></button>
+    <button data-view="table" class="tab"><span class="tab-icon">📋</span><span>רשימה</span></button>
   </nav>
 
   <div id="toast" class="toast" hidden></div>

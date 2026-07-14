@@ -1,6 +1,6 @@
-/* views/form.ts — טופס הדיווח האחוד: מסך אחד רציף. תומך בכמה מיני ציפור
- * (עם כמות והערה לכל מין), בורר מיקום על מפה, ובחירת פרויקט/מיקום מרשימה
- * נפתחת עם השלמה אוטומטית ואפשרות ליצירת ערך חדש. */
+/* views/form.ts — טופס הדיווח האחוד. נפתח מכפתור ה-➕ ביומן או מלחיצה על סיכה
+ * במפה (עם קואורדינטות). תומך בכמה מיני ציפור, ולכל מין: כמות, הערה ותמונות
+ * משלו. פרויקט/מיקום נבחרים מרשימה נפתחת עם אפשרות ליצירת ערך חדש. */
 
 import {
   saveObservation, getObservation, listObservations, listSpecies,
@@ -10,26 +10,32 @@ import { toast, toLocalInputValue, fromLocalInputValue } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
 import { getImageObjectUrl } from '../lib/media';
 import { pickLocation } from '../lib/location-picker';
-import { entriesOf } from '../lib/observation';
+import { entriesOf, entryImages } from '../lib/observation';
 import { qs, input } from '../lib/dom';
+import { navigate } from '../main';
 import type { ViewParams } from './view';
 import type { Observation, ObservationImage, SpeciesEntry } from '../types';
 
 interface PendingImage { id: string; file: File; url: string }
+interface RowImages { pending: PendingImage[]; kept: ObservationImage[] }
 
 let container: HTMLElement;
 let speciesCache: string[] = [];
 let projectSuggestions: string[] = [];
 let locationSuggestions: string[] = [];
-let pendingImages: PendingImage[] = [];
 let editId: string | null = null;
-let editKeptImages: ObservationImage[] = [];
 let prefillSpecies: string | null = null;
+let prefillCoords: { lat: number; lng: number } | null = null;
+let obsId = '';
+const rowImages = new WeakMap<HTMLElement, RowImages>();
 
 export function init(el: HTMLElement): void {
   container = el;
   container.innerHTML = `
-    <h2 id="form-title">תצפית חדשה</h2>
+    <div class="form-head">
+      <button type="button" class="btn btn-sm" id="back-btn">→ חזרה ליומן</button>
+      <h2 id="form-title">תצפית חדשה</h2>
+    </div>
     <form id="obs-form" autocomplete="off">
       <div class="row-2">
         <div class="field">
@@ -66,20 +72,9 @@ export function init(el: HTMLElement): void {
       </div>
 
       <div class="field">
-        <label>מיני הציפור <span class="hint">(אפשר להוסיף יותר ממין אחד, עם כמות והערה לכל מין)</span></label>
+        <label>מיני הציפור <span class="hint">(לכל מין: כמות, הערה ותמונות משלו)</span></label>
         <div id="species-rows"></div>
         <button type="button" class="btn btn-sm" id="add-species-row" style="margin-top:6px">➕ הוספת מין</button>
-      </div>
-
-      <div class="field">
-        <label>תמונות תצפית <span class="hint">(נשמרות באיכות מקור מלאה, ללא כיווץ)</span></label>
-        <div class="img-inputs">
-          <button type="button" class="btn" id="btn-camera">📷 צילום מהמצלמה</button>
-          <button type="button" class="btn" id="btn-gallery">🖼️ העלאה מהגלריה</button>
-          <input type="file" id="f-camera" accept="image/*" capture="environment" hidden>
-          <input type="file" id="f-gallery" accept="image/*,.heic,.tif,.tiff" multiple hidden>
-        </div>
-        <div class="img-previews" id="img-previews"></div>
       </div>
 
       <div class="field">
@@ -88,22 +83,21 @@ export function init(el: HTMLElement): void {
       </div>
 
       <button type="submit" class="btn btn-primary btn-block" id="save-btn">💾 שמירת התצפית</button>
-      <button type="button" class="btn btn-block" id="cancel-edit-btn" hidden style="margin-top:8px">ביטול עריכה</button>
     </form>
   `;
 
-  setupImages();
   wireCombo(input(container, '#f-project'), qs(container, '#project-list'), () => projectSuggestions);
   wireCombo(input(container, '#f-location'), qs(container, '#location-list'), () => locationSuggestions);
   qs(container, '#pick-map-btn').addEventListener('click', () => void openPicker());
   qs(container, '#add-species-row').addEventListener('click', () => addSpeciesRow({ species: '', quantity: 1 }, true));
+  qs(container, '#back-btn').addEventListener('click', () => navigate('cards'));
   qs<HTMLFormElement>(container, '#obs-form').addEventListener('submit', (e) => void onSave(e));
-  qs(container, '#cancel-edit-btn').addEventListener('click', () => resetForm());
 }
 
 export function setParams(params: ViewParams): void {
   editId = params?.editId || null;
   prefillSpecies = params?.species || null;
+  prefillCoords = (params?.lat != null && params?.lng != null) ? { lat: params.lat, lng: params.lng } : null;
 }
 
 export async function activate(): Promise<void> {
@@ -111,53 +105,51 @@ export async function activate(): Promise<void> {
   const all = await listObservations();
   projectSuggestions = [...new Set(all.map((o) => o.project).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'he'));
   locationSuggestions = [...new Set(all.map((o) => o.locationName).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'he'));
-  if (editId) {
-    await loadForEdit(editId);
-  } else if (prefillSpecies) {
-    resetForm();
-    setEntries([{ species: prefillSpecies, quantity: 1 }]);
-    prefillSpecies = null;
-  } else if (!input(container, '#f-datetime').value) {
-    resetForm();
+
+  if (editId) { await loadForEdit(editId); return; }
+
+  resetForm(!prefillCoords);
+  if (prefillSpecies) setEntries([{ species: prefillSpecies, quantity: 1 }]);
+  if (prefillCoords) {
+    input(container, '#f-lat').value = prefillCoords.lat.toFixed(6);
+    input(container, '#f-lng').value = prefillCoords.lng.toFixed(6);
+    qs(container, '#gps-status').textContent = '(נבחר על המפה)';
   }
+  prefillSpecies = null;
+  prefillCoords = null;
 }
 
-function resetForm(): void {
+function resetForm(locate = true): void {
   editId = null;
-  editKeptImages = [];
-  pendingImages.forEach((p) => URL.revokeObjectURL(p.url));
-  pendingImages = [];
+  obsId = crypto.randomUUID();
   qs<HTMLFormElement>(container, '#obs-form').reset();
   input(container, '#f-datetime').value = toLocalInputValue();
   setEntries([{ species: '', quantity: 1 }]);
   qs(container, '#form-title').textContent = 'תצפית חדשה';
   qs(container, '#save-btn').textContent = '💾 שמירת התצפית';
-  qs(container, '#cancel-edit-btn').hidden = true;
-  void renderPreviews();
-  autoFillGps();
+  if (locate) autoFillGps();
 }
 
 async function loadForEdit(id: string): Promise<void> {
   const obs = await getObservation(id);
   if (!obs) { resetForm(); return; }
+  obsId = id;
   qs(container, '#form-title').textContent = 'עריכת תצפית';
   qs(container, '#save-btn').textContent = '💾 עדכון התצפית';
-  qs(container, '#cancel-edit-btn').hidden = false;
   input(container, '#f-datetime').value = toLocalInputValue(new Date(obs.dateTime));
   input(container, '#f-location').value = obs.locationName || '';
   input(container, '#f-project').value = obs.project || '';
   input(container, '#f-lat').value = obs.lat == null ? '' : String(obs.lat);
   input(container, '#f-lng').value = obs.lng == null ? '' : String(obs.lng);
   const entries = entriesOf(obs);
-  setEntries(entries.length ? entries : [{ species: '', quantity: 1 }]);
+  // legacy top-level images fold into the first entry for editing
+  const withLegacy = entries.map((e, i) =>
+    i === 0 && obs.images?.length ? { ...e, images: [...entryImages(e), ...obs.images] } : e);
+  setEntries(withLegacy.length ? withLegacy : [{ species: '', quantity: 1 }]);
   qs<HTMLTextAreaElement>(container, '#f-notes').value = obs.notes || '';
-  editKeptImages = [...(obs.images || [])];
-  pendingImages.forEach((p) => URL.revokeObjectURL(p.url));
-  pendingImages = [];
-  await renderPreviews();
 }
 
-/* ---------- location (default = current; pin opens the map picker) ---------- */
+/* ---------- location ---------- */
 
 function autoFillGps(): void {
   const latEl = input(container, '#f-lat');
@@ -168,6 +160,7 @@ function autoFillGps(): void {
   status.textContent = '(מאתר מיקום...)';
   navigator.geolocation.getCurrentPosition(
     (pos) => {
+      if (latEl.value || lngEl.value) return; // don't clobber a manual/map choice
       latEl.value = pos.coords.latitude.toFixed(6);
       lngEl.value = pos.coords.longitude.toFixed(6);
       status.textContent = `(דיוק ±${Math.round(pos.coords.accuracy)} מ')`;
@@ -193,8 +186,6 @@ async function openPicker(): Promise<void> {
 
 /* ---------- generic autocomplete combobox ---------- */
 
-/** Wire an input + a .combo-list element into an autocomplete that suggests
- * from getSuggestions() but also allows typing any new value. */
 function wireCombo(inp: HTMLInputElement, list: HTMLElement, getSuggestions: () => string[]): void {
   const toggle = inp.closest('.combo')?.querySelector<HTMLButtonElement>('.combo-toggle');
   let hlIndex = -1;
@@ -202,7 +193,6 @@ function wireCombo(inp: HTMLInputElement, list: HTMLElement, getSuggestions: () 
     const esc = escapeHtml(s);
     return q ? esc.replaceAll(escapeHtml(q), `<mark>${escapeHtml(q)}</mark>`) : esc;
   };
-  /** showAll: ignore the typed text and list everything (used by the ▾ button). */
   const render = (showAll = false): void => {
     const q = inp.value.trim();
     const all = getSuggestions();
@@ -222,7 +212,7 @@ function wireCombo(inp: HTMLInputElement, list: HTMLElement, getSuggestions: () 
       if (list.hidden || !items.length) { render(); if (list.hidden) return; }
       e.preventDefault();
       hlIndex = e.key === 'ArrowDown' ? Math.min(hlIndex + 1, items.length - 1) : Math.max(hlIndex - 1, 0);
-      items.forEach((b, i) => b.classList.toggle('hl', i === hlIndex));
+      items.forEach((btn, i) => btn.classList.toggle('hl', i === hlIndex));
       items[hlIndex]?.scrollIntoView({ block: 'nearest' });
     } else if (e.key === 'Enter' && !list.hidden && hlIndex >= 0) {
       e.preventDefault();
@@ -235,29 +225,17 @@ function wireCombo(inp: HTMLInputElement, list: HTMLElement, getSuggestions: () 
     if (btn) { e.preventDefault(); inp.value = btn.dataset.name!; list.hidden = true; }
   });
   toggle?.addEventListener('mousedown', (e) => {
-    e.preventDefault(); // keep focus so blur doesn't immediately close the list
+    e.preventDefault();
     if (list.hidden) { inp.focus(); render(true); } else { list.hidden = true; }
   });
   inp.addEventListener('blur', () => setTimeout(() => { list.hidden = true; }, 150));
 }
 
-/* ---------- species rows (multi-species, per-species quantity + note) ---------- */
+/* ---------- species rows (multi-species; per-species qty, note, images) ---------- */
 
 function setEntries(entries: SpeciesEntry[]): void {
   qs(container, '#species-rows').innerHTML = '';
   for (const e of entries) addSpeciesRow(e, false);
-}
-
-function collectEntries(): SpeciesEntry[] {
-  const rows = Array.from(container.querySelectorAll<HTMLElement>('#species-rows .sp-entry'));
-  const out: SpeciesEntry[] = [];
-  for (const row of rows) {
-    const species = row.querySelector<HTMLInputElement>('.sp-input')!.value.trim();
-    const quantity = Math.max(1, parseInt(row.querySelector<HTMLInputElement>('.sp-qty')!.value, 10) || 1);
-    const note = row.querySelector<HTMLInputElement>('.sp-note')!.value.trim();
-    if (species) out.push(note ? { species, quantity, note } : { species, quantity });
-  }
-  return out;
 }
 
 function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
@@ -280,8 +258,14 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
       </div>
       <input type="text" class="sp-note" placeholder="הערה למין זה (לא חובה)" value="${escapeHtml(entry.note || '')}">
     </div>
+    <div class="sp-entry-images">
+      <button type="button" class="btn btn-sm sp-add-img">📷 תמונות למין</button>
+      <input type="file" class="sp-file" accept="image/*,.heic,.tif,.tiff" multiple hidden>
+      <div class="sp-thumbs"></div>
+    </div>
   `;
   rows.appendChild(row);
+  rowImages.set(row, { pending: [], kept: entry.images ? [...entry.images] : [] });
 
   const qtyInput = row.querySelector<HTMLInputElement>('.sp-qty')!;
   const step = (delta: number): void => {
@@ -292,40 +276,38 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
 
   wireCombo(row.querySelector<HTMLInputElement>('.sp-input')!, row.querySelector<HTMLElement>('.sp-combo .combo-list')!, () => speciesCache);
 
+  const fileInput = row.querySelector<HTMLInputElement>('.sp-file')!;
+  row.querySelector('.sp-add-img')!.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', (e) => {
+    const files = (e.target as HTMLInputElement).files;
+    const st = rowImages.get(row)!;
+    if (files) for (const file of Array.from(files)) {
+      st.pending.push({ id: crypto.randomUUID(), file, url: URL.createObjectURL(file) });
+    }
+    fileInput.value = '';
+    void renderRowThumbs(row);
+  });
+
   row.querySelector('.sp-remove')!.addEventListener('click', () => {
     if (container.querySelectorAll('#species-rows .sp-entry').length > 1) row.remove();
     else {
       row.querySelector<HTMLInputElement>('.sp-input')!.value = '';
       row.querySelector<HTMLInputElement>('.sp-note')!.value = '';
       qtyInput.value = '1';
+      rowImages.set(row, { pending: [], kept: [] });
+      void renderRowThumbs(row);
     }
   });
+
+  void renderRowThumbs(row);
   if (focus) row.querySelector<HTMLInputElement>('.sp-input')!.focus();
 }
 
-/* ---------- images ---------- */
-
-function setupImages(): void {
-  const cam = input(container, '#f-camera');
-  const gal = input(container, '#f-gallery');
-  qs(container, '#btn-camera').addEventListener('click', () => cam.click());
-  qs(container, '#btn-gallery').addEventListener('click', () => gal.click());
-  const onFiles = (e: Event): void => {
-    const files = (e.target as HTMLInputElement).files;
-    if (files) for (const file of Array.from(files)) {
-      pendingImages.push({ id: crypto.randomUUID(), file, url: URL.createObjectURL(file) });
-    }
-    (e.target as HTMLInputElement).value = '';
-    void renderPreviews();
-  };
-  cam.addEventListener('change', onFiles);
-  gal.addEventListener('change', onFiles);
-}
-
-async function renderPreviews(): Promise<void> {
-  const wrap = qs(container, '#img-previews');
+async function renderRowThumbs(row: HTMLElement): Promise<void> {
+  const wrap = row.querySelector<HTMLElement>('.sp-thumbs')!;
+  const st = rowImages.get(row)!;
   wrap.innerHTML = '';
-  for (const img of editKeptImages) {
+  for (const img of st.kept) {
     const div = document.createElement('div');
     div.className = 'img-thumb';
     const el = document.createElement('img');
@@ -336,11 +318,11 @@ async function renderPreviews(): Promise<void> {
     rm.type = 'button';
     rm.className = 'rm';
     rm.textContent = '✕';
-    rm.onclick = (): void => { editKeptImages = editKeptImages.filter((i) => i !== img); void renderPreviews(); };
+    rm.onclick = (): void => { st.kept = st.kept.filter((i) => i !== img); void renderRowThumbs(row); };
     div.appendChild(rm);
     wrap.appendChild(div);
   }
-  for (const p of pendingImages) {
+  for (const p of st.pending) {
     const div = document.createElement('div');
     div.className = 'img-thumb';
     div.innerHTML = `<img src="${p.url}" alt="">`;
@@ -350,8 +332,8 @@ async function renderPreviews(): Promise<void> {
     rm.textContent = '✕';
     rm.onclick = (): void => {
       URL.revokeObjectURL(p.url);
-      pendingImages = pendingImages.filter((x) => x !== p);
-      void renderPreviews();
+      st.pending = st.pending.filter((x) => x !== p);
+      void renderRowThumbs(row);
     };
     div.appendChild(rm);
     wrap.appendChild(div);
@@ -362,48 +344,61 @@ async function renderPreviews(): Promise<void> {
 
 async function onSave(e: Event): Promise<void> {
   e.preventDefault();
-  const entries = collectEntries();
-  if (!entries.length) { toast('יש לבחור לפחות מין ציפור אחד', true); return; }
-  const invalid = entries.find((en) => !speciesCache.includes(en.species));
-  if (invalid) {
-    toast(`"${invalid.species}" אינו ברשימת המינים — בחרו מין מהרשימה (ניתן להוסיף בטאב "מינים")`, true, 5000);
-    return;
-  }
+  const rowEls = Array.from(container.querySelectorAll<HTMLElement>('#species-rows .sp-entry'));
   const iso = fromLocalInputValue(input(container, '#f-datetime').value);
   if (!iso) { toast('תאריך לא תקין', true); return; }
 
-  const latRaw = input(container, '#f-lat').value;
-  const lngRaw = input(container, '#f-lng').value;
-  const id = editId || crypto.randomUUID();
-  const images: ObservationImage[] = [...editKeptImages];
-
-  for (const p of pendingImages) {
-    await saveMedia({ id: p.id, obsId: id, name: p.file.name || 'image', mime: p.file.type, blob: p.file });
-    images.push({ localId: p.id, name: p.file.name || 'image' });
+  const entries: SpeciesEntry[] = [];
+  const keptIds = new Set<string>();
+  for (const row of rowEls) {
+    const species = row.querySelector<HTMLInputElement>('.sp-input')!.value.trim();
+    if (!species) continue;
+    if (!speciesCache.includes(species)) {
+      toast(`"${species}" אינו ברשימת המינים — בחרו מין מהרשימה (ניתן להוסיף בטאב "מינים")`, true, 5000);
+      return;
+    }
+    const quantity = Math.max(1, parseInt(row.querySelector<HTMLInputElement>('.sp-qty')!.value, 10) || 1);
+    const note = row.querySelector<HTMLInputElement>('.sp-note')!.value.trim();
+    const st = rowImages.get(row)!;
+    const images: ObservationImage[] = [...st.kept];
+    for (const p of st.pending) {
+      await saveMedia({ id: p.id, obsId, name: p.file.name || 'image', mime: p.file.type, blob: p.file });
+      images.push({ localId: p.id, name: p.file.name || 'image' });
+    }
+    images.forEach((i) => i.localId && keptIds.add(i.localId));
+    const entry: SpeciesEntry = { species, quantity };
+    if (note) entry.note = note;
+    if (images.length) entry.images = images;
+    entries.push(entry);
   }
+  if (!entries.length) { toast('יש לבחור לפחות מין ציפור אחד', true); return; }
+
+  // on edit: delete media blobs that were removed
   if (editId) {
-    const existing = await mediaForObservation(editId);
+    const existing = await mediaForObservation(obsId);
     for (const m of existing) {
-      if (!images.some((i) => i.localId === m.id)) await deleteMedia(m.id);
+      if (!keptIds.has(m.id)) await deleteMedia(m.id);
     }
   }
 
+  const latRaw = input(container, '#f-lat').value;
+  const lngRaw = input(container, '#f-lng').value;
   const prev = editId ? await getObservation(editId) : null;
   const obs: Observation = {
     ...(prev ?? {}),
-    id,
+    id: obsId,
     dateTime: iso,
     locationName: input(container, '#f-location').value.trim(),
     lat: latRaw === '' ? null : parseFloat(latRaw),
     lng: lngRaw === '' ? null : parseFloat(lngRaw),
     project: input(container, '#f-project').value.trim(),
     entries,
-    images,
+    images: [], // per-species now; keep empty for legacy field
     notes: qs<HTMLTextAreaElement>(container, '#f-notes').value,
     deleted: false,
     updatedAt: '',
   };
   await saveObservation(obs);
   toast(editId ? 'התצפית עודכנה ✓' : 'התצפית נשמרה ✓');
-  resetForm();
+  navigate('cards');
 }

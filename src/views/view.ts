@@ -3,6 +3,8 @@
 export interface ViewParams {
   editId?: string;
   species?: string;
+  lat?: number;
+  lng?: number;
 }
 
 export interface View {

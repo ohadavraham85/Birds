@@ -4,7 +4,7 @@
  * (e.g. if the Dexie migration hasn't run yet, or an old backup is restored),
  * so display and filtering stay correct in every case. */
 
-import type { Observation, SpeciesEntry } from '../types';
+import type { Observation, SpeciesEntry, ObservationImage } from '../types';
 
 interface LegacyShape { species?: string; quantity?: number }
 
@@ -30,6 +30,17 @@ export function totalQuantity(o: Observation): number {
 
 export function hasSpecies(o: Observation, name: string): boolean {
   return entriesOf(o).some((e) => e.species === name);
+}
+
+export function entryImages(entry: SpeciesEntry): ObservationImage[] {
+  return Array.isArray(entry.images) ? entry.images : [];
+}
+
+/** All images across an observation's entries, plus any legacy top-level ones. */
+export function allImages(o: Observation): ObservationImage[] {
+  const fromEntries = entriesOf(o).flatMap(entryImages);
+  const legacy = Array.isArray(o.images) ? o.images : [];
+  return [...fromEntries, ...legacy];
 }
 
 /** Human label: "חיוויאי הנחשים × 2 · עיט ניצי". */

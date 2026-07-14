@@ -36,6 +36,18 @@ export class BirdsDatabase extends Dexie {
         }
       });
     });
+    // v3: per-species images — move observation-level images into the first entry
+    this.version(3).stores(stores).upgrade(async (tx) => {
+      await tx.table('observations').toCollection().modify((o: Record<string, unknown>) => {
+        const imgs = o.images as unknown[] | undefined;
+        const entries = o.entries as Array<Record<string, unknown>> | undefined;
+        if (Array.isArray(imgs) && imgs.length && Array.isArray(entries) && entries.length) {
+          const first = entries[0]!;
+          first.images = [...((first.images as unknown[]) ?? []), ...imgs];
+          o.images = [];
+        }
+      });
+    });
   }
 }
 

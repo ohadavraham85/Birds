@@ -28,10 +28,13 @@ const VIEWS: Record<string, View> = {
   settings: settingsView,
 };
 
+/** Views reachable from the bottom tab bar (order matters). */
+const TAB_VIEWS = ['cards', 'map', 'species', 'table'];
+
 let currentView: string | null = null;
 
 async function showView(name: string): Promise<void> {
-  if (!VIEWS[name]) name = 'form';
+  if (!VIEWS[name]) name = 'cards';
   currentView = name;
   for (const key of Object.keys(VIEWS)) {
     document.getElementById(`view-${key}`)!.hidden = key !== name;
@@ -39,8 +42,19 @@ async function showView(name: string): Promise<void> {
   document.querySelectorAll<HTMLElement>('.tab').forEach((tab) => {
     tab.classList.toggle('active', tab.dataset.view === name);
   });
+  updateChrome(name);
   if (location.hash !== `#${name}`) history.replaceState(null, '', `#${name}`);
   await VIEWS[name]!.activate();
+}
+
+/** Top-bar action button (⋯ settings / ← back) and the FAB visibility. */
+function updateChrome(name: string): void {
+  const isTab = TAB_VIEWS.includes(name);
+  const action = document.getElementById('nav-action')!;
+  action.textContent = isTab ? '⋯' : '→';
+  action.title = isTab ? 'הגדרות' : 'חזרה ליומן';
+  const fab = document.getElementById('fab') as HTMLElement;
+  fab.hidden = name !== 'cards';
 }
 
 export function navigate(name: string, params?: ViewParams): void {
@@ -53,7 +67,11 @@ function setupNav(): void {
   document.querySelectorAll<HTMLElement>('.tab').forEach((tab) => {
     tab.addEventListener('click', () => void showView(tab.dataset.view!));
   });
-  window.addEventListener('hashchange', () => void showView(location.hash.replace('#', '') || 'form'));
+  document.getElementById('nav-action')!.addEventListener('click', () => {
+    navigate(TAB_VIEWS.includes(currentView || '') ? 'settings' : 'cards');
+  });
+  document.getElementById('fab')!.addEventListener('click', () => navigate('form'));
+  window.addEventListener('hashchange', () => void showView(location.hash.replace('#', '') || 'cards'));
 }
 
 function setupStatusIndicator(): void {
@@ -99,7 +117,7 @@ async function init(): Promise<void> {
     refreshTimer = setTimeout(() => { if (currentView) void VIEWS[currentView]!.activate(); }, 150);
   });
 
-  await showView(location.hash.replace('#', '') || 'form');
+  await showView(location.hash.replace('#', '') || 'cards');
 }
 
 void init().catch((err: unknown) => {
