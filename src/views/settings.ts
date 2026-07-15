@@ -25,6 +25,7 @@ const STATE_LABEL: Record<SyncStatus['state'], string> = {
 export async function activate(): Promise<void> {
   const obsCount = (await listObservations()).length;
   const url = await serverUrl();
+  const token = await getSetting<string>('syncToken', '');
   const lastSync = await getSetting<string | null>('lastSync', null);
   let version = '';
   try { version = (await (await fetch('version.json')).json()).version; } catch { /* dev */ }
@@ -40,7 +41,11 @@ export async function activate(): Promise<void> {
       </p>
       <div class="field">
         <label for="s-server">כתובת שרת הסנכרון (URL)</label>
-        <input type="url" id="s-server" dir="ltr" style="text-align:left" placeholder="https://my-server.example.com" value="${escapeHtml(url)}">
+        <input type="url" id="s-server" dir="ltr" style="text-align:left" placeholder="https://birds-sync.xxxxx.workers.dev" value="${escapeHtml(url)}">
+      </div>
+      <div class="field">
+        <label for="s-token">קוד סנכרון <span class="hint">(סוד משותף לך ולחברים)</span></label>
+        <input type="password" id="s-token" dir="ltr" style="text-align:left" placeholder="••••••••" value="${escapeHtml(token)}">
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-primary" id="s-save-server">💾 שמירה</button>
@@ -102,8 +107,9 @@ export async function activate(): Promise<void> {
 
 async function onSaveServer(): Promise<void> {
   const url = input(container, '#s-server').value.trim();
-  await reconfigureSync(url);
-  toast(url ? 'כתובת השרת נשמרה — מסנכרן...' : 'סנכרון כובה (עבודה מקומית)');
+  const token = input(container, '#s-token').value.trim();
+  await reconfigureSync(url, token);
+  toast(url ? 'הגדרות הסנכרון נשמרו — מסנכרן...' : 'סנכרון כובה (עבודה מקומית)');
 }
 
 /* ---------- backup / restore ---------- */

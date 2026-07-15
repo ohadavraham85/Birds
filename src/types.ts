@@ -66,6 +66,7 @@ export interface SpeciesDetail {
 
 export type SettingsKey =
   | 'syncServerUrl'
+  | 'syncToken'
   | 'syncCursor'
   | 'lastSync'
   | 'speciesSeedVersion'

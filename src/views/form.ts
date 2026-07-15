@@ -313,7 +313,7 @@ async function renderRowThumbs(row: HTMLElement): Promise<void> {
     const el = document.createElement('img');
     el.alt = img.name || 'תמונה';
     div.appendChild(el);
-    void getImageObjectUrl(img).then((url) => { if (url) el.src = url; });
+    void getImageObjectUrl(img, obsId).then((url) => { if (url) el.src = url; });
     const rm = document.createElement('button');
     rm.type = 'button';
     rm.className = 'rm';

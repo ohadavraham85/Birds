@@ -77,7 +77,7 @@ export async function activate(): Promise<void> {
         el.alt = img.name || entry.species;
         el.loading = 'lazy';
         imgWrap.appendChild(el);
-        void getImageObjectUrl(img).then((objUrl) => {
+        void getImageObjectUrl(img, o.id).then((objUrl) => {
           if (objUrl) { el.src = objUrl; el.onclick = (): void => showImageModal(objUrl, entry.species); }
           else el.remove();
         });

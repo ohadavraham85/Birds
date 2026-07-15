@@ -22,7 +22,7 @@ import {
   setSetting,
 } from '../db/repository';
 import { db } from '../db/database';
-import { postSync, type PushOp } from './api-client';
+import { postSync, uploadMedia, type PushOp } from './api-client';
 import type { Observation, SpeciesRow, SyncStatus } from '../types';
 
 const PERIODIC_MS = 60_000;
@@ -62,8 +62,34 @@ export async function serverUrl(): Promise<string> {
   return getSetting<string>('syncServerUrl', '');
 }
 
+export async function syncToken(): Promise<string> {
+  return getSetting<string>('syncToken', '');
+}
+
 export async function isSyncEnabled(): Promise<boolean> {
   return !!(await serverUrl());
+}
+
+/** Upload photo blobs not yet on the server, and stamp their remoteId onto the
+ * owning observation's image refs so the reference propagates on the next push. */
+async function uploadLocalMedia(base: string, token: string): Promise<void> {
+  const pending = (await db.media.toArray()).filter((m) => !m.remoteId);
+  for (const m of pending) {
+    await uploadMedia(base, token, m.id, m.blob);
+    m.remoteId = m.id;
+    await db.media.put(m);
+    const obs = await getObservation(m.obsId);
+    if (!obs) continue;
+    let changed = false;
+    const stamp = (imgs: { localId: string; remoteId?: string | null }[] | undefined): void => {
+      for (const img of imgs ?? []) {
+        if (img.localId === m.id && !img.remoteId) { img.remoteId = m.id; changed = true; }
+      }
+    };
+    for (const e of obs.entries ?? []) stamp(e.images);
+    stamp(obs.images);
+    if (changed) await putObservationRaw(obs);
+  }
 }
 
 /** Newer-wins merge: apply a remote observation only if it is at least as new. */
@@ -99,12 +125,27 @@ export async function syncNow(): Promise<void> {
   running = true;
   try {
     await setStatus({ state: 'syncing', message: undefined });
+    const token = await syncToken();
 
+    // 1) upload any new photos to R2 first, so image refs carry a remoteId
+    await uploadLocalMedia(base, token);
+
+    // 2) build push ops from the CURRENT entity state (picks up remoteIds and
+    //    collapses multiple edits), not the stored outbox snapshots
     const outbox = await listOutbox();
-    const ops: PushOp[] = outbox.map((e) => ({ entity: e.entity, op: e.op, payload: e.payload }));
+    const ops: PushOp[] = [];
+    for (const e of outbox) {
+      if (e.entity === 'observation') {
+        const cur = await getObservation(e.entityId);
+        if (cur) ops.push({ entity: 'observation', op: cur.deleted ? 'delete' : 'upsert', payload: cur });
+      } else {
+        const cur = await db.species.get(e.entityId);
+        if (cur) ops.push({ entity: 'species', op: cur.deleted ? 'delete' : 'upsert', payload: cur });
+      }
+    }
     const since = await getSetting<string | null>('syncCursor', null);
 
-    const res = await postSync(base, { deviceId: await deviceId(), since, ops });
+    const res = await postSync(base, token, { deviceId: await deviceId(), since, ops });
 
     // apply pulled changes (newer-wins)
     for (const o of res.changes.observations) await applyRemoteObservation(o);
@@ -181,9 +222,10 @@ export async function initSync(): Promise<void> {
   }
 }
 
-/** Called from settings when the server URL changes. */
-export async function reconfigureSync(url: string): Promise<void> {
+/** Called from settings when the server URL / token changes. */
+export async function reconfigureSync(url: string, token: string): Promise<void> {
   await setSetting('syncServerUrl', url.trim());
+  await setSetting('syncToken', token.trim());
   await setStatus({ state: url.trim() ? 'idle' : 'disabled' });
   if (url.trim()) {
     await registerBackgroundSync();

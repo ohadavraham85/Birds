@@ -53,30 +53,60 @@ function sendJson(res, code, body) {
   res.writeHead(code, {
     'Content-Type': 'application/json; charset=utf-8',
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
   });
   res.end(data);
 }
 
-const server = createServer((req, res) => {
+// in-memory photo store (the Cloudflare Worker uses R2 instead)
+const media = new Map();
+const TOKEN = process.env.SYNC_TOKEN || '';
+
+function authorized(req) {
+  if (!TOKEN) return true; // open in local dev unless a token is set
+  return (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '') === TOKEN;
+}
+
+function readBody(req) {
+  return new Promise((resolve) => {
+    const chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+  });
+}
+
+const server = createServer(async (req, res) => {
   if (req.method === 'OPTIONS') return sendJson(res, 204, {});
   if (req.method === 'GET' && req.url === '/api/health') return sendJson(res, 200, { ok: true });
 
+  if (!authorized(req)) return sendJson(res, 401, { error: 'unauthorized' });
+
   if (req.method === 'POST' && req.url === '/api/sync') {
-    let raw = '';
-    req.on('data', (c) => { raw += c; });
-    req.on('end', () => {
-      let body;
-      try { body = JSON.parse(raw || '{}'); } catch { return sendJson(res, 400, { error: 'bad json' }); }
-      for (const op of body.ops || []) {
-        if (op?.entity && op?.payload) applyOp(op.entity, op.payload);
-      }
-      const changes = changesSince(body.since);
-      persist();
-      sendJson(res, 200, { cursor: String(store.seq), changes });
-    });
-    return;
+    const raw = (await readBody(req)).toString('utf8');
+    let body;
+    try { body = JSON.parse(raw || '{}'); } catch { return sendJson(res, 400, { error: 'bad json' }); }
+    for (const op of body.ops || []) {
+      if (op?.entity && op?.payload) applyOp(op.entity, op.payload);
+    }
+    const changes = changesSince(body.since);
+    persist();
+    return sendJson(res, 200, { cursor: String(store.seq), changes });
+  }
+
+  const m = /^\/api\/media\/([A-Za-z0-9._-]+)$/.exec(req.url || '');
+  if (m) {
+    const id = m[1];
+    if (req.method === 'PUT') {
+      media.set(id, { type: req.headers['content-type'] || 'application/octet-stream', data: await readBody(req) });
+      return sendJson(res, 200, { ok: true, id });
+    }
+    if (req.method === 'GET') {
+      const obj = media.get(id);
+      if (!obj) return sendJson(res, 404, { error: 'not found' });
+      res.writeHead(200, { 'Content-Type': obj.type, 'Access-Control-Allow-Origin': '*' });
+      return res.end(obj.data);
+    }
   }
   sendJson(res, 404, { error: 'not found' });
 });

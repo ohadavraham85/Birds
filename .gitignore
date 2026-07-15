@@ -4,3 +4,5 @@ dev-dist/
 server/data.json
 *.log
 .DS_Store
+worker/node_modules/
+worker/.wrangler/
