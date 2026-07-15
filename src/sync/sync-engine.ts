@@ -75,7 +75,13 @@ export async function isSyncEnabled(): Promise<boolean> {
 async function uploadLocalMedia(base: string, token: string): Promise<void> {
   const pending = (await db.media.toArray()).filter((m) => !m.remoteId);
   for (const m of pending) {
-    await uploadMedia(base, token, m.id, m.blob);
+    try {
+      await uploadMedia(base, token, m.id, m.blob);
+    } catch {
+      // photo storage (R2) not enabled, or a transient upload error — skip the
+      // photo but let structured-data sync proceed. It retries next cycle.
+      continue;
+    }
     m.remoteId = m.id;
     await db.media.put(m);
     const obs = await getObservation(m.obsId);

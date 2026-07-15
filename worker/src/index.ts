@@ -13,7 +13,7 @@
 
 export interface Env {
   DB: D1Database;
-  PHOTOS: R2Bucket;
+  PHOTOS?: R2Bucket; // optional — photo sync only when R2 is enabled
   SYNC_TOKEN: string;
 }
 
@@ -57,9 +57,10 @@ export default {
 
       const media = path.match(/^\/api\/media\/([A-Za-z0-9._-]+)$/);
       if (media) {
+        if (!env.PHOTOS) return json({ error: 'photo storage (R2) not enabled' }, 501);
         const id = media[1]!;
-        if (req.method === 'PUT') return await putMedia(req, env, id);
-        if (req.method === 'GET') return await getMedia(env, id);
+        if (req.method === 'PUT') return await putMedia(req, env.PHOTOS, id);
+        if (req.method === 'GET') return await getMedia(env.PHOTOS, id);
       }
     } catch (err) {
       return json({ error: (err as Error).message }, 500);
@@ -116,16 +117,16 @@ async function handleSync(req: Request, env: Env): Promise<Response> {
   return json({ cursor: String(seq), changes: { observations, species } });
 }
 
-async function putMedia(req: Request, env: Env, id: string): Promise<Response> {
+async function putMedia(req: Request, photos: R2Bucket, id: string): Promise<Response> {
   if (!req.body) return json({ error: 'empty body' }, 400);
-  await env.PHOTOS.put(id, req.body, {
+  await photos.put(id, req.body, {
     httpMetadata: { contentType: req.headers.get('Content-Type') || 'application/octet-stream' },
   });
   return json({ ok: true, id });
 }
 
-async function getMedia(env: Env, id: string): Promise<Response> {
-  const obj = await env.PHOTOS.get(id);
+async function getMedia(photos: R2Bucket, id: string): Promise<Response> {
+  const obj = await photos.get(id);
   if (!obj) return json({ error: 'not found' }, 404);
   return new Response(obj.body, {
     headers: {
