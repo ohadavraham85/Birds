@@ -17,6 +17,7 @@ import * as mapView from './views/map';
 import * as tableView from './views/table';
 import * as cardsView from './views/cards';
 import * as speciesView from './views/species';
+import * as calendarView from './views/calendar';
 import * as settingsView from './views/settings';
 
 const VIEWS: Record<string, View> = {
@@ -25,11 +26,12 @@ const VIEWS: Record<string, View> = {
   table: tableView,
   cards: cardsView,
   species: speciesView,
+  calendar: calendarView,
   settings: settingsView,
 };
 
 /** Views reachable from the bottom tab bar (order matters). */
-const TAB_VIEWS = ['cards', 'map', 'species', 'table'];
+const TAB_VIEWS = ['cards', 'map', 'species', 'table', 'calendar'];
 
 let currentView: string | null = null;
 
