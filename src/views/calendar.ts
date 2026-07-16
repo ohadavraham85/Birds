@@ -89,16 +89,20 @@ function renderGrid(): void {
     const date = new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + i);
     const dayStr = localDay(date.toISOString());
     const inMonth = date.getMonth() === month;
-    const count = byDay.get(dayStr)?.length ?? 0;
+    const dayObs = byDay.get(dayStr) ?? [];
+    const count = dayObs.length;
+    const locs = [...new Set(dayObs.map((o) => o.locationName).filter(Boolean))];
+    const locLabel = locs.length > 1 ? `${locs[0]} +${locs.length - 1}` : (locs[0] || '');
     const classes = ['cal-day'];
     if (!inMonth) classes.push('muted');
     if (dayStr === todayStr) classes.push('today');
     if (count) classes.push('has-obs');
     if (dayStr === selectedDay) classes.push('selected');
     cells.push(`
-      <button class="${classes.join(' ')}" data-day="${dayStr}">
+      <button class="${classes.join(' ')}" data-day="${dayStr}"${locs.length ? ` title="${escapeHtml(locs.join(', '))}"` : ''}>
         <span class="cal-daynum">${date.getDate()}</span>
         ${count ? `<span class="cal-dot">${count}</span>` : ''}
+        ${locLabel ? `<span class="cal-loc">📍 ${escapeHtml(locLabel)}</span>` : ''}
       </button>`);
   }
   grid.innerHTML = cells.join('');

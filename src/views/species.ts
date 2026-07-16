@@ -1,18 +1,22 @@
 /* views/species.ts — טאב "מינים": רשימת המינים עם פרטים (עברית/אנגלית/מדעי/משפחה),
- * חיפוש, קיבוץ לפי משפחה, מספר תצפיות לכל מין, וקישור לתצפיות. */
+ * חיפוש, קיבוץ לפי משפחה, מספר תצפיות לכל מין, תמונות מהתצפיות, תיאור אישי
+ * לכל מין, וקישור לתצפיות. */
 
-import { listSpecies, addSpecies, removeSpecies, listObservations } from '../db/repository';
+import { listSpeciesRows, addSpecies, setSpeciesDescription, listObservations } from '../db/repository';
 import { SPECIES_DETAILS } from '../data/species-data';
-import { toast, confirmDialog } from '../lib/ui';
+import { toast, showImageModal } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
-import { speciesNames } from '../lib/observation';
+import { speciesNames, entriesOf, entryImages } from '../lib/observation';
+import { getImageObjectUrl } from '../lib/media';
 import { qs, input, select } from '../lib/dom';
 import { navigate } from '../main';
-import type { SpeciesDetail } from '../types';
+import type { SpeciesDetail, ObservationImage } from '../types';
 
 let container: HTMLElement;
 let names: string[] = [];
 let counts: Record<string, number> = {};
+let descriptions: Record<string, string> = {};
+let imagesByName: Record<string, { img: ObservationImage; obsId: string }[]> = {};
 let query = '';
 let grouped = true;
 let openKey: string | null = null;
@@ -39,14 +43,28 @@ export function init(el: HTMLElement): void {
   select(container, '#sp-group').addEventListener('change', (e) => { grouped = (e.target as HTMLSelectElement).value === 'family'; render(); });
   qs(container, '#sp-add').addEventListener('click', () => void onAdd());
   input(container, '#sp-new').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); void onAdd(); } });
-  qs(container, '#sp-list').addEventListener('click', (e) => void onListClick(e));
+  qs(container, '#sp-list').addEventListener('click', onListClick);
+  qs(container, '#sp-list').addEventListener('change', (e) => void onDescriptionChange(e));
 }
 
 export async function activate(): Promise<void> {
-  names = await listSpecies();
+  const rows = await listSpeciesRows();
+  names = rows.map((r) => r.name);
+  descriptions = {};
+  for (const r of rows) descriptions[r.name] = r.description || '';
+
   const obs = await listObservations();
   counts = {};
-  for (const o of obs) for (const name of speciesNames(o)) counts[name] = (counts[name] || 0) + 1;
+  imagesByName = {};
+  for (const o of obs) {
+    for (const name of speciesNames(o)) counts[name] = (counts[name] || 0) + 1;
+    for (const entry of entriesOf(o)) {
+      const imgs = entryImages(entry);
+      if (entry.species && imgs.length) {
+        (imagesByName[entry.species] ??= []).push(...imgs.map((img) => ({ img, obsId: o.id })));
+      }
+    }
+  }
   render();
 }
 
@@ -85,12 +103,34 @@ function render(): void {
   } else {
     el.innerHTML = [...list].sort((a, b) => a.localeCompare(b, 'he')).map(cardHtml).join('');
   }
+  renderOpenPhotos();
+}
+
+/** Fills the open card's photo gallery (thumbnails resolved async, like the journal cards). */
+function renderOpenPhotos(): void {
+  if (!openKey) return;
+  const wrap = [...container.querySelectorAll<HTMLElement>('.sp-photos')].find((w) => w.dataset.name === openKey);
+  if (!wrap) return;
+  const photos = imagesByName[openKey] || [];
+  wrap.innerHTML = '';
+  for (const { img, obsId } of photos) {
+    const el = document.createElement('img');
+    el.loading = 'lazy';
+    el.alt = openKey;
+    wrap.appendChild(el);
+    void getImageObjectUrl(img, obsId).then((url) => {
+      if (url) { el.src = url; el.onclick = (): void => showImageModal(url, openKey || ''); }
+      else el.remove();
+    });
+  }
 }
 
 function cardHtml(name: string): string {
   const d = detailsFor(name);
   const n = counts[name] || 0;
   const open = openKey === name;
+  const photoCount = (imagesByName[name] || []).length;
+  const desc = descriptions[name] || '';
   return `
     <div class="sp-card${open ? ' open' : ''}" data-name="${escapeHtml(name)}">
       <div class="sp-row">
@@ -109,33 +149,43 @@ function cardHtml(name: string): string {
           ${d.en ? `<div><b>שם אנגלי:</b> <span dir="ltr">${escapeHtml(d.en)}</span></div>` : ''}
           ${d.family ? `<div><b>משפחה:</b> ${escapeHtml(d.family)}</div>` : ''}
           ${!d.en && !d.sci && !d.family ? '<div style="color:var(--ink-soft)">אין פרטים נוספים למין זה.</div>' : ''}
+          ${photoCount ? `
+            <div class="sp-photos-label">📷 ${photoCount} תמונות מהתצפיות</div>
+            <div class="sp-photos" data-name="${escapeHtml(name)}"></div>` : ''}
+          <div class="field sp-desc-field">
+            <label for="sp-desc-${escapeHtml(name)}">תיאור אישי</label>
+            <textarea id="sp-desc-${escapeHtml(name)}" class="sp-desc-input" data-name="${escapeHtml(name)}"
+              placeholder="הוסיפו כאן תיאור, סימני זיהוי, מיקומים מועדפים...">${escapeHtml(desc)}</textarea>
+          </div>
           <div class="sp-actions">
             ${n ? `<button class="btn btn-sm btn-primary act-obs" data-name="${escapeHtml(name)}">📋 הצגת ${n} התצפיות</button>` : ''}
             <button class="btn btn-sm act-report" data-name="${escapeHtml(name)}">📝 דיווח תצפית</button>
-            <button class="btn btn-sm btn-danger act-remove" data-name="${escapeHtml(name)}">🗑️ הסרה מהרשימה</button>
           </div>
         </div>` : ''}
     </div>`;
 }
 
-async function onListClick(e: Event): Promise<void> {
+function onListClick(e: Event): void {
   const target = e.target as HTMLElement;
   const obs = target.closest<HTMLElement>('.act-obs');
   if (obs) { e.stopPropagation(); navigate('table', { species: obs.dataset.name! }); return; }
   const report = target.closest<HTMLElement>('.act-report');
   if (report) { navigate('form', { species: report.dataset.name! }); return; }
-  const remove = target.closest<HTMLElement>('.act-remove');
-  if (remove) {
-    if (await confirmDialog(`להסיר את "${remove.dataset.name}" מרשימת המינים?`, 'הסרה')) {
-      await removeSpecies(remove.dataset.name!);
-      openKey = null;
-      await activate();
-      toast('המין הוסר מהרשימה');
-    }
-    return;
+  const row = target.closest<HTMLElement>('.sp-row');
+  if (row) {
+    const card = row.closest<HTMLElement>('.sp-card')!;
+    openKey = openKey === card.dataset.name ? null : card.dataset.name!;
+    render();
   }
-  const card = target.closest<HTMLElement>('.sp-card');
-  if (card) { openKey = openKey === card.dataset.name ? null : card.dataset.name!; render(); }
+}
+
+async function onDescriptionChange(e: Event): Promise<void> {
+  const ta = (e.target as HTMLElement).closest<HTMLTextAreaElement>('.sp-desc-input');
+  if (!ta) return;
+  const name = ta.dataset.name!;
+  descriptions[name] = ta.value;
+  await setSpeciesDescription(name, ta.value);
+  toast('התיאור נשמר');
 }
 
 async function onAdd(): Promise<void> {
