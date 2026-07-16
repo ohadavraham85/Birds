@@ -57,7 +57,12 @@ export async function activate(): Promise<void> {
       <ol class="species-ol"></ol>
       ${o.notes ? `<div class="notes">${renderMarkdown(o.notes)}</div>` : ''}
     `;
-    card.querySelector('.act-pdf')!.addEventListener('click', () => void onExportOne(o));
+    card.querySelector('.act-pdf')!.addEventListener('click', (e) => { e.stopPropagation(); void onExportOne(o); });
+    card.addEventListener('click', (e) => {
+      const target = e.target as HTMLElement;
+      if (target.closest('.place-link, .species-imgs img')) return;
+      navigate('form', { editId: o.id });
+    });
 
     const ol = card.querySelector<HTMLElement>('.species-ol')!;
     for (const entry of entries) {

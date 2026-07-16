@@ -472,8 +472,10 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   padding: 14px 16px;
+  cursor: pointer;
 }
 .obs-card:hover { box-shadow: var(--shadow-lg); }
+.obs-card .place-link, .obs-card .act-pdf, .obs-card .species-imgs img { cursor: pointer; }
 .obs-card .card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
 .obs-card .card-place { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .obs-card .place-link { color: var(--green-700); font-weight: 700; text-decoration: none; }
