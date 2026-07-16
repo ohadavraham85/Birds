@@ -4,7 +4,7 @@
 
 import { listSpeciesRows, addSpecies, setSpeciesDescription, listObservations } from '../db/repository';
 import { SPECIES_DETAILS } from '../data/species-data';
-import { toast, showImageModal } from '../lib/ui';
+import { toast, showImageModal, fmtDateTime } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
 import { speciesNames, entriesOf, entryImages } from '../lib/observation';
 import { getImageObjectUrl } from '../lib/media';
@@ -12,13 +12,16 @@ import { qs, input, select } from '../lib/dom';
 import { navigate } from '../main';
 import type { SpeciesDetail, ObservationImage } from '../types';
 
+type SortMode = 'family' | 'alpha' | 'recent';
+
 let container: HTMLElement;
 let names: string[] = [];
 let counts: Record<string, number> = {};
 let descriptions: Record<string, string> = {};
 let imagesByName: Record<string, { img: ObservationImage; obsId: string }[]> = {};
+let lastObserved: Record<string, string> = {};
 let query = '';
-let grouped = true;
+let sortMode: SortMode = 'family';
 let openKey: string | null = null;
 
 export function init(el: HTMLElement): void {
@@ -29,7 +32,8 @@ export function init(el: HTMLElement): void {
       <input type="search" id="sp-q" class="filter-search" placeholder="🔍 חיפוש מין (עברית / אנגלית / מדעי / משפחה)...">
       <select id="sp-group" class="filter-sel">
         <option value="family">קיבוץ לפי משפחה</option>
-        <option value="none">לפי א״ב</option>
+        <option value="alpha">לפי א״ב</option>
+        <option value="recent">לפי תצפית אחרונה</option>
       </select>
     </div>
     <div class="add-species-row">
@@ -40,7 +44,7 @@ export function init(el: HTMLElement): void {
     <div id="sp-list" class="sp-cards"></div>
   `;
   input(container, '#sp-q').addEventListener('input', (e) => { query = (e.target as HTMLInputElement).value; render(); });
-  select(container, '#sp-group').addEventListener('change', (e) => { grouped = (e.target as HTMLSelectElement).value === 'family'; render(); });
+  select(container, '#sp-group').addEventListener('change', (e) => { sortMode = (e.target as HTMLSelectElement).value as SortMode; render(); });
   qs(container, '#sp-add').addEventListener('click', () => void onAdd());
   input(container, '#sp-new').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); void onAdd(); } });
   qs(container, '#sp-list').addEventListener('click', onListClick);
@@ -56,8 +60,12 @@ export async function activate(): Promise<void> {
   const obs = await listObservations();
   counts = {};
   imagesByName = {};
+  lastObserved = {};
   for (const o of obs) {
-    for (const name of speciesNames(o)) counts[name] = (counts[name] || 0) + 1;
+    for (const name of speciesNames(o)) {
+      counts[name] = (counts[name] || 0) + 1;
+      if (!lastObserved[name] || o.dateTime > lastObserved[name]!) lastObserved[name] = o.dateTime;
+    }
     for (const entry of entriesOf(o)) {
       const imgs = entryImages(entry);
       if (entry.species && imgs.length) {
@@ -88,7 +96,7 @@ function render(): void {
   const el = qs(container, '#sp-list');
   if (!list.length) { el.innerHTML = '<p style="color:var(--ink-soft)">אין מין תואם.</p>'; return; }
 
-  if (grouped) {
+  if (sortMode === 'family') {
     const groups = new Map<string, string[]>();
     for (const n of list) {
       const fam = detailsFor(n).family || '(ללא משפחה)';
@@ -100,6 +108,16 @@ function render(): void {
         <div class="sp-group-head">${escapeHtml(fam)} <span class="sp-group-n">${groups.get(fam)!.length}</span></div>
         ${groups.get(fam)!.sort((a, b) => a.localeCompare(b, 'he')).map(cardHtml).join('')}
       </div>`).join('');
+  } else if (sortMode === 'recent') {
+    const sorted = [...list].sort((a, b) => {
+      const la = lastObserved[a] || '';
+      const lb = lastObserved[b] || '';
+      if (la && lb) return la < lb ? 1 : la > lb ? -1 : 0;
+      if (la) return -1;
+      if (lb) return 1;
+      return a.localeCompare(b, 'he');
+    });
+    el.innerHTML = sorted.map(cardHtml).join('');
   } else {
     el.innerHTML = [...list].sort((a, b) => a.localeCompare(b, 'he')).map(cardHtml).join('');
   }
@@ -148,6 +166,7 @@ function cardHtml(name: string): string {
           ${d.sci ? `<div><b>שם מדעי:</b> <i dir="ltr">${escapeHtml(d.sci)}</i></div>` : ''}
           ${d.en ? `<div><b>שם אנגלי:</b> <span dir="ltr">${escapeHtml(d.en)}</span></div>` : ''}
           ${d.family ? `<div><b>משפחה:</b> ${escapeHtml(d.family)}</div>` : ''}
+          ${lastObserved[name] ? `<div><b>תצפית אחרונה:</b> ${fmtDateTime(lastObserved[name]!)}</div>` : ''}
           ${!d.en && !d.sci && !d.family ? '<div style="color:var(--ink-soft)">אין פרטים נוספים למין זה.</div>' : ''}
           ${photoCount ? `
             <div class="sp-photos-label">📷 ${photoCount} תמונות מהתצפיות</div>
