@@ -25,7 +25,7 @@ function mapsUrl(o: Observation): string | null {
 
 export async function activate(): Promise<void> {
   const all = await listObservations();
-  container.innerHTML = '<h2>יומן תצפיות</h2>';
+  container.innerHTML = '<h2>יומן תצפית</h2>';
   if (!all.length) {
     container.insertAdjacentHTML('beforeend',
       '<p style="color:var(--ink-soft)">אין עדיין תצפיות — הוסיפו תצפית עם כפתור ה־➕ 📝</p>');
