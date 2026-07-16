@@ -129,16 +129,27 @@ export async function addSpecies(name: string, opts: SaveOptions = {}): Promise<
   return true;
 }
 
-export async function removeSpecies(name: string): Promise<void> {
-  const row: SpeciesRow = { name, updatedAt: now(), deleted: true };
-  await db.species.put(row);
-  await enqueue('species', name, 'delete', row);
-  emitChange();
-}
-
 export async function speciesExists(name: string): Promise<boolean> {
   const row = await db.species.get(name);
   return !!row && !row.deleted;
+}
+
+/** All non-deleted species rows (with their description), name-sorted. */
+export async function listSpeciesRows(): Promise<SpeciesRow[]> {
+  const all = await db.species.toArray();
+  return all
+    .filter((s) => !s.deleted)
+    .sort((a, b) => a.name.localeCompare(b.name, 'he'));
+}
+
+export async function setSpeciesDescription(name: string, description: string): Promise<void> {
+  const row = await db.species.get(name);
+  if (!row) return;
+  row.description = description;
+  row.updatedAt = now();
+  await db.species.put(row);
+  await enqueue('species', name, 'upsert', row);
+  emitChange();
 }
 
 export async function putSpeciesRaw(row: SpeciesRow): Promise<void> {

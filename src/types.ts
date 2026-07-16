@@ -44,6 +44,8 @@ export interface SpeciesRow {
   name: string;
   updatedAt: string;
   deleted?: boolean;
+  /** User-written free-text description/notes for this species. */
+  description?: string;
 }
 
 /** Original-quality image blob, linked to an observation. */
