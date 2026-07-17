@@ -1,104 +1,123 @@
 /* views/cards.ts — מסך יומן (ראשי): כרטיס לכל תצפית עם מיקום לחיץ (מפות),
- * רשימת מינים ממוספרת, הערה ותמונות לכל מין, וכפתור ייצוא ל-PDF. כולל FAB
- * להוספת תצפית. */
+ * רשימת מינים ממוספרת, הערה ותמונות לכל מין. לחיצה על כרטיס פותחת מסך צפייה
+ * (View Mode) בלבד — העריכה עוברת דרך כפתור ייעודי שם. כולל קיבוץ/מיון לפי
+ * תאריך, מיקום או פרויקט, וכפתור FAB להוספת תצפית. */
 
 import { listObservations } from '../db/repository';
-import { fmtDateTime, fmtCoords, showImageModal, toast } from '../lib/ui';
-import { renderMarkdown, escapeHtml } from '../lib/markdown';
-import { getImageObjectUrl } from '../lib/media';
-import { entriesOf, entryImages } from '../lib/observation';
-import { exportObservationsPdf } from '../lib/pdf';
+import { renderObservationCard } from '../lib/obs-card';
+import { qs, select } from '../lib/dom';
 import { navigate } from '../main';
 import type { Observation } from '../types';
 
+type GroupMode = 'none' | 'day' | 'month' | 'location' | 'project';
+
 let container: HTMLElement;
+let observations: Observation[] = [];
+let groupBy: GroupMode = 'none';
 
 export function init(el: HTMLElement): void {
   container = el;
-}
-
-function mapsUrl(o: Observation): string | null {
-  if (o.lat != null && o.lng != null) return `https://www.google.com/maps/search/?api=1&query=${o.lat},${o.lng}`;
-  if (o.locationName) return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(o.locationName)}`;
-  return null;
+  container.innerHTML = `
+    <h2>יומן תצפית</h2>
+    <div class="filter-bar">
+      <select id="j-group" class="filter-sel">
+        <option value="none">ללא קיבוץ</option>
+        <option value="day">קיבוץ לפי יום</option>
+        <option value="month">קיבוץ לפי חודש</option>
+        <option value="location">קיבוץ לפי מיקום</option>
+        <option value="project">קיבוץ לפי פרויקט</option>
+      </select>
+    </div>
+    <div id="cards-feed-wrap"></div>
+  `;
+  select(container, '#j-group').addEventListener('change', (e) => {
+    groupBy = (e.target as HTMLSelectElement).value as GroupMode;
+    render();
+  });
 }
 
 export async function activate(): Promise<void> {
-  const all = await listObservations();
-  container.innerHTML = '<h2>יומן תצפית</h2>';
-  if (!all.length) {
-    container.insertAdjacentHTML('beforeend',
-      '<p style="color:var(--ink-soft)">אין עדיין תצפיות — הוסיפו תצפית עם כפתור ה־➕ 📝</p>');
-    return;
-  }
-  const feed = document.createElement('div');
-  feed.className = 'cards-feed';
-  container.appendChild(feed);
+  observations = await listObservations();
+  render();
+}
 
-  for (const o of all) {
-    const entries = entriesOf(o);
-    const url = mapsUrl(o);
-    const card = document.createElement('article');
-    card.className = 'obs-card';
-    card.innerHTML = `
-      <div class="card-head">
-        <div class="card-place">
-          ${url
-            ? `<a href="${url}" target="_blank" rel="noopener" class="place-link">📍 ${escapeHtml(o.locationName || 'מיקום')}</a>`
-            : `<span>📍 ${escapeHtml(o.locationName || '—')}</span>`}
-          ${o.project ? `<span class="badge">${escapeHtml(o.project)}</span>` : ''}
-        </div>
-        <button class="btn btn-sm act-pdf" title="ייצוא ל-PDF">🧾</button>
-      </div>
-      <div class="meta">
-        <span>🕒 ${fmtDateTime(o.dateTime)}</span>
-        ${fmtCoords(o.lat, o.lng) ? `<span dir="ltr">🧭 ${fmtCoords(o.lat, o.lng)}</span>` : ''}
-      </div>
-      <ol class="species-ol"></ol>
-      ${o.notes ? `<div class="notes">${renderMarkdown(o.notes)}</div>` : ''}
-    `;
-    card.querySelector('.act-pdf')!.addEventListener('click', (e) => { e.stopPropagation(); void onExportOne(o); });
-    card.addEventListener('click', (e) => {
-      const target = e.target as HTMLElement;
-      if (target.closest('.place-link, .species-imgs img')) return;
-      navigate('form', { editId: o.id });
-    });
+function dayKey(iso: string): string {
+  const d = new Date(iso);
+  const p = (n: number): string => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
 
-    const ol = card.querySelector<HTMLElement>('.species-ol')!;
-    for (const entry of entries) {
-      const li = document.createElement('li');
-      li.className = 'species-li';
-      li.innerHTML = `
-        <div class="species-line">
-          <span class="species-name">${escapeHtml(entry.species)}</span>
-          <span class="species-qty">× ${entry.quantity}</span>
-        </div>
-        ${entry.note ? `<div class="species-note">${escapeHtml(entry.note)}</div>` : ''}
-        <div class="species-imgs"></div>
-      `;
-      const imgWrap = li.querySelector<HTMLElement>('.species-imgs')!;
-      for (const img of entryImages(entry)) {
-        const el = document.createElement('img');
-        el.alt = img.name || entry.species;
-        el.loading = 'lazy';
-        imgWrap.appendChild(el);
-        void getImageObjectUrl(img, o.id).then((objUrl) => {
-          if (objUrl) { el.src = objUrl; el.onclick = (): void => showImageModal(objUrl, entry.species); }
-          else el.remove();
-        });
-      }
-      ol.appendChild(li);
+function monthKey(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function groupOf(o: Observation): { key: string; label: string } {
+  switch (groupBy) {
+    case 'day': {
+      const key = dayKey(o.dateTime);
+      const label = new Date(o.dateTime).toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+      return { key, label };
     }
-    feed.appendChild(card);
+    case 'month': {
+      const key = monthKey(o.dateTime);
+      const label = new Date(o.dateTime).toLocaleDateString('he-IL', { month: 'long', year: 'numeric' });
+      return { key, label };
+    }
+    case 'location': {
+      const label = o.locationName || '(ללא מיקום)';
+      return { key: label, label };
+    }
+    case 'project': {
+      const label = o.project || '(ללא פרויקט)';
+      return { key: label, label };
+    }
+    default:
+      return { key: '', label: '' };
   }
 }
 
-async function onExportOne(o: Observation): Promise<void> {
-  try {
-    await exportObservationsPdf([o]);
-  } catch (err) {
-    toast('הפקת ה-PDF נכשלה: ' + (err as Error).message, true, 5000);
+function render(): void {
+  const wrap = qs(container, '#cards-feed-wrap');
+  wrap.innerHTML = '';
+  if (!observations.length) {
+    wrap.innerHTML = '<p style="color:var(--ink-soft)">אין עדיין תצפיות — הוסיפו תצפית עם כפתור ה־➕ 📝</p>';
+    return;
   }
+
+  const feed = document.createElement('div');
+  feed.className = 'cards-feed';
+  wrap.appendChild(feed);
+
+  if (groupBy === 'none') {
+    for (const o of observations) feed.appendChild(cardWithClick(o));
+    return;
+  }
+
+  const groups = new Map<string, { label: string; items: Observation[] }>();
+  for (const o of observations) {
+    const { key, label } = groupOf(o);
+    (groups.get(key) ?? groups.set(key, { label, items: [] }).get(key)!).items.push(o);
+  }
+  const keys = [...groups.keys()].sort((a, b) => (groupBy === 'day' || groupBy === 'month' ? (a < b ? 1 : a > b ? -1 : 0) : a.localeCompare(b, 'he')));
+  for (const key of keys) {
+    const group = groups.get(key)!;
+    const head = document.createElement('h3');
+    head.className = 'cards-group-head';
+    head.textContent = group.label;
+    feed.appendChild(head);
+    for (const o of group.items) feed.appendChild(cardWithClick(o));
+  }
+}
+
+function cardWithClick(o: Observation): HTMLElement {
+  const card = renderObservationCard(o);
+  card.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('.place-link, .species-imgs img')) return;
+    navigate('detail', { viewId: o.id });
+  });
+  return card;
 }
 
 // Called by the FAB in the app chrome.

@@ -16,6 +16,7 @@ import * as formView from './views/form';
 import * as mapView from './views/map';
 import * as tableView from './views/table';
 import * as cardsView from './views/cards';
+import * as detailView from './views/detail';
 import * as speciesView from './views/species';
 import * as calendarView from './views/calendar';
 import * as settingsView from './views/settings';
@@ -25,13 +26,14 @@ const VIEWS: Record<string, View> = {
   map: mapView,
   table: tableView,
   cards: cardsView,
+  detail: detailView,
   species: speciesView,
   calendar: calendarView,
   settings: settingsView,
 };
 
 /** Views reachable from the bottom tab bar (order matters). */
-const TAB_VIEWS = ['cards', 'map', 'species', 'table', 'calendar'];
+const TAB_VIEWS = ['cards', 'calendar', 'map', 'species'];
 
 let currentView: string | null = null;
 
@@ -49,12 +51,13 @@ async function showView(name: string): Promise<void> {
   await VIEWS[name]!.activate();
 }
 
-/** Top-bar action button (⋯ settings / ← back) and the FAB visibility. */
+/** Top-bar action button (⋯ overflow menu / ← back) and the FAB visibility. */
 function updateChrome(name: string): void {
   const isTab = TAB_VIEWS.includes(name);
   const action = document.getElementById('nav-action')!;
   action.textContent = isTab ? '⋯' : '→';
-  action.title = isTab ? 'הגדרות' : 'חזרה ליומן';
+  action.title = isTab ? 'תפריט' : 'חזרה ליומן';
+  if (!isTab) document.getElementById('topbar-menu-list')!.hidden = true;
   const fab = document.getElementById('fab') as HTMLElement;
   fab.hidden = name !== 'cards';
 }
@@ -69,9 +72,19 @@ function setupNav(): void {
   document.querySelectorAll<HTMLElement>('.tab').forEach((tab) => {
     tab.addEventListener('click', () => void showView(tab.dataset.view!));
   });
+
+  const menuList = document.getElementById('topbar-menu-list')!;
   document.getElementById('nav-action')!.addEventListener('click', () => {
-    navigate(TAB_VIEWS.includes(currentView || '') ? 'settings' : 'cards');
+    if (TAB_VIEWS.includes(currentView || '')) { menuList.hidden = !menuList.hidden; }
+    else navigate('cards');
   });
+  menuList.querySelectorAll<HTMLElement>('button[data-view]').forEach((btn) => {
+    btn.addEventListener('click', () => { menuList.hidden = true; navigate(btn.dataset.view!); });
+  });
+  document.addEventListener('click', (e) => {
+    if (!(e.target as HTMLElement).closest('.topbar-menu')) menuList.hidden = true;
+  });
+
   document.getElementById('fab')!.addEventListener('click', () => navigate('form'));
   window.addEventListener('hashchange', () => void showView(location.hash.replace('#', '') || 'cards'));
 }

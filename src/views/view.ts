@@ -2,6 +2,7 @@
 
 export interface ViewParams {
   editId?: string;
+  viewId?: string;
   species?: string;
   lat?: number;
   lng?: number;

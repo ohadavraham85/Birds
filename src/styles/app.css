@@ -101,6 +101,27 @@ body {
 }
 .topbar-btn:hover { background: rgba(255, 255, 255, 0.28); }
 
+.topbar-menu { position: relative; }
+.topbar-menu-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 20px rgba(27,67,50,.18);
+  z-index: 1300;
+  overflow: hidden;
+  min-width: 150px;
+}
+.topbar-menu-list[hidden] { display: none; }
+.topbar-menu-list button {
+  display: block; width: 100%; text-align: right;
+  padding: 11px 14px; border: 0; background: none; font: inherit; color: var(--ink);
+  cursor: pointer;
+}
+.topbar-menu-list button:hover { background: var(--green-50); }
+
 /* ---------- floating action button ---------- */
 
 .fab {
@@ -127,6 +148,19 @@ body {
 
 .form-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .form-head h2 { margin: 0; }
+
+/* ---------- observation detail (view mode) ---------- */
+
+.detail-actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+
+/* ---------- journal group headers ---------- */
+
+.cards-group-head {
+  font-weight: 700; color: var(--green-900);
+  background: var(--green-50); border-radius: var(--radius);
+  padding: 8px 12px; margin: 4px 0 2px;
+}
+.cards-group-head:first-child { margin-top: 0; }
 
 /* ---------- main / views ---------- */
 
@@ -165,6 +199,14 @@ body {
   font-size: .8rem; padding: 5px 12px; border-radius: 999px;
   z-index: 600; pointer-events: none; max-width: 92%; text-align: center;
 }
+.map-locate-btn {
+  position: absolute; bottom: calc(var(--tabbar-h) + 18px); left: 16px;
+  width: 46px; height: 46px; border-radius: 50%; border: 0;
+  background: var(--card); box-shadow: var(--shadow-lg);
+  font-size: 1.25rem; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; z-index: 700;
+}
+.map-locate-btn:hover { background: var(--green-50); }
 
 /* ---------- tab bar ---------- */
 
@@ -479,12 +521,13 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
   cursor: pointer;
 }
 .obs-card:hover { box-shadow: var(--shadow-lg); }
-.obs-card .place-link, .obs-card .act-pdf, .obs-card .species-imgs img { cursor: pointer; }
+.obs-card.static-card { cursor: default; }
+.obs-card.static-card:hover { box-shadow: var(--shadow); }
+.obs-card .place-link, .obs-card .species-imgs img { cursor: pointer; }
 .obs-card .card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
 .obs-card .card-place { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .obs-card .place-link { color: var(--green-700); font-weight: 700; text-decoration: none; }
 .obs-card .place-link:hover { text-decoration: underline; }
-.obs-card .act-pdf { flex-shrink: 0; }
 .obs-card .species { font-size: 1.15rem; font-weight: 700; color: var(--green-900); }
 .obs-card .qty { color: var(--green-700); font-weight: 600; font-size: .9rem; }
 .obs-card .meta { color: var(--ink-soft); font-size: .85rem; margin-top: 3px; display: flex; gap: 12px; flex-wrap: wrap; }
@@ -675,15 +718,24 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
 
 /* leaflet popup RTL */
 .leaflet-popup-content { direction: rtl; text-align: right; font-family: inherit; }
-.leaflet-popup-content .species { font-weight: 700; color: var(--green-900); }
 
-.map-loc-label {
-  direction: rtl; font-family: inherit; font-weight: 600; font-size: .78rem;
-  color: var(--green-900); background: var(--card);
-  border: 1px solid var(--line); border-radius: 999px;
-  padding: 3px 10px; box-shadow: var(--shadow);
+/* compact "add observation here" popup on map points */
+.leaflet-popup.map-pop-wrap .leaflet-popup-content-wrapper {
+  padding: 0; border-radius: 999px; box-shadow: var(--shadow-lg);
 }
-.map-loc-label::before { display: none; }
+.leaflet-popup.map-pop-wrap .leaflet-popup-content { margin: 0; }
+.leaflet-popup.map-pop-wrap .leaflet-popup-tip-container { display: none; }
+.map-pop {
+  direction: rtl; display: flex; align-items: center; gap: 6px;
+  padding: 5px 6px 5px 12px;
+}
+.map-pop-name { font-size: .82rem; font-weight: 600; color: var(--green-900); white-space: nowrap; }
+.map-pop-add {
+  flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%;
+  border: 0; background: var(--green-700); color: #fff; font-size: .95rem;
+  display: flex; align-items: center; justify-content: center; cursor: pointer; line-height: 1;
+}
+.map-pop-add:hover { background: var(--green-600); }
 
 .leaflet-div-icon.bird-div-icon { background: transparent; border: none; }
 .bird-marker-badge {
