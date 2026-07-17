@@ -148,6 +148,10 @@ body {
 #map-container {
   height: calc(100vh - var(--topbar-h) - var(--tabbar-h) - env(safe-area-inset-bottom));
   width: 100%;
+  /* Leaflet's own positioning math isn't RTL-aware — under dir="rtl" its
+     tooltip/popup centering breaks (shifts a full tooltip-width sideways).
+     Isolate the map in an LTR context; content inside re-declares rtl. */
+  direction: ltr;
 }
 .map-empty {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
