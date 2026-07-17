@@ -673,6 +673,14 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
 .leaflet-popup-content { direction: rtl; text-align: right; font-family: inherit; }
 .leaflet-popup-content .species { font-weight: 700; color: var(--green-900); }
 
+.map-loc-label {
+  direction: rtl; font-family: inherit; font-weight: 600; font-size: .78rem;
+  color: var(--green-900); background: var(--card);
+  border: 1px solid var(--line); border-radius: 999px;
+  padding: 3px 10px; box-shadow: var(--shadow);
+}
+.map-loc-label::before { display: none; }
+
 /* ---------- PDF report template (rendered off-screen) ---------- */
 
 .pdf-report { direction: rtl; font-family: Arial, "Noto Sans Hebrew", sans-serif; color: #1d2721; padding: 24px; background: #fff; width: 720px; }
