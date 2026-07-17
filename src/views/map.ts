@@ -14,6 +14,18 @@ let map: L.Map | undefined;
 let markersLayer: L.LayerGroup | undefined;
 let dropMarker: L.Marker | undefined;
 
+/** Round green badge with a bird glyph, replacing Leaflet's default pin.
+ * iconAnchor centers it on the coordinate; tooltipAnchor keeps the label
+ * tight against the badge instead of floating far above it. */
+const birdIcon = L.divIcon({
+  className: 'bird-div-icon',
+  html: '<div class="bird-marker-badge">🐦</div>',
+  iconSize: [30, 30],
+  iconAnchor: [15, 15],
+  tooltipAnchor: [0, -17],
+  popupAnchor: [0, -15],
+});
+
 export function init(el: HTMLElement): void {
   container = el;
   container.innerHTML = `
@@ -39,8 +51,8 @@ function ensureMap(): void {
 function dropPin(latlng: L.LatLng): void {
   const params = { lat: +latlng.lat.toFixed(6), lng: +latlng.lng.toFixed(6) };
   dropMarker?.remove();
-  dropMarker = L.marker(latlng).addTo(map!);
-  dropMarker.bindTooltip('לחצו על הסיכה להוספת תצפית כאן', { permanent: true, direction: 'top', offset: [0, -36] }).openTooltip();
+  dropMarker = L.marker(latlng, { icon: birdIcon }).addTo(map!);
+  dropMarker.bindTooltip('לחצו על הסיכה להוספת תצפית כאן', { permanent: true, direction: 'top' }).openTooltip();
   dropMarker.on('click', () => navigate('form', params));
 }
 
@@ -76,10 +88,10 @@ export async function activate(): Promise<void> {
 
   const bounds: [number, number][] = [];
   for (const { first, count } of groupByLocation(withCoords)) {
-    const marker = L.marker([first.lat!, first.lng!]);
+    const marker = L.marker([first.lat!, first.lng!], { icon: birdIcon });
     const label = first.locationName || 'מיקום ללא שם';
     marker.bindTooltip(escapeHtml(label) + (count > 1 ? ` (${count})` : ''), {
-      permanent: true, direction: 'top', offset: [0, -30], className: 'map-loc-label',
+      permanent: true, direction: 'top', className: 'map-loc-label',
     });
     marker.on('click', () => navigate('form', { lat: first.lat!, lng: first.lng!, locationName: first.locationName }));
     marker.addTo(markersLayer!);
