@@ -18,6 +18,9 @@ let markersLayer: L.LayerGroup | undefined;
 let dropMarker: L.Marker | undefined;
 let myLocationMarker: L.CircleMarker | undefined;
 let geoWatchId: number | null = null;
+let streetLayer: L.TileLayer;
+let satelliteLayer: L.TileLayer;
+let usingSatellite = false;
 
 /** Round green badge with a bird glyph, replacing Leaflet's default pin.
  * tooltipAnchor keeps the small permanent name label snug against the badge. */
@@ -36,18 +39,24 @@ export function init(el: HTMLElement): void {
     <div id="map-container"></div>
     <div class="map-hint">לחיצה ארוכה על המפה מוסיפה תצפית במיקום חדש · לחיצה על נקודה קיימת מציגה אפשרות להוספת תצפית באותו מיקום</div>
     <button id="locate-btn" class="map-locate-btn" type="button" title="התמרכזות על המיקום הנוכחי" aria-label="התמרכזות על המיקום הנוכחי">🎯</button>
+    <button id="layer-toggle-btn" class="map-layer-btn" type="button" title="הצגת שכבת לוויין" aria-label="הצגת שכבת לוויין">🛰️</button>
     <div class="map-empty" id="map-empty" hidden>אין עדיין תצפיות עם קואורדינטות.<br>הוסיפו תצפית עם מיקום GPS והיא תופיע כאן.</div>
   `;
   qs(container, '#locate-btn').addEventListener('click', onLocateClick);
+  qs(container, '#layer-toggle-btn').addEventListener('click', toggleLayer);
 }
 
 function ensureMap(): void {
   if (map) return;
   map = L.map('map-container', { zoomControl: true }).setView([31.5, 35.0], 8);
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  streetLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '&copy; OpenStreetMap',
   }).addTo(map);
+  satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 19,
+    attribution: 'Tiles &copy; Esri',
+  });
   markersLayer = L.layerGroup().addTo(map);
 
   // long-press (contextmenu on touch) drops a pin at a new location
@@ -166,4 +175,16 @@ function onLocateClick(): void {
 function qsEmpty(show: boolean): void {
   const e = container.querySelector<HTMLElement>('#map-empty');
   if (e) e.hidden = !show;
+}
+
+/* ---------- base layer (street / satellite) ---------- */
+
+function toggleLayer(): void {
+  if (!map) return;
+  usingSatellite = !usingSatellite;
+  if (usingSatellite) { map.removeLayer(streetLayer); satelliteLayer.addTo(map); }
+  else { map.removeLayer(satelliteLayer); streetLayer.addTo(map); }
+  const btn = qs<HTMLButtonElement>(container, '#layer-toggle-btn');
+  btn.textContent = usingSatellite ? '🗺️' : '🛰️';
+  btn.title = usingSatellite ? 'הצגת מפת רחובות' : 'הצגת שכבת לוויין';
 }

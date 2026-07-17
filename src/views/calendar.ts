@@ -1,10 +1,10 @@
-/* views/calendar.ts — תצוגת לוח שנה: חודש עם נקודת/מספר תצפיות בכל יום,
- * לחיצה על יום מציגה למטה את התצפיות של אותו יום. */
+/* views/calendar.ts — תצוגת לוח שנה: חודש עם נקודת/מספר תצפיות בכל יום.
+ * לחיצה על יום מציגה למטה את התצפיות שלו (כמו ביומן) עם כפתור להוספת
+ * תצפית חדשה לאותו יום; לחיצה על תצפית קיימת פותחת את מסך הצפייה שלה. */
 
-import { listObservations, deleteObservation } from '../db/repository';
-import { fmtDateTime, toast, confirmDialog } from '../lib/ui';
+import { listObservations } from '../db/repository';
 import { escapeHtml } from '../lib/markdown';
-import { speciesLabel } from '../lib/observation';
+import { renderObservationCard } from '../lib/obs-card';
 import { qs } from '../lib/dom';
 import { navigate } from '../main';
 import type { Observation } from '../types';
@@ -39,7 +39,6 @@ export function init(el: HTMLElement): void {
     render();
   });
   qs(container, '#cal-grid').addEventListener('click', onGridClick);
-  qs(container, '#cal-agenda').addEventListener('click', (e) => void onAgendaClick(e));
 }
 
 export async function activate(): Promise<void> {
@@ -118,47 +117,42 @@ function onGridClick(e: Event): void {
 
 function renderAgenda(): void {
   const agenda = qs(container, '#cal-agenda');
-  if (!selectedDay) { agenda.innerHTML = ''; return; }
+  agenda.innerHTML = '';
+  if (!selectedDay) return;
+
   const items = (byDay.get(selectedDay) ?? [])
     .slice()
     .sort((a, b) => (a.dateTime < b.dateTime ? -1 : a.dateTime > b.dateTime ? 1 : 0));
   const dateLabel = new Date(selectedDay).toLocaleDateString('he-IL', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
+  const day = selectedDay;
+
+  const head = document.createElement('div');
+  head.className = 'cal-agenda-head';
+  const title = document.createElement('h3');
+  title.textContent = dateLabel + (items.length ? ` · ${items.length} תצפיות` : '');
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.className = 'btn btn-sm btn-primary';
+  addBtn.textContent = '➕ הוספת תצפית ליום זה';
+  addBtn.addEventListener('click', () => navigate('form', { date: day }));
+  head.append(title, addBtn);
+  agenda.appendChild(head);
 
   if (!items.length) {
-    agenda.innerHTML = `
-      <h3>${dateLabel}</h3>
-      <p style="color:var(--ink-soft)">אין תצפיות ביום זה.</p>`;
+    agenda.insertAdjacentHTML('beforeend', '<p style="color:var(--ink-soft)">אין תצפיות ביום זה.</p>');
     return;
   }
 
-  agenda.innerHTML = `
-    <h3>${dateLabel} · ${items.length} תצפיות</h3>
-    <div class="cal-agenda-list">
-      ${items.map((o) => `
-        <div class="cal-agenda-item" data-id="${o.id}">
-          <div class="cal-agenda-main">
-            <span class="cal-agenda-time">🕒 ${fmtDateTime(o.dateTime).split(' ').pop()}</span>
-            <span class="cal-agenda-species">${escapeHtml(speciesLabel(o) || '—')}</span>
-            ${o.locationName ? `<span class="cal-agenda-place">📍 ${escapeHtml(o.locationName)}</span>` : ''}
-          </div>
-          <div class="cal-agenda-actions">
-            <button class="btn btn-sm act-edit" title="עריכה">✏️</button>
-            <button class="btn btn-sm act-del" title="מחיקה">🗑️</button>
-          </div>
-        </div>`).join('')}
-    </div>`;
-}
-
-async function onAgendaClick(e: Event): Promise<void> {
-  const item = (e.target as HTMLElement).closest<HTMLElement>('.cal-agenda-item');
-  if (!item) return;
-  const id = item.dataset.id!;
-  if ((e.target as HTMLElement).closest('.act-edit')) { navigate('form', { editId: id }); return; }
-  if ((e.target as HTMLElement).closest('.act-del')) {
-    if (await confirmDialog('למחוק את התצפית?', 'מחיקה')) {
-      await deleteObservation(id);
-      await activate();
-      toast('התצפית נמחקה');
-    }
+  const feed = document.createElement('div');
+  feed.className = 'cards-feed';
+  agenda.appendChild(feed);
+  for (const o of items) {
+    const card = renderObservationCard(o);
+    card.addEventListener('click', (e) => {
+      const target = e.target as HTMLElement;
+      if (target.closest('.place-link, .species-imgs img')) return;
+      navigate('detail', { viewId: o.id });
+    });
+    feed.appendChild(card);
   }
 }

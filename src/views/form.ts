@@ -10,7 +10,7 @@ import { toast, toLocalInputValue, fromLocalInputValue } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
 import { getImageObjectUrl } from '../lib/media';
 import { pickLocation } from '../lib/location-picker';
-import { entriesOf, entryImages } from '../lib/observation';
+import { entriesOf, entryImages, speciesNames } from '../lib/observation';
 import { qs, input } from '../lib/dom';
 import { navigate } from '../main';
 import type { ViewParams } from './view';
@@ -21,12 +21,14 @@ interface RowImages { pending: PendingImage[]; kept: ObservationImage[] }
 
 let container: HTMLElement;
 let speciesCache: string[] = [];
+let seenSpeciesCache: string[] = [];
 let projectSuggestions: string[] = [];
 let locationSuggestions: string[] = [];
 let editId: string | null = null;
 let prefillSpecies: string | null = null;
 let prefillCoords: { lat: number; lng: number } | null = null;
 let prefillLocationName: string | null = null;
+let prefillDate: string | null = null;
 let obsId = '';
 const rowImages = new WeakMap<HTMLElement, RowImages>();
 
@@ -100,11 +102,15 @@ export function setParams(params: ViewParams): void {
   prefillSpecies = params?.species || null;
   prefillCoords = (params?.lat != null && params?.lng != null) ? { lat: params.lat, lng: params.lng } : null;
   prefillLocationName = params?.locationName || null;
+  prefillDate = params?.date || null;
 }
 
 export async function activate(): Promise<void> {
   speciesCache = await listSpecies();
   const all = await listObservations();
+  const seen = new Set<string>();
+  for (const o of all) for (const name of speciesNames(o)) seen.add(name);
+  seenSpeciesCache = speciesCache.filter((s) => seen.has(s));
   projectSuggestions = [...new Set(all.map((o) => o.project).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'he'));
   locationSuggestions = [...new Set(all.map((o) => o.locationName).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'he'));
 
@@ -118,9 +124,15 @@ export async function activate(): Promise<void> {
     qs(container, '#gps-status').textContent = '(נבחר על המפה)';
   }
   if (prefillLocationName) input(container, '#f-location').value = prefillLocationName;
+  if (prefillDate) {
+    const [y, m, d] = prefillDate.split('-').map(Number);
+    const now = new Date();
+    input(container, '#f-datetime').value = toLocalInputValue(new Date(y!, m! - 1, d!, now.getHours(), now.getMinutes()));
+  }
   prefillSpecies = null;
   prefillCoords = null;
   prefillLocationName = null;
+  prefillDate = null;
 }
 
 function resetForm(locate = true): void {
@@ -190,8 +202,16 @@ async function openPicker(): Promise<void> {
 
 /* ---------- generic autocomplete combobox ---------- */
 
-function wireCombo(inp: HTMLInputElement, list: HTMLElement, getSuggestions: () => string[]): void {
+interface ComboOptions {
+  /** 'prefix' matches only names starting with the typed text; default is substring-anywhere. */
+  matchMode?: 'contains' | 'prefix';
+  /** Suggestions shown when the field is empty (e.g. previously-seen species), if different from the full list. */
+  getDefault?: () => string[];
+}
+
+function wireCombo(inp: HTMLInputElement, list: HTMLElement, getSuggestions: () => string[], opts: ComboOptions = {}): void {
   const toggle = inp.closest('.combo')?.querySelector<HTMLButtonElement>('.combo-toggle');
+  const matchMode = opts.matchMode ?? 'contains';
   let hlIndex = -1;
   const highlight = (s: string, q: string): string => {
     const esc = escapeHtml(s);
@@ -199,8 +219,11 @@ function wireCombo(inp: HTMLInputElement, list: HTMLElement, getSuggestions: () 
   };
   const render = (showAll = false): void => {
     const q = inp.value.trim();
-    const all = getSuggestions();
-    const matches = (showAll || !q ? all : all.filter((s) => s.includes(q))).slice(0, 60);
+    let matches: string[];
+    if (showAll) matches = getSuggestions();
+    else if (!q) matches = opts.getDefault ? opts.getDefault() : getSuggestions();
+    else matches = getSuggestions().filter((s) => (matchMode === 'prefix' ? s.startsWith(q) : s.includes(q)));
+    matches = matches.slice(0, 60);
     hlIndex = -1;
     if (!matches.length) { list.hidden = true; return; }
     list.innerHTML = matches
@@ -252,21 +275,19 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
         <input type="text" class="sp-input" placeholder="הקלידו לחיפוש מין..." value="${escapeHtml(entry.species)}">
         <div class="combo-list" hidden></div>
       </div>
-      <button type="button" class="btn btn-icon sp-remove" title="הסרת מין">✕</button>
-    </div>
-    <div class="sp-entry-second">
       <div class="qty-stepper">
         <button type="button" class="btn btn-icon qty-minus" title="פחות">−</button>
         <input type="number" class="sp-qty" min="1" step="1" inputmode="numeric" value="${entry.quantity}" title="מספר פרטים">
         <button type="button" class="btn btn-icon qty-plus" title="עוד">+</button>
       </div>
+      <button type="button" class="btn btn-icon sp-remove" title="הסרת מין">✕</button>
+    </div>
+    <div class="sp-entry-second">
+      <button type="button" class="btn btn-icon sp-add-img" title="הוספת תמונות למין">📷</button>
+      <input type="file" class="sp-file" accept="image/*,.heic,.tif,.tiff" multiple hidden>
       <input type="text" class="sp-note" placeholder="הערה למין זה (לא חובה)" value="${escapeHtml(entry.note || '')}">
     </div>
-    <div class="sp-entry-images">
-      <button type="button" class="btn btn-sm sp-add-img">📷 תמונות למין</button>
-      <input type="file" class="sp-file" accept="image/*,.heic,.tif,.tiff" multiple hidden>
-      <div class="sp-thumbs"></div>
-    </div>
+    <div class="sp-thumbs"></div>
   `;
   rows.appendChild(row);
   rowImages.set(row, { pending: [], kept: entry.images ? [...entry.images] : [] });
@@ -278,7 +299,12 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
   row.querySelector('.qty-minus')!.addEventListener('click', () => step(-1));
   row.querySelector('.qty-plus')!.addEventListener('click', () => step(1));
 
-  wireCombo(row.querySelector<HTMLInputElement>('.sp-input')!, row.querySelector<HTMLElement>('.sp-combo .combo-list')!, () => speciesCache);
+  wireCombo(
+    row.querySelector<HTMLInputElement>('.sp-input')!,
+    row.querySelector<HTMLElement>('.sp-combo .combo-list')!,
+    () => speciesCache,
+    { matchMode: 'prefix', getDefault: () => seenSpeciesCache },
+  );
 
   const fileInput = row.querySelector<HTMLInputElement>('.sp-file')!;
   row.querySelector('.sp-add-img')!.addEventListener('click', () => fileInput.click());

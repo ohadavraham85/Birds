@@ -207,6 +207,14 @@ body {
   cursor: pointer; z-index: 700;
 }
 .map-locate-btn:hover { background: var(--green-50); }
+.map-layer-btn {
+  position: absolute; bottom: calc(var(--tabbar-h) + 18px + 46px + 10px); left: 16px;
+  width: 46px; height: 46px; border-radius: 50%; border: 0;
+  background: var(--card); box-shadow: var(--shadow-lg);
+  font-size: 1.25rem; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; z-index: 700;
+}
+.map-layer-btn:hover { background: var(--green-50); }
 
 /* ---------- tab bar ---------- */
 
@@ -373,15 +381,15 @@ textarea { min-height: 130px; resize: vertical; white-space: pre-wrap; line-heig
 .sp-entry-main .sp-combo { flex: 1; min-width: 0; }
 .sp-entry .sp-remove { flex-shrink: 0; padding: 8px 11px; }
 .sp-entry-second { display: flex; gap: 8px; align-items: center; }
+.sp-entry-second .sp-add-img { flex-shrink: 0; padding: 8px 11px; }
 .sp-entry-second .sp-note { flex: 1; min-width: 0; font-size: .9rem; }
 
 .qty-stepper { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
 .qty-stepper .sp-qty { width: 54px; text-align: center; padding: 8px 4px; }
 .qty-stepper .btn-icon { padding: 8px 12px; font-weight: 700; font-size: 1.05rem; line-height: 1; }
 
-.sp-entry-images { display: flex; flex-direction: column; gap: 6px; }
-.sp-entry-images .sp-thumbs { display: flex; gap: 8px; flex-wrap: wrap; }
-.sp-entry-images .sp-thumbs:empty { display: none; }
+.sp-thumbs { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.sp-thumbs:empty { display: none; margin-top: 0; }
 
 /* ---------- map picker modal ---------- */
 
@@ -605,17 +613,11 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
 .cal-day.selected .cal-loc { color: rgba(255, 255, 255, .88); }
 .cal-day.muted .cal-loc { color: var(--ink-soft); }
 
-.cal-agenda-list { display: flex; flex-direction: column; gap: 8px; }
-.cal-agenda-item {
+.cal-agenda-head {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
-  padding: 10px 12px;
+  flex-wrap: wrap; margin-bottom: 10px;
 }
-.cal-agenda-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.cal-agenda-time { color: var(--ink-soft); font-size: .82rem; }
-.cal-agenda-species { font-weight: 700; color: var(--green-900); }
-.cal-agenda-place { color: var(--ink-soft); font-size: .85rem; }
-.cal-agenda-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.cal-agenda-head h3 { margin: 0; }
 
 /* ---------- settings ---------- */
 
