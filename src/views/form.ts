@@ -26,6 +26,7 @@ let locationSuggestions: string[] = [];
 let editId: string | null = null;
 let prefillSpecies: string | null = null;
 let prefillCoords: { lat: number; lng: number } | null = null;
+let prefillLocationName: string | null = null;
 let obsId = '';
 const rowImages = new WeakMap<HTMLElement, RowImages>();
 
@@ -98,6 +99,7 @@ export function setParams(params: ViewParams): void {
   editId = params?.editId || null;
   prefillSpecies = params?.species || null;
   prefillCoords = (params?.lat != null && params?.lng != null) ? { lat: params.lat, lng: params.lng } : null;
+  prefillLocationName = params?.locationName || null;
 }
 
 export async function activate(): Promise<void> {
@@ -115,8 +117,10 @@ export async function activate(): Promise<void> {
     input(container, '#f-lng').value = prefillCoords.lng.toFixed(6);
     qs(container, '#gps-status').textContent = '(נבחר על המפה)';
   }
+  if (prefillLocationName) input(container, '#f-location').value = prefillLocationName;
   prefillSpecies = null;
   prefillCoords = null;
+  prefillLocationName = null;
 }
 
 function resetForm(locate = true): void {

@@ -5,6 +5,7 @@ export interface ViewParams {
   species?: string;
   lat?: number;
   lng?: number;
+  locationName?: string;
 }
 
 export interface View {
