@@ -12,7 +12,7 @@ import { qs, input, select } from '../lib/dom';
 import { navigate } from '../main';
 import type { SpeciesDetail, ObservationImage } from '../types';
 
-type SortMode = 'family' | 'alpha' | 'recent';
+type SortMode = 'family' | 'alpha' | 'recent' | 'seen';
 
 let container: HTMLElement;
 let names: string[] = [];
@@ -23,6 +23,7 @@ let lastObserved: Record<string, string> = {};
 let query = '';
 let sortMode: SortMode = 'family';
 let openKey: string | null = null;
+let collapsedGroups = new Set<string>();
 
 export function init(el: HTMLElement): void {
   container = el;
@@ -32,6 +33,7 @@ export function init(el: HTMLElement): void {
       <input type="search" id="sp-q" class="filter-search" placeholder="🔍 חיפוש מין (עברית / אנגלית / מדעי / משפחה)...">
       <select id="sp-group" class="filter-sel">
         <option value="family">קיבוץ לפי משפחה</option>
+        <option value="seen">נצפה / לא נצפה</option>
         <option value="alpha">לפי א״ב</option>
         <option value="recent">לפי תצפית אחרונה</option>
       </select>
@@ -96,18 +98,27 @@ function render(): void {
   const el = qs(container, '#sp-list');
   if (!list.length) { el.innerHTML = '<p style="color:var(--ink-soft)">אין מין תואם.</p>'; return; }
 
-  if (sortMode === 'family') {
+  if (sortMode === 'family' || sortMode === 'seen') {
     const groups = new Map<string, string[]>();
     for (const n of list) {
-      const fam = detailsFor(n).family || '(ללא משפחה)';
-      (groups.get(fam) ?? groups.set(fam, []).get(fam)!).push(n);
+      const key = sortMode === 'family' ? (detailsFor(n).family || '(ללא משפחה)') : (counts[n] ? 'נצפה' : 'לא נצפה');
+      (groups.get(key) ?? groups.set(key, []).get(key)!).push(n);
     }
-    const fams = [...groups.keys()].sort((a, b) => a.localeCompare(b, 'he'));
-    el.innerHTML = fams.map((fam) => `
+    const keys = sortMode === 'seen'
+      ? ['נצפה', 'לא נצפה'].filter((k) => groups.has(k))
+      : [...groups.keys()].sort((a, b) => a.localeCompare(b, 'he'));
+    el.innerHTML = keys.map((key) => {
+      const items = groups.get(key)!.sort((a, b) => a.localeCompare(b, 'he'));
+      const collapsed = collapsedGroups.has(key);
+      return `
       <div class="sp-group">
-        <div class="sp-group-head">${escapeHtml(fam)} <span class="sp-group-n">${groups.get(fam)!.length}</span></div>
-        ${groups.get(fam)!.sort((a, b) => a.localeCompare(b, 'he')).map(cardHtml).join('')}
-      </div>`).join('');
+        <button type="button" class="sp-group-head" data-group="${escapeHtml(key)}">
+          <span>${escapeHtml(key)} <span class="sp-group-n">${items.length}</span></span>
+          <span class="sp-caret">${collapsed ? '▼' : '▲'}</span>
+        </button>
+        ${collapsed ? '' : items.map(cardHtml).join('')}
+      </div>`;
+    }).join('');
   } else if (sortMode === 'recent') {
     const sorted = [...list].sort((a, b) => {
       const la = lastObserved[a] || '';
@@ -190,6 +201,14 @@ function onListClick(e: Event): void {
   if (obs) { e.stopPropagation(); navigate('table', { species: obs.dataset.name! }); return; }
   const report = target.closest<HTMLElement>('.act-report');
   if (report) { navigate('form', { species: report.dataset.name! }); return; }
+  const groupHead = target.closest<HTMLElement>('.sp-group-head');
+  if (groupHead) {
+    const key = groupHead.dataset.group!;
+    if (collapsedGroups.has(key)) collapsedGroups.delete(key);
+    else collapsedGroups.add(key);
+    render();
+    return;
+  }
   const row = target.closest<HTMLElement>('.sp-row');
   if (row) {
     const card = row.closest<HTMLElement>('.sp-card')!;

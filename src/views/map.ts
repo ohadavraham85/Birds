@@ -1,12 +1,13 @@
 /* views/map.ts — מסך מפת השטח: נקודה אחת לכל מיקום ייחודי (לפי הקואורדינטות
- * של התצפית הראשונה שנרשמה שם). לחיצה על נקודה פותחת חלונית מידע קומפקטית
- * (שם המקום + כפתור "הוספת תצפית כאן"); לחיצה ארוכה על המפה פותחת אותה
- * חלונית במיקום חדש שנבחר. שכבת GPS מציגה את מיקום המשתמש בזמן אמת, עם
- * כפתור להתמרכזות עליו. */
+ * של התצפית הראשונה שנרשמה שם), עם תווית קטנה וצמודה של שם המיקום. לחיצה על
+ * נקודה פותחת חלונית מידע קומפקטית (שם המקום + כפתור "הוספת תצפית כאן");
+ * לחיצה ארוכה על המפה פותחת אותה חלונית במיקום חדש שנבחר. שכבת GPS מציגה את
+ * מיקום המשתמש בזמן אמת, עם כפתור להתמרכזות עליו. */
 
 import L from '../lib/leaflet-setup';
 import { listObservations } from '../db/repository';
 import { toast } from '../lib/ui';
+import { escapeHtml } from '../lib/markdown';
 import { qs } from '../lib/dom';
 import { navigate } from '../main';
 import type { Observation } from '../types';
@@ -18,12 +19,14 @@ let dropMarker: L.Marker | undefined;
 let myLocationMarker: L.CircleMarker | undefined;
 let geoWatchId: number | null = null;
 
-/** Round green badge with a bird glyph, replacing Leaflet's default pin. */
+/** Round green badge with a bird glyph, replacing Leaflet's default pin.
+ * tooltipAnchor keeps the small permanent name label snug against the badge. */
 const birdIcon = L.divIcon({
   className: 'bird-div-icon',
   html: '<div class="bird-marker-badge">🐦</div>',
   iconSize: [30, 30],
   iconAnchor: [15, 15],
+  tooltipAnchor: [0, -16],
   popupAnchor: [0, -17],
 });
 
@@ -113,6 +116,7 @@ export async function activate(): Promise<void> {
   for (const { first, count } of groupByLocation(withCoords)) {
     const marker = L.marker([first.lat!, first.lng!], { icon: birdIcon });
     const label = (first.locationName || 'מיקום ללא שם') + (count > 1 ? ` (${count})` : '');
+    marker.bindTooltip(escapeHtml(label), { permanent: true, direction: 'top', className: 'map-loc-label-sm' });
     marker.bindPopup(
       buildAddPopup(label, { lat: first.lat!, lng: first.lng!, locationName: first.locationName }),
       { closeButton: false, className: 'map-pop-wrap', maxWidth: 240 },
