@@ -12,6 +12,7 @@ import { getImageObjectUrl } from '../lib/media';
 import { pickLocation } from '../lib/location-picker';
 import { entriesOf, entryImages, speciesNames } from '../lib/observation';
 import { qs, input } from '../lib/dom';
+import { icon } from '../lib/icons';
 import { navigate } from '../main';
 import type { ViewParams } from './view';
 import type { Observation, ObservationImage, SpeciesEntry } from '../types';
@@ -69,7 +70,7 @@ export function init(el: HTMLElement): void {
         <div class="coords-row">
           <input type="number" step="any" id="f-lat" placeholder="קו רוחב (Lat)" inputmode="decimal">
           <input type="number" step="any" id="f-lng" placeholder="קו אורך (Lng)" inputmode="decimal">
-          <button type="button" class="btn btn-icon" id="pick-map-btn" title="בחירת מיקום על המפה">📍</button>
+          <button type="button" class="btn btn-icon" id="pick-map-btn" title="בחירת מיקום על המפה">${icon('pin')}</button>
         </div>
         <span class="hint">ברירת מחדל: המיקום הנוכחי · לחצו על הסיכה כדי לבחור על המפה</span>
       </div>
@@ -77,7 +78,7 @@ export function init(el: HTMLElement): void {
       <div class="field">
         <label>מיני הציפור <span class="hint">(לכל מין: כמות, הערה ותמונות משלו)</span></label>
         <div id="species-rows"></div>
-        <button type="button" class="btn btn-sm" id="add-species-row" style="margin-top:6px">➕ הוספת מין</button>
+        <button type="button" class="btn btn-sm" id="add-species-row" style="margin-top:6px">${icon('plus')} הוספת מין</button>
       </div>
 
       <div class="field">
@@ -85,7 +86,7 @@ export function init(el: HTMLElement): void {
         <textarea id="f-notes" placeholder="סיכום שטח מפורט..."></textarea>
       </div>
 
-      <button type="submit" class="btn btn-primary btn-block" id="save-btn">💾 שמירת התצפית</button>
+      <button type="submit" class="btn btn-primary btn-block" id="save-btn">${icon('save')} שמירת התצפית</button>
     </form>
   `;
 
@@ -142,7 +143,7 @@ function resetForm(locate = true): void {
   input(container, '#f-datetime').value = toLocalInputValue();
   setEntries([{ species: '', quantity: 1 }]);
   qs(container, '#form-title').textContent = 'תצפית חדשה';
-  qs(container, '#save-btn').textContent = '💾 שמירת התצפית';
+  qs(container, '#save-btn').innerHTML = `${icon('save')} שמירת התצפית`;
   if (locate) autoFillGps();
 }
 
@@ -151,7 +152,7 @@ async function loadForEdit(id: string): Promise<void> {
   if (!obs) { resetForm(); return; }
   obsId = id;
   qs(container, '#form-title').textContent = 'עריכת תצפית';
-  qs(container, '#save-btn').textContent = '💾 עדכון התצפית';
+  qs(container, '#save-btn').innerHTML = `${icon('save')} עדכון התצפית`;
   input(container, '#f-datetime').value = toLocalInputValue(new Date(obs.dateTime));
   input(container, '#f-location').value = obs.locationName || '';
   input(container, '#f-project').value = obs.project || '';
@@ -283,7 +284,7 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
       <button type="button" class="btn btn-icon sp-remove" title="הסרת מין">✕</button>
     </div>
     <div class="sp-entry-second">
-      <button type="button" class="btn btn-icon sp-add-img" title="הוספת תמונות למין">📷</button>
+      <button type="button" class="btn btn-icon sp-add-img" title="הוספת תמונות למין">${icon('camera')}</button>
       <input type="file" class="sp-file" accept="image/*,.heic,.tif,.tiff" multiple hidden>
       <input type="text" class="sp-note" placeholder="הערה למין זה (לא חובה)" value="${escapeHtml(entry.note || '')}">
     </div>

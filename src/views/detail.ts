@@ -5,6 +5,7 @@ import { getObservation } from '../db/repository';
 import { toast } from '../lib/ui';
 import { renderObservationCard } from '../lib/obs-card';
 import { exportObservationsPdf } from '../lib/pdf';
+import { icon } from '../lib/icons';
 import { qs } from '../lib/dom';
 import { navigate } from '../main';
 import type { ViewParams } from './view';
@@ -23,8 +24,8 @@ export function init(el: HTMLElement): void {
     </div>
     <div id="detail-body"></div>
     <div class="detail-actions">
-      <button class="btn btn-primary" id="detail-edit">✏️ עריכה</button>
-      <button class="btn" id="detail-pdf">🧾 ייצוא PDF</button>
+      <button class="btn btn-primary" id="detail-edit">${icon('edit')} עריכה</button>
+      <button class="btn" id="detail-pdf">${icon('document')} ייצוא PDF</button>
     </div>
   `;
   qs(container, '#detail-back').addEventListener('click', () => navigate('cards'));

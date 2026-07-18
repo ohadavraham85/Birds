@@ -8,6 +8,7 @@ import { reconfigureSync, serverUrl, syncNow, onSyncStatus } from '../sync/sync-
 import { toast, confirmDialog, fmtDateTime } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
 import { qs, input } from '../lib/dom';
+import { icon } from '../lib/icons';
 import { THEMES, currentTheme, setTheme, type ThemeId } from '../lib/theme';
 import type { Observation, SyncStatus } from '../types';
 
@@ -36,7 +37,7 @@ export async function activate(): Promise<void> {
     <h2>הגדרות</h2>
 
     <div class="settings-card">
-      <h3>🎨 עיצוב</h3>
+      <h3>${icon('palette')} עיצוב</h3>
       <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">בחרו ערכת צבעים לאפליקציה — משתנה מיד, ונשמרת במכשיר זה.</p>
       <div class="theme-picker" id="s-theme-picker">
         ${THEMES.map((t) => `
@@ -48,7 +49,7 @@ export async function activate(): Promise<void> {
     </div>
 
     <div class="settings-card">
-      <h3>☁️ סנכרון לשרת</h3>
+      <h3>${icon('cloud')} סנכרון לשרת</h3>
       <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
         עבודה מלאה גם ללא רשת; כשמוגדרת כתובת שרת, השינויים מסתנכרנים אוטומטית
         כשחוזרת התקשורת. השאירו ריק לעבודה מקומית בלבד.
@@ -62,43 +63,43 @@ export async function activate(): Promise<void> {
         <input type="password" id="s-token" dir="ltr" style="text-align:left" placeholder="••••••••" value="${escapeHtml(token)}">
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-primary" id="s-save-server">💾 שמירה</button>
-        <button class="btn" id="s-sync-now">🔄 סנכרון עכשיו</button>
+        <button class="btn btn-primary" id="s-save-server">${icon('save')} שמירה</button>
+        <button class="btn" id="s-sync-now">${icon('refresh')} סנכרון עכשיו</button>
       </div>
       <div class="settings-status" id="s-sync-status"></div>
       ${lastSync ? `<div class="settings-status">סנכרון אחרון: ${fmtDateTime(lastSync)}</div>` : ''}
     </div>
 
     <div class="settings-card">
-      <h3>💾 גיבוי ושחזור</h3>
+      <h3>${icon('save')} גיבוי ושחזור</h3>
       <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
         קובץ גיבוי יחיד (כולל תמונות באיכות מקור). ניתן לשחזור בכל מכשיר.
       </p>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-primary" id="s-backup">⬇️ הורדת קובץ גיבוי מלא</button>
-        <label class="btn" style="cursor:pointer">⬆️ שחזור מקובץ גיבוי
+        <button class="btn btn-primary" id="s-backup">${icon('download')} הורדת קובץ גיבוי מלא</button>
+        <label class="btn" style="cursor:pointer">${icon('upload')} שחזור מקובץ גיבוי
           <input type="file" id="s-restore" accept=".json,application/json" hidden>
         </label>
       </div>
     </div>
 
     <div class="settings-card">
-      <h3>🎬 נתוני הדגמה</h3>
+      <h3>נתוני הדגמה</h3>
       <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
         טעינת 20 תצפיות לדוגמה. אפשר להסירן בלחיצה בלי לפגוע בתצפיות אמיתיות.
       </p>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-primary" id="s-demo-load">🎬 טעינת נתוני דמה</button>
-        <button class="btn" id="s-demo-remove">🧹 הסרת נתוני הדמה</button>
+        <button class="btn btn-primary" id="s-demo-load">טעינת נתוני דמה</button>
+        <button class="btn" id="s-demo-remove">${icon('trash')} הסרת נתוני הדמה</button>
       </div>
     </div>
 
     <div class="settings-card">
-      <h3>🗄️ נתונים מקומיים</h3>
+      <h3>${icon('database')} נתונים מקומיים</h3>
       <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
         במכשיר זה שמורות כרגע ${obsCount} תצפיות. ${version ? `· גרסת אפליקציה: v${escapeHtml(version)}` : ''}
       </p>
-      <button class="btn btn-danger" id="s-clear">🗑️ מחיקת כל הנתונים</button>
+      <button class="btn btn-danger" id="s-clear">${icon('trash')} מחיקת כל הנתונים</button>
     </div>
   `;
 
@@ -200,7 +201,7 @@ async function onLoadDemo(): Promise<void> {
   try {
     const { loadDemoData } = await import('../data/demo-data');
     const n = await loadDemoData();
-    toast(`נטענו ${n} תצפיות לדוגמה — עברו למסכי היומן, הרשימה והמפה 🎉`, false, 5000);
+    toast(`נטענו ${n} תצפיות לדוגמה — עברו למסכי היומן, הרשימה והמפה`, false, 5000);
     await activate();
   } finally { btn.disabled = false; }
 }

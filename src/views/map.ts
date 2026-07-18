@@ -8,6 +8,7 @@ import L from '../lib/leaflet-setup';
 import { listObservations } from '../db/repository';
 import { toast } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
+import { icon } from '../lib/icons';
 import { qs } from '../lib/dom';
 import { navigate } from '../main';
 import type { Observation } from '../types';
@@ -26,7 +27,7 @@ let usingSatellite = false;
  * tooltipAnchor keeps the small permanent name label snug against the badge. */
 const birdIcon = L.divIcon({
   className: 'bird-div-icon',
-  html: '<div class="bird-marker-badge">🐦</div>',
+  html: `<div class="bird-marker-badge">${icon('bird')}</div>`,
   iconSize: [30, 30],
   iconAnchor: [15, 15],
   tooltipAnchor: [0, -16],
@@ -38,8 +39,8 @@ export function init(el: HTMLElement): void {
   container.innerHTML = `
     <div id="map-container"></div>
     <div class="map-hint">לחיצה ארוכה על המפה מוסיפה תצפית במיקום חדש · לחיצה על נקודה קיימת מציגה אפשרות להוספת תצפית באותו מיקום</div>
-    <button id="locate-btn" class="map-locate-btn" type="button" title="התמרכזות על המיקום הנוכחי" aria-label="התמרכזות על המיקום הנוכחי">🎯</button>
-    <button id="layer-toggle-btn" class="map-layer-btn" type="button" title="הצגת שכבת לוויין" aria-label="הצגת שכבת לוויין">🛰️</button>
+    <button id="locate-btn" class="map-locate-btn" type="button" title="התמרכזות על המיקום הנוכחי" aria-label="התמרכזות על המיקום הנוכחי">${icon('target')}</button>
+    <button id="layer-toggle-btn" class="map-layer-btn" type="button" title="הצגת שכבת לוויין" aria-label="הצגת שכבת לוויין">${icon('layers')}</button>
     <div class="map-empty" id="map-empty" hidden>אין עדיין תצפיות עם קואורדינטות.<br>הוסיפו תצפית עם מיקום GPS והיא תופיע כאן.</div>
   `;
   qs(container, '#locate-btn').addEventListener('click', onLocateClick);
@@ -76,7 +77,7 @@ function buildAddPopup(label: string, params: { lat: number; lng: number; locati
   btn.type = 'button';
   btn.className = 'map-pop-add';
   btn.title = 'הוספת תצפית כאן';
-  btn.textContent = '➕';
+  btn.innerHTML = icon('plus');
   btn.addEventListener('click', (e) => { e.stopPropagation(); navigate('form', params); });
   wrap.append(span, btn);
   return wrap;
@@ -185,6 +186,6 @@ function toggleLayer(): void {
   if (usingSatellite) { map.removeLayer(streetLayer); satelliteLayer.addTo(map); }
   else { map.removeLayer(satelliteLayer); streetLayer.addTo(map); }
   const btn = qs<HTMLButtonElement>(container, '#layer-toggle-btn');
-  btn.textContent = usingSatellite ? '🗺️' : '🛰️';
+  btn.innerHTML = usingSatellite ? icon('map') : icon('layers');
   btn.title = usingSatellite ? 'הצגת מפת רחובות' : 'הצגת שכבת לוויין';
 }

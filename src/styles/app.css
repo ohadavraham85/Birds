@@ -13,9 +13,9 @@
   --line: #dce7df;
   --danger: #c1443c;
   --amber: #b07d1e;
-  --radius: 12px;
-  --shadow: 0 1px 3px rgba(27, 67, 50, 0.12);
-  --shadow-lg: 0 8px 24px rgba(27, 67, 50, 0.16);
+  --radius: 10px;
+  --shadow: 0 1px 2px rgba(27, 67, 50, 0.10);
+  --shadow-lg: 0 6px 18px rgba(27, 67, 50, 0.14);
   --ease: 150ms ease;
   --tabbar-h: 64px;
   --topbar-h: 56px;
@@ -44,8 +44,8 @@
   --paper: #eceee9;
   --card: #ffffff;
   --line: #e4e2da;
-  --shadow: 0 1px 3px rgba(30, 40, 25, .10);
-  --shadow-lg: 0 8px 24px rgba(30, 40, 25, .16);
+  --shadow: 0 1px 2px rgba(30, 40, 25, .08);
+  --shadow-lg: 0 6px 18px rgba(30, 40, 25, .14);
   --topbar-end: #26332a;
   --toast-bg: #26332a;
   --danger-soft: #f7e2df;
@@ -64,8 +64,8 @@
   --paper: #eef0f2;
   --card: #ffffff;
   --line: #e3e6ea;
-  --shadow: 0 1px 3px rgba(20, 30, 45, .08);
-  --shadow-lg: 0 8px 24px rgba(20, 30, 45, .14);
+  --shadow: 0 1px 2px rgba(20, 30, 45, .07);
+  --shadow-lg: 0 6px 18px rgba(20, 30, 45, .12);
   --topbar-end: #1e2733;
   --toast-bg: #1e2733;
   --danger-soft: #f7e2df;
@@ -86,8 +86,8 @@
   --line: #2a333c;
   --danger: #e0685e;
   --amber: #dba13e;
-  --shadow: 0 1px 3px rgba(0, 0, 0, .35);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, .5);
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3);
+  --shadow-lg: 0 6px 18px rgba(0, 0, 0, .42);
   --topbar-end: #0d1418;
   --toast-bg: #0d1418;
   --danger-soft: #3a201d;
@@ -96,6 +96,13 @@
 }
 
 * { box-sizing: border-box; }
+
+.icon {
+  width: 1em; height: 1em; display: inline-block; vertical-align: -0.15em;
+  fill: none; stroke: currentColor; stroke-width: 1.8;
+  stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0;
+}
+.icon.icon-lg { width: 1.3em; height: 1.3em; }
 
 button, .tab, .cal-day, input, select, textarea, .obs-card, .sp-card, .btn {
   transition: background-color var(--ease), border-color var(--ease),
@@ -134,7 +141,7 @@ body {
   padding: 0 14px;
   padding-top: env(safe-area-inset-top);
   flex-shrink: 0;
-  box-shadow: 0 2px 10px rgba(0,0,0,.22);
+  box-shadow: 0 2px 8px rgba(0,0,0,.18);
   z-index: 1200;
 }
 
@@ -189,10 +196,11 @@ body {
 }
 .topbar-menu-list[hidden] { display: none; }
 .topbar-menu-list button {
-  display: block; width: 100%; text-align: right;
-  padding: 11px 14px; border: 0; background: none; font: inherit; color: var(--ink);
+  display: flex; align-items: center; gap: 9px; width: 100%; text-align: right;
+  padding: 11px 14px; border: 0; background: none; font: inherit; color: var(--ink-soft);
   cursor: pointer;
 }
+.topbar-menu-list button .icon { color: var(--accent-700); }
 .topbar-menu-list button:hover { background: var(--accent-50); }
 
 /* ---------- floating action button ---------- */
@@ -209,12 +217,12 @@ body {
   color: #fff;
   font-size: 1.6rem;
   line-height: 1;
-  box-shadow: 0 4px 14px rgba(27, 67, 50, 0.4);
+  box-shadow: 0 3px 10px rgba(27, 67, 50, 0.3);
   cursor: pointer;
   z-index: 1050;
 }
 .fab[hidden] { display: none; }
-.fab:hover { background: var(--accent-600); box-shadow: 0 6px 18px rgba(27, 67, 50, 0.48); transform: translateY(-1px); }
+.fab:hover { background: var(--accent-600); box-shadow: 0 5px 14px rgba(27, 67, 50, 0.36); transform: translateY(-1px); }
 .fab:active { transform: translateY(0) scale(.96); }
 
 /* ---------- form header (back + title) ---------- */
@@ -269,7 +277,7 @@ body {
 .map-hint {
   position: absolute; top: 10px; right: 50%; transform: translateX(50%);
   background: rgba(27, 67, 50, 0.85); color: #fff;
-  font-size: .8rem; padding: 5px 12px; border-radius: 999px;
+  font-size: .8rem; padding: 5px 12px; border-radius: 8px;
   z-index: 600; pointer-events: none; max-width: 92%; text-align: center;
 }
 .map-locate-btn {
@@ -384,7 +392,7 @@ textarea { min-height: 130px; resize: vertical; white-space: pre-wrap; line-heig
 .btn-primary:not(:disabled):hover { background: var(--accent-600); filter: none; }
 .btn-danger { background: var(--danger-soft); color: var(--danger); }
 .btn-ghost { background: rgba(255,255,255,.15); color: #fff; padding: 7px 12px; }
-.btn-sm { padding: 6px 12px; font-size: .85rem; border-radius: 9px; }
+.btn-sm { padding: 6px 12px; font-size: .85rem; border-radius: 8px; }
 .btn-block { width: 100%; padding: 14px; font-size: 1.05rem; }
 .btn-icon { background: var(--accent-50); border: 1px solid var(--line); padding: 8px 10px; }
 
@@ -779,8 +787,8 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
   background: var(--toast-bg);
   color: #fff;
   padding: 11px 20px;
-  border-radius: 999px;
-  box-shadow: 0 4px 16px rgba(0,0,0,.3);
+  border-radius: 10px;
+  box-shadow: 0 4px 14px rgba(0,0,0,.25);
   z-index: 2000;
   font-size: .95rem;
   max-width: 90vw;
@@ -795,7 +803,7 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
   animation: modal-fade .15s ease;
 }
 .modal {
-  background: var(--card); border-radius: 16px; padding: 20px;
+  background: var(--card); border-radius: 14px; padding: 20px;
   max-width: 560px; width: 100%; max-height: 85vh; overflow-y: auto;
   box-shadow: var(--shadow-lg);
   animation: modal-in .18s ease;
@@ -811,7 +819,7 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
 
 /* compact "add observation here" popup on map points */
 .leaflet-popup.map-pop-wrap .leaflet-popup-content-wrapper {
-  padding: 0; border-radius: 999px; box-shadow: var(--shadow-lg);
+  padding: 0; border-radius: 12px; box-shadow: var(--shadow-lg);
 }
 .leaflet-popup.map-pop-wrap .leaflet-popup-content { margin: 0; }
 .leaflet-popup.map-pop-wrap .leaflet-popup-tip-container { display: none; }
@@ -831,7 +839,7 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
 .map-loc-label-sm {
   direction: rtl; font-family: inherit; font-weight: 600; font-size: .6rem;
   color: var(--accent-900); background: var(--card);
-  border: 1px solid var(--line); border-radius: 999px;
+  border: 1px solid var(--line); border-radius: 6px;
   padding: 1px 7px; box-shadow: var(--shadow);
 }
 .map-loc-label-sm::before { display: none; }
@@ -839,11 +847,12 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
 .leaflet-div-icon.bird-div-icon { background: transparent; border: none; }
 .bird-marker-badge {
   width: 30px; height: 30px; border-radius: 50%;
-  background: var(--accent-700); border: 2px solid #fff;
-  box-shadow: 0 2px 6px rgba(27, 67, 50, .45);
+  background: var(--accent-700); border: 2px solid #fff; color: #fff;
+  box-shadow: 0 2px 5px rgba(27, 67, 50, .35);
   display: flex; align-items: center; justify-content: center;
   font-size: 16px; line-height: 1;
 }
+.bird-marker-badge .icon { width: 15px; height: 15px; }
 
 /* ---------- PDF report template (rendered off-screen) ---------- */
 

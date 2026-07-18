@@ -5,6 +5,7 @@
 import { listObservations } from '../db/repository';
 import { escapeHtml } from '../lib/markdown';
 import { renderObservationCard } from '../lib/obs-card';
+import { icon } from '../lib/icons';
 import { qs } from '../lib/dom';
 import { navigate } from '../main';
 import type { Observation } from '../types';
@@ -101,7 +102,7 @@ function renderGrid(): void {
       <button class="${classes.join(' ')}" data-day="${dayStr}"${locs.length ? ` title="${escapeHtml(locs.join(', '))}"` : ''}>
         <span class="cal-daynum">${date.getDate()}</span>
         ${count ? `<span class="cal-dot">${count}</span>` : ''}
-        ${locLabel ? `<span class="cal-loc">📍 ${escapeHtml(locLabel)}</span>` : ''}
+        ${locLabel ? `<span class="cal-loc">${icon('pin')} ${escapeHtml(locLabel)}</span>` : ''}
       </button>`);
   }
   grid.innerHTML = cells.join('');
@@ -133,7 +134,7 @@ function renderAgenda(): void {
   const addBtn = document.createElement('button');
   addBtn.type = 'button';
   addBtn.className = 'btn btn-sm btn-primary';
-  addBtn.textContent = '➕ הוספת תצפית ליום זה';
+  addBtn.innerHTML = `${icon('plus')} הוספת תצפית ליום זה`;
   addBtn.addEventListener('click', () => navigate('form', { date: day }));
   head.append(title, addBtn);
   agenda.appendChild(head);

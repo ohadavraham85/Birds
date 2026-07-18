@@ -7,6 +7,7 @@ import { fmtDateTime, fmtCoords, showImageModal } from './ui';
 import { renderMarkdown, escapeHtml } from './markdown';
 import { getImageObjectUrl } from './media';
 import { entriesOf, entryImages } from './observation';
+import { icon } from './icons';
 import type { Observation } from '../types';
 
 function mapsUrl(o: Observation): string | null {
@@ -23,14 +24,14 @@ export function renderObservationCard(o: Observation): HTMLElement {
     <div class="card-head">
       <div class="card-place">
         ${url
-          ? `<a href="${url}" target="_blank" rel="noopener" class="place-link">📍 ${escapeHtml(o.locationName || 'מיקום')}</a>`
-          : `<span>📍 ${escapeHtml(o.locationName || '—')}</span>`}
+          ? `<a href="${url}" target="_blank" rel="noopener" class="place-link">${icon('pin')} ${escapeHtml(o.locationName || 'מיקום')}</a>`
+          : `<span>${icon('pin')} ${escapeHtml(o.locationName || '—')}</span>`}
         ${o.project ? `<span class="badge">${escapeHtml(o.project)}</span>` : ''}
       </div>
     </div>
     <div class="meta">
-      <span>🕒 ${fmtDateTime(o.dateTime)}</span>
-      ${fmtCoords(o.lat, o.lng) ? `<span dir="ltr">🧭 ${fmtCoords(o.lat, o.lng)}</span>` : ''}
+      <span>${icon('clock')} ${fmtDateTime(o.dateTime)}</span>
+      ${fmtCoords(o.lat, o.lng) ? `<span dir="ltr">${icon('compass')} ${fmtCoords(o.lat, o.lng)}</span>` : ''}
     </div>
     <ol class="species-ol"></ol>
     ${o.notes ? `<div class="notes">${renderMarkdown(o.notes)}</div>` : ''}

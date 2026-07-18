@@ -9,6 +9,7 @@ import { SPECIES_SEED, SPECIES_SEED_VERSION } from './data/species-seed';
 import { toast } from './lib/ui';
 import { qs } from './lib/dom';
 import { initTheme } from './lib/theme';
+import { hydrateIcons } from './lib/icons';
 import { initSync, onSyncStatus, requestSync } from './sync/sync-engine';
 import type { View, ViewParams } from './views/view';
 import type { SyncStatus } from './types';
@@ -114,6 +115,7 @@ function setupStatusIndicator(): void {
 }
 
 async function init(): Promise<void> {
+  hydrateIcons(document.body);
   await seedSpeciesIfEmpty(SPECIES_SEED, SPECIES_SEED_VERSION);
 
   for (const [name, view] of Object.entries(VIEWS)) {
