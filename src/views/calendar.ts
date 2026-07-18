@@ -11,32 +11,39 @@ import { navigate } from '../main';
 import type { Observation } from '../types';
 
 const WEEKDAYS = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'];
+const MONTH_NAMES = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
+
+type ViewMode = 'month' | 'year';
 
 let container: HTMLElement;
 let observations: Observation[] = [];
 let byDay = new Map<string, Observation[]>();
 let monthCursor = startOfMonth(new Date());
 let selectedDay: string | null = null;
+let viewMode: ViewMode = 'month';
 
 export function init(el: HTMLElement): void {
   container = el;
   container.innerHTML = `
     <h2>לוח שנה</h2>
     <div class="cal-header">
-      <button class="btn btn-icon" id="cal-prev" title="חודש קודם" aria-label="חודש קודם">‹</button>
+      <button class="btn btn-icon" id="cal-prev" title="הקודם" aria-label="הקודם">‹</button>
       <h3 id="cal-month-label"></h3>
-      <button class="btn btn-icon" id="cal-next" title="חודש הבא" aria-label="חודש הבא">›</button>
+      <button class="btn btn-icon" id="cal-next" title="הבא" aria-label="הבא">›</button>
+      <button class="btn btn-icon" id="cal-zoom" title="תצוגה שנתית" aria-label="תצוגה שנתית">${icon('grid')}</button>
       <button class="btn btn-sm" id="cal-today">היום</button>
     </div>
-    <div class="cal-weekdays">${WEEKDAYS.map((w) => `<span>${w}</span>`).join('')}</div>
+    <div class="cal-weekdays" id="cal-weekdays">${WEEKDAYS.map((w) => `<span>${w}</span>`).join('')}</div>
     <div class="cal-grid" id="cal-grid"></div>
     <div id="cal-agenda"></div>
   `;
-  qs(container, '#cal-prev').addEventListener('click', () => { shiftMonth(-1); });
-  qs(container, '#cal-next').addEventListener('click', () => { shiftMonth(1); });
+  qs(container, '#cal-prev').addEventListener('click', () => { shiftCursor(-1); });
+  qs(container, '#cal-next').addEventListener('click', () => { shiftCursor(1); });
+  qs(container, '#cal-zoom').addEventListener('click', toggleViewMode);
   qs(container, '#cal-today').addEventListener('click', () => {
     monthCursor = startOfMonth(new Date());
     selectedDay = localDay(new Date().toISOString());
+    viewMode = 'month';
     render();
   });
   qs(container, '#cal-grid').addEventListener('click', onGridClick);
@@ -53,8 +60,15 @@ export async function activate(): Promise<void> {
   render();
 }
 
-function shiftMonth(delta: number): void {
-  monthCursor = new Date(monthCursor.getFullYear(), monthCursor.getMonth() + delta, 1);
+function shiftCursor(delta: number): void {
+  monthCursor = viewMode === 'year'
+    ? new Date(monthCursor.getFullYear() + delta, monthCursor.getMonth(), 1)
+    : new Date(monthCursor.getFullYear(), monthCursor.getMonth() + delta, 1);
+  render();
+}
+
+function toggleViewMode(): void {
+  viewMode = viewMode === 'month' ? 'year' : 'month';
   render();
 }
 
@@ -70,10 +84,45 @@ function startOfMonth(d: Date): Date {
 }
 
 function render(): void {
-  qs(container, '#cal-month-label').textContent =
-    monthCursor.toLocaleDateString('he-IL', { month: 'long', year: 'numeric' });
-  renderGrid();
-  renderAgenda();
+  qs(container, '#cal-month-label').textContent = viewMode === 'year'
+    ? String(monthCursor.getFullYear())
+    : monthCursor.toLocaleDateString('he-IL', { month: 'long', year: 'numeric' });
+  qs(container, '#cal-weekdays').hidden = viewMode === 'year';
+  qs(container, '#cal-grid').className = viewMode === 'year' ? 'cal-grid cal-year-grid' : 'cal-grid';
+  const zoomBtn = qs<HTMLButtonElement>(container, '#cal-zoom');
+  zoomBtn.innerHTML = viewMode === 'year' ? icon('calendar') : icon('grid');
+  zoomBtn.title = viewMode === 'year' ? 'תצוגה חודשית' : 'תצוגה שנתית';
+  if (viewMode === 'year') {
+    renderYearGrid();
+    qs(container, '#cal-agenda').innerHTML = '';
+  } else {
+    renderGrid();
+    renderAgenda();
+  }
+}
+
+function renderYearGrid(): void {
+  const grid = qs(container, '#cal-grid');
+  const year = monthCursor.getFullYear();
+  const counts = Array(12).fill(0) as number[];
+  for (const o of observations) {
+    const d = new Date(o.dateTime);
+    if (!isNaN(d.getTime()) && d.getFullYear() === year) counts[d.getMonth()]!++;
+  }
+  const max = Math.max(...counts);
+  const now = new Date();
+
+  grid.innerHTML = MONTH_NAMES.map((name, i) => {
+    const count = counts[i]!;
+    const ratio = max ? count / max : 0;
+    const heat = count === 0 ? 0 : ratio <= 0.33 ? 1 : ratio <= 0.66 ? 2 : 3;
+    const isToday = year === now.getFullYear() && i === now.getMonth();
+    return `
+      <button class="cal-year-tile heat-${heat}${isToday ? ' today' : ''}" data-month="${i}">
+        <span class="cal-year-tile-name">${name}</span>
+        ${count ? `<span class="cal-year-tile-count">${count}</span>` : ''}
+      </button>`;
+  }).join('');
 }
 
 function renderGrid(): void {
@@ -109,7 +158,15 @@ function renderGrid(): void {
 }
 
 function onGridClick(e: Event): void {
-  const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('.cal-day');
+  const target = e.target as HTMLElement;
+  const yearTile = target.closest<HTMLButtonElement>('.cal-year-tile');
+  if (yearTile) {
+    monthCursor = new Date(monthCursor.getFullYear(), Number(yearTile.dataset.month), 1);
+    viewMode = 'month';
+    render();
+    return;
+  }
+  const btn = target.closest<HTMLButtonElement>('.cal-day');
   if (!btn) return;
   const day = btn.dataset.day!;
   selectedDay = selectedDay === day ? null : day;

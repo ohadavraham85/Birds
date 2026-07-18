@@ -1,13 +1,17 @@
 /* views/map.ts — מסך מפת השטח: נקודה אחת לכל מיקום ייחודי (לפי הקואורדינטות
  * של התצפית הראשונה שנרשמה שם), עם תווית קטנה וצמודה של שם המיקום. לחיצה על
- * נקודה פותחת חלונית מידע קומפקטית (שם המקום + כפתור "הוספת תצפית כאן");
- * לחיצה ארוכה על המפה פותחת אותה חלונית במיקום חדש שנבחר. שכבת GPS מציגה את
- * מיקום המשתמש בזמן אמת, עם כפתור להתמרכזות עליו. */
+ * נקודה פותחת חלון תחתון (bottom sheet) עם שם המקום, רשימת כל התצפיות
+ * ההיסטוריות באותו מיקום (מהחדשה לישנה, לחיצה על אחת פותחת אותה בתצוגת
+ * צפייה), וכפתור קומפקטי להוספת תצפית חדשה; לחיצה ארוכה על המפה פותחת אותו
+ * חלון במיקום חדש שנבחר. שכבת הלוויין במצב היברידי כוללת שכבת תוויות (שמות
+ * מקומות/כבישים) מעל צילום האוויר. שכבת GPS מציגה את מיקום המשתמש בזמן
+ * אמת, עם כפתור להתמרכזות עליו. */
 
 import L from '../lib/leaflet-setup';
 import { listObservations } from '../db/repository';
 import { toast } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
+import { speciesLabel } from '../lib/observation';
 import { icon } from '../lib/icons';
 import { qs } from '../lib/dom';
 import { navigate } from '../main';
@@ -20,8 +24,10 @@ let dropMarker: L.Marker | undefined;
 let myLocationMarker: L.CircleMarker | undefined;
 let geoWatchId: number | null = null;
 let streetLayer: L.TileLayer;
-let satelliteLayer: L.TileLayer;
+let satelliteLayer: L.LayerGroup;
 let usingSatellite = false;
+let allObservations: Observation[] = [];
+let closeSheet: (() => void) | null = null;
 
 /** Round green badge with a bird glyph, replacing Leaflet's default pin.
  * tooltipAnchor keeps the small permanent name label snug against the badge. */
@@ -38,7 +44,7 @@ export function init(el: HTMLElement): void {
   container = el;
   container.innerHTML = `
     <div id="map-container"></div>
-    <div class="map-hint">לחיצה ארוכה על המפה מוסיפה תצפית במיקום חדש · לחיצה על נקודה קיימת מציגה אפשרות להוספת תצפית באותו מיקום</div>
+    <div class="map-hint">לחיצה ארוכה על המפה מוסיפה תצפית במיקום חדש · לחיצה על נקודה קיימת מציגה את היסטוריית התצפיות שם</div>
     <button id="locate-btn" class="map-locate-btn" type="button" title="התמרכזות על המיקום הנוכחי" aria-label="התמרכזות על המיקום הנוכחי">${icon('target')}</button>
     <button id="layer-toggle-btn" class="map-layer-btn" type="button" title="הצגת שכבת לוויין" aria-label="הצגת שכבת לוויין">${icon('layers')}</button>
     <div class="map-empty" id="map-empty" hidden>אין עדיין תצפיות עם קואורדינטות.<br>הוסיפו תצפית עם מיקום GPS והיא תופיע כאן.</div>
@@ -54,10 +60,17 @@ function ensureMap(): void {
     maxZoom: 19,
     attribution: '&copy; OpenStreetMap',
   }).addTo(map);
-  satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  // hybrid satellite: aerial imagery + a transparent labels/roads/places overlay on top
+  const satelliteImagery = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
     maxZoom: 19,
+    zIndex: 1,
     attribution: 'Tiles &copy; Esri',
   });
+  const satelliteLabels = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 19,
+    zIndex: 2,
+  });
+  satelliteLayer = L.layerGroup([satelliteImagery, satelliteLabels]);
   markersLayer = L.layerGroup().addTo(map);
 
   // long-press (contextmenu on touch) drops a pin at a new location
@@ -66,30 +79,66 @@ function ensureMap(): void {
   startGeoWatch();
 }
 
-/** A small pill: place name + a "+" button to start a new observation there. */
-function buildAddPopup(label: string, params: { lat: number; lng: number; locationName?: string }): HTMLElement {
-  const wrap = document.createElement('div');
-  wrap.className = 'map-pop';
-  const span = document.createElement('span');
-  span.className = 'map-pop-name';
-  span.textContent = label;
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'map-pop-add';
-  btn.title = 'הוספת תצפית כאן';
-  btn.innerHTML = icon('plus');
-  btn.addEventListener('click', (e) => { e.stopPropagation(); navigate('form', params); });
-  wrap.append(span, btn);
-  return wrap;
+/** Bottom sheet: place name, the full observation history at that point
+ * (newest first, tap to open in View Mode), and a compact "+" to log a new
+ * visit there. Used both for existing marker taps and for a freshly dropped
+ * pin (where the history list is simply empty). */
+function openLocationSheet(label: string, history: Observation[], params: { lat: number; lng: number; locationName?: string }): void {
+  closeSheet?.();
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'sheet-backdrop';
+  const sheet = document.createElement('div');
+  sheet.className = 'map-sheet';
+  sheet.innerHTML = `
+    <div class="map-sheet-head">
+      <h3>${escapeHtml(label)}</h3>
+      <button type="button" class="btn btn-icon map-sheet-close" title="סגירה" aria-label="סגירה">✕</button>
+    </div>
+    <div class="map-sheet-list"></div>
+    <button type="button" class="btn btn-primary btn-block map-sheet-add">${icon('plus')} הוספת תצפית כאן</button>
+  `;
+  backdrop.appendChild(sheet);
+  document.getElementById('modal-root')!.appendChild(backdrop);
+
+  const close = (): void => { backdrop.remove(); if (closeSheet === close) closeSheet = null; };
+  closeSheet = close;
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+  sheet.querySelector('.map-sheet-close')!.addEventListener('click', close);
+  sheet.querySelector('.map-sheet-add')!.addEventListener('click', () => { close(); navigate('form', params); });
+
+  const list = sheet.querySelector<HTMLElement>('.map-sheet-list')!;
+  if (!history.length) {
+    list.innerHTML = '<p class="map-sheet-empty">אין עדיין תצפיות במיקום זה.</p>';
+  } else {
+    for (const o of history) {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'map-sheet-item';
+      const time = new Date(o.dateTime).toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      item.innerHTML = `
+        <span class="map-sheet-item-species">${escapeHtml(speciesLabel(o) || 'ללא מין')}</span>
+        <span class="map-sheet-item-date">${time}</span>`;
+      item.addEventListener('click', () => { close(); navigate('detail', { viewId: o.id }); });
+      list.appendChild(item);
+    }
+  }
+}
+
+/** All observations that share a location (by exact trimmed name), newest first.
+ * Observations without a location name are treated as their own single-item history. */
+function historyFor(key: string): Observation[] {
+  return allObservations
+    .filter((o) => groupKey(o) === key)
+    .sort((a, b) => (a.dateTime < b.dateTime ? 1 : a.dateTime > b.dateTime ? -1 : 0));
 }
 
 function dropPin(latlng: L.LatLng): void {
   const params = { lat: +latlng.lat.toFixed(6), lng: +latlng.lng.toFixed(6) };
   dropMarker?.remove();
   dropMarker = L.marker(latlng, { icon: birdIcon }).addTo(map!);
-  dropMarker
-    .bindPopup(buildAddPopup('מיקום חדש', params), { closeButton: false, className: 'map-pop-wrap', maxWidth: 220 })
-    .openPopup();
+  dropMarker.on('click', () => openLocationSheet('מיקום חדש', [], params));
+  openLocationSheet('מיקום חדש', [], params);
 }
 
 /** Groups observations that share a location name, so repeat visits to the
@@ -118,8 +167,8 @@ export async function activate(): Promise<void> {
   setTimeout(() => map?.invalidateSize(), 60);
 
   markersLayer!.clearLayers();
-  const all = await listObservations();
-  const withCoords = all.filter((o) => o.lat != null && o.lng != null);
+  allObservations = await listObservations();
+  const withCoords = allObservations.filter((o) => o.lat != null && o.lng != null);
   qsEmpty(withCoords.length === 0);
 
   const bounds: [number, number][] = [];
@@ -127,10 +176,8 @@ export async function activate(): Promise<void> {
     const marker = L.marker([first.lat!, first.lng!], { icon: birdIcon });
     const label = (first.locationName || 'מיקום ללא שם') + (count > 1 ? ` (${count})` : '');
     marker.bindTooltip(escapeHtml(label), { permanent: true, direction: 'top', className: 'map-loc-label-sm' });
-    marker.bindPopup(
-      buildAddPopup(label, { lat: first.lat!, lng: first.lng!, locationName: first.locationName }),
-      { closeButton: false, className: 'map-pop-wrap', maxWidth: 240 },
-    );
+    const key = groupKey(first);
+    marker.on('click', () => openLocationSheet(label, historyFor(key), { lat: first.lat!, lng: first.lng!, locationName: first.locationName }));
     marker.addTo(markersLayer!);
     bounds.push([first.lat!, first.lng!]);
   }
