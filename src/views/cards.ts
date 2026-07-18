@@ -7,17 +7,24 @@ import { listObservations } from '../db/repository';
 import { renderObservationCard } from '../lib/obs-card';
 import { speciesNames } from '../lib/observation';
 import { escapeHtml } from '../lib/markdown';
+import { showModal } from '../lib/ui';
+import { icon } from '../lib/icons';
 import { qs, input, select } from '../lib/dom';
 import { navigate } from '../main';
 import type { Observation } from '../types';
 
 type GroupMode = 'none' | 'day' | 'month' | 'location' | 'project';
+type SortDir = 'desc' | 'asc';
 
 let container: HTMLElement;
 let observations: Observation[] = [];
 let groupBy: GroupMode = 'none';
+let sortDir: SortDir = 'desc';
 let query = '';
 let collapsedGroups = new Set<string>();
+let selectedProjects = new Set<string>();
+let selectedLocations = new Set<string>();
+let selectedSpecies = new Set<string>();
 
 export function init(el: HTMLElement): void {
   container = el;
@@ -32,12 +39,28 @@ export function init(el: HTMLElement): void {
         <option value="location">קיבוץ לפי מיקום</option>
         <option value="project">קיבוץ לפי פרויקט</option>
       </select>
+      <button type="button" class="btn btn-icon j-filter-btn" id="j-filter-btn" title="סינון מתקדם" aria-label="סינון מתקדם">
+        ${icon('filter')}<span class="filter-badge" id="j-filter-badge" hidden></span>
+      </button>
+      <button type="button" class="btn btn-icon" id="j-sort-btn" title="היפוך סדר כרונולוגי" aria-label="היפוך סדר כרונולוגי">${icon('sortArrows')}</button>
+      <button type="button" class="btn btn-icon" id="j-expand-all" title="פתיחת כל הקבוצות" aria-label="פתיחת כל הקבוצות">${icon('chevronsDown')}</button>
+      <button type="button" class="btn btn-icon" id="j-collapse-all" title="סגירת כל הקבוצות" aria-label="סגירת כל הקבוצות">${icon('chevronsUp')}</button>
     </div>
     <div id="cards-feed-wrap"></div>
   `;
   input(container, '#j-q').addEventListener('input', (e) => { query = (e.target as HTMLInputElement).value; render(); });
   select(container, '#j-group').addEventListener('change', (e) => {
     groupBy = (e.target as HTMLSelectElement).value as GroupMode;
+    render();
+  });
+  qs(container, '#j-filter-btn').addEventListener('click', openFilterModal);
+  qs(container, '#j-sort-btn').addEventListener('click', () => {
+    sortDir = sortDir === 'desc' ? 'asc' : 'desc';
+    render();
+  });
+  qs(container, '#j-expand-all').addEventListener('click', () => { collapsedGroups = new Set(); render(); });
+  qs(container, '#j-collapse-all').addEventListener('click', () => {
+    collapsedGroups = new Set(groupsOf(observations.filter(matches)).keys());
     render();
   });
 }
@@ -49,9 +72,76 @@ export async function activate(): Promise<void> {
 
 function matches(o: Observation): boolean {
   const q = query.trim().toLowerCase();
-  if (!q) return true;
-  const haystack = [o.locationName, o.project, o.notes, ...speciesNames(o)].join(' ').toLowerCase();
-  return haystack.includes(q);
+  if (q) {
+    const haystack = [o.locationName, o.project, o.notes, ...speciesNames(o)].join(' ').toLowerCase();
+    if (!haystack.includes(q)) return false;
+  }
+  if (selectedProjects.size && !selectedProjects.has(o.project || '(ללא פרויקט)')) return false;
+  if (selectedLocations.size && !selectedLocations.has(o.locationName || '(ללא מיקום)')) return false;
+  if (selectedSpecies.size && !speciesNames(o).some((s) => selectedSpecies.has(s))) return false;
+  return true;
+}
+
+/* ---------- advanced filter modal ---------- */
+
+function openFilterModal(): void {
+  const projects = [...new Set(observations.map((o) => o.project || '(ללא פרויקט)'))].sort((a, b) => a.localeCompare(b, 'he'));
+  const locations = [...new Set(observations.map((o) => o.locationName || '(ללא מיקום)'))].sort((a, b) => a.localeCompare(b, 'he'));
+  const species = [...new Set(observations.flatMap(speciesNames))].sort((a, b) => a.localeCompare(b, 'he'));
+
+  const localSets: Record<'project' | 'location' | 'species', Set<string>> = {
+    project: new Set(selectedProjects),
+    location: new Set(selectedLocations),
+    species: new Set(selectedSpecies),
+  };
+
+  const section = (title: string, group: 'project' | 'location' | 'species', values: string[]): string => `
+    <div class="filter-modal-section">
+      <h4>${escapeHtml(title)}</h4>
+      <div class="filter-modal-checks">
+        ${values.map((v) => `
+          <label class="filter-modal-check">
+            <input type="checkbox" data-group="${group}" value="${escapeHtml(v)}" ${localSets[group].has(v) ? 'checked' : ''}>
+            <span>${escapeHtml(v)}</span>
+          </label>`).join('') || '<p class="hint">אין ערכים</p>'}
+      </div>
+    </div>`;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'filter-modal';
+  wrap.innerHTML = `
+    <h3>סינון מתקדם</h3>
+    ${section('פרויקט', 'project', projects)}
+    ${section('מיקום', 'location', locations)}
+    ${section('מין', 'species', species)}
+    <div class="modal-actions">
+      <button type="button" class="btn btn-primary" id="filter-apply">החלת סינון</button>
+      <button type="button" class="btn" id="filter-clear">נקה סינון</button>
+    </div>
+  `;
+  const close = showModal(wrap);
+
+  wrap.querySelectorAll<HTMLInputElement>('input[type=checkbox]').forEach((cb) => {
+    cb.addEventListener('change', () => {
+      const group = cb.dataset.group as 'project' | 'location' | 'species';
+      if (cb.checked) localSets[group].add(cb.value);
+      else localSets[group].delete(cb.value);
+    });
+  });
+  wrap.querySelector('#filter-apply')!.addEventListener('click', () => {
+    selectedProjects = localSets.project;
+    selectedLocations = localSets.location;
+    selectedSpecies = localSets.species;
+    close();
+    render();
+  });
+  wrap.querySelector('#filter-clear')!.addEventListener('click', () => {
+    selectedProjects = new Set();
+    selectedLocations = new Set();
+    selectedSpecies = new Set();
+    close();
+    render();
+  });
 }
 
 function dayKey(iso: string): string {
@@ -90,7 +180,27 @@ function groupOf(o: Observation): { key: string; label: string } {
   }
 }
 
+function groupsOf(list: Observation[]): Map<string, { label: string; items: Observation[] }> {
+  const groups = new Map<string, { label: string; items: Observation[] }>();
+  for (const o of list) {
+    const { key, label } = groupOf(o);
+    (groups.get(key) ?? groups.set(key, { label, items: [] }).get(key)!).items.push(o);
+  }
+  return groups;
+}
+
 function render(): void {
+  const filterCount = selectedProjects.size + selectedLocations.size + selectedSpecies.size;
+  const badge = qs(container, '#j-filter-badge');
+  badge.hidden = !filterCount;
+  badge.textContent = String(filterCount);
+  qs(container, '#j-filter-btn').classList.toggle('active', !!filterCount);
+  qs<HTMLButtonElement>(container, '#j-expand-all').hidden = groupBy === 'none';
+  qs<HTMLButtonElement>(container, '#j-collapse-all').hidden = groupBy === 'none';
+  const sortBtn = qs(container, '#j-sort-btn');
+  sortBtn.innerHTML = icon('sortArrows', sortDir === 'asc' ? 'icon-flip' : '');
+  sortBtn.title = sortDir === 'desc' ? 'מוצג: מהחדש לישן' : 'מוצג: מהישן לחדש';
+
   const wrap = qs(container, '#cards-feed-wrap');
   wrap.innerHTML = '';
   if (!observations.length) {
@@ -98,7 +208,9 @@ function render(): void {
     return;
   }
 
-  const list = observations.filter(matches);
+  // observations is DB-sorted newest-first; asc just reverses that.
+  const filtered = observations.filter(matches);
+  const list = sortDir === 'asc' ? [...filtered].reverse() : filtered;
   if (!list.length) {
     wrap.innerHTML = '<p style="color:var(--ink-soft)">אין תצפיות תואמות לסינון.</p>';
     return;
@@ -113,12 +225,12 @@ function render(): void {
     return;
   }
 
-  const groups = new Map<string, { label: string; items: Observation[] }>();
-  for (const o of list) {
-    const { key, label } = groupOf(o);
-    (groups.get(key) ?? groups.set(key, { label, items: [] }).get(key)!).items.push(o);
-  }
-  const keys = [...groups.keys()].sort((a, b) => (groupBy === 'day' || groupBy === 'month' ? (a < b ? 1 : a > b ? -1 : 0) : a.localeCompare(b, 'he')));
+  const groups = groupsOf(list);
+  const keys = [...groups.keys()].sort((a, b) => {
+    if (groupBy !== 'day' && groupBy !== 'month') return a.localeCompare(b, 'he');
+    const cmp = a < b ? -1 : a > b ? 1 : 0;
+    return sortDir === 'desc' ? -cmp : cmp;
+  });
   for (const key of keys) {
     const group = groups.get(key)!;
     const collapsed = collapsedGroups.has(key);

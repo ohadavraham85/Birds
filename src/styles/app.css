@@ -560,6 +560,30 @@ textarea { min-height: 130px; resize: vertical; white-space: pre-wrap; line-heig
   font: inherit;
 }
 
+.icon-flip { transform: rotate(180deg); }
+
+.j-filter-btn { position: relative; }
+.j-filter-btn.active { background: var(--accent-700); color: #fff; }
+.filter-badge {
+  position: absolute; top: -5px; left: -5px;
+  min-width: 16px; height: 16px; padding: 0 3px;
+  border-radius: 999px; background: var(--danger); color: #fff;
+  font-size: .65rem; font-weight: 700; line-height: 16px; text-align: center;
+}
+
+/* ---------- advanced filter modal (journal) ---------- */
+
+.filter-modal h3 { margin-top: 0; color: var(--accent-900); }
+.filter-modal-section { margin-bottom: 14px; }
+.filter-modal-section h4 { margin: 0 0 6px; color: var(--accent-700); font-size: .9rem; }
+.filter-modal-checks {
+  display: flex; flex-direction: column; gap: 2px;
+  max-height: 160px; overflow-y: auto;
+  border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px;
+}
+.filter-modal-check { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: .92rem; cursor: pointer; }
+.filter-modal-check input { flex-shrink: 0; }
+
 /* ---------- export dropdown ---------- */
 
 .export-wrap { position: relative; display: inline-block; }
@@ -699,6 +723,21 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
 .cal-day.selected .cal-loc { color: rgba(255, 255, 255, .88); }
 .cal-day.muted .cal-loc { color: var(--ink-soft); }
 
+.cal-year-grid { grid-template-columns: repeat(3, 1fr); gap: 10px; }
+@media (min-width: 480px) { .cal-year-grid { grid-template-columns: repeat(4, 1fr); } }
+.cal-year-tile {
+  min-height: 76px; border: 1px solid var(--line); border-radius: 10px;
+  cursor: pointer; font: inherit; color: var(--ink);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  background: var(--card);
+}
+.cal-year-tile.heat-1 { background: var(--accent-50); }
+.cal-year-tile.heat-2 { background: var(--accent-100); }
+.cal-year-tile.heat-3 { background: var(--accent-600); color: #fff; }
+.cal-year-tile.today { border-color: var(--accent-700); border-width: 2px; }
+.cal-year-tile-name { font-weight: 600; }
+.cal-year-tile-count { font-size: .78rem; opacity: .85; }
+
 .cal-agenda-head {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   flex-wrap: wrap; margin-bottom: 10px;
@@ -822,23 +861,35 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
 /* leaflet popup RTL */
 .leaflet-popup-content { direction: rtl; text-align: right; font-family: inherit; }
 
-/* compact "add observation here" popup on map points */
-.leaflet-popup.map-pop-wrap .leaflet-popup-content-wrapper {
-  padding: 0; border-radius: 12px; box-shadow: var(--shadow-lg);
+/* ---------- bottom sheets (map location history) ---------- */
+
+.sheet-backdrop {
+  position: fixed; inset: 0; background: rgba(20,30,24,.45);
+  display: flex; align-items: flex-end; justify-content: center;
+  z-index: 3000;
+  animation: modal-fade .15s ease;
 }
-.leaflet-popup.map-pop-wrap .leaflet-popup-content { margin: 0; }
-.leaflet-popup.map-pop-wrap .leaflet-popup-tip-container { display: none; }
-.map-pop {
-  direction: rtl; display: flex; align-items: center; gap: 6px;
-  padding: 5px 6px 5px 12px;
+.map-sheet {
+  background: var(--card); border-radius: 16px 16px 0 0;
+  width: 100%; max-width: 560px; max-height: 72vh;
+  display: flex; flex-direction: column;
+  box-shadow: 0 -6px 24px rgba(0,0,0,.2);
+  animation: sheet-up .2s ease;
+  padding: 14px 16px calc(16px + env(safe-area-inset-bottom));
 }
-.map-pop-name { font-size: .82rem; font-weight: 600; color: var(--accent-900); white-space: nowrap; }
-.map-pop-add {
-  flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%;
-  border: 0; background: var(--accent-700); color: #fff; font-size: .95rem;
-  display: flex; align-items: center; justify-content: center; cursor: pointer; line-height: 1;
+@keyframes sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.map-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.map-sheet-head h3 { margin: 0; color: var(--accent-900); font-size: 1.05rem; }
+.map-sheet-list { overflow-y: auto; flex: 1; margin: 4px 0 12px; display: flex; flex-direction: column; gap: 6px; }
+.map-sheet-empty { color: var(--ink-soft); margin: 8px 0; }
+.map-sheet-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  width: 100%; text-align: right; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--accent-50); padding: 10px 12px; cursor: pointer; font: inherit;
 }
-.map-pop-add:hover { background: var(--accent-600); }
+.map-sheet-item:hover { background: var(--accent-100); }
+.map-sheet-item-species { font-weight: 600; color: var(--accent-900); }
+.map-sheet-item-date { color: var(--ink-soft); font-size: .82rem; white-space: nowrap; }
 
 /* small always-visible location-name label, snug against each map point */
 .map-loc-label-sm {
