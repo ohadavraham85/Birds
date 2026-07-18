@@ -8,9 +8,12 @@ import { seedSpeciesIfEmpty, onDataChanged } from './db/repository';
 import { SPECIES_SEED, SPECIES_SEED_VERSION } from './data/species-seed';
 import { toast } from './lib/ui';
 import { qs } from './lib/dom';
+import { initTheme } from './lib/theme';
 import { initSync, onSyncStatus, requestSync } from './sync/sync-engine';
 import type { View, ViewParams } from './views/view';
 import type { SyncStatus } from './types';
+
+initTheme();
 
 import * as formView from './views/form';
 import * as mapView from './views/map';
