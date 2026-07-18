@@ -8,6 +8,7 @@ import { reconfigureSync, serverUrl, syncNow, onSyncStatus } from '../sync/sync-
 import { toast, confirmDialog, fmtDateTime } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
 import { qs, input } from '../lib/dom';
+import { THEMES, currentTheme, setTheme, type ThemeId } from '../lib/theme';
 import type { Observation, SyncStatus } from '../types';
 
 let container: HTMLElement;
@@ -30,8 +31,21 @@ export async function activate(): Promise<void> {
   let version = '';
   try { version = (await (await fetch('version.json')).json()).version; } catch { /* dev */ }
 
+  const activeTheme = currentTheme();
   container.innerHTML = `
     <h2>הגדרות</h2>
+
+    <div class="settings-card">
+      <h3>🎨 עיצוב</h3>
+      <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">בחרו ערכת צבעים לאפליקציה — משתנה מיד, ונשמרת במכשיר זה.</p>
+      <div class="theme-picker" id="s-theme-picker">
+        ${THEMES.map((t) => `
+          <button type="button" class="theme-swatch${t.id === activeTheme ? ' active' : ''}" data-theme="${t.id}" title="${escapeHtml(t.label)}">
+            <span class="theme-dot" style="background:${t.swatch}"></span>
+            <span>${escapeHtml(t.label)}</span>
+          </button>`).join('')}
+      </div>
+    </div>
 
     <div class="settings-card">
       <h3>☁️ סנכרון לשרת</h3>
@@ -88,6 +102,7 @@ export async function activate(): Promise<void> {
     </div>
   `;
 
+  qs(container, '#s-theme-picker').addEventListener('click', onThemePick);
   qs(container, '#s-save-server').addEventListener('click', () => void onSaveServer());
   qs(container, '#s-sync-now').addEventListener('click', () => void syncNow());
   qs(container, '#s-backup').addEventListener('click', () => void onBackup());
@@ -102,6 +117,15 @@ export async function activate(): Promise<void> {
     if (!el) return;
     el.textContent = STATE_LABEL[s.state] + (s.pending ? ` · ${s.pending} ממתינים` : '') + (s.message ? ` — ${s.message}` : '');
     el.className = 'settings-status ' + (s.state === 'idle' ? 'ok' : s.state === 'error' ? 'err' : '');
+  });
+}
+
+function onThemePick(e: Event): void {
+  const btn = (e.target as HTMLElement).closest<HTMLElement>('.theme-swatch');
+  if (!btn) return;
+  setTheme(btn.dataset.theme as ThemeId);
+  qs(container, '#s-theme-picker').querySelectorAll('.theme-swatch').forEach((el) => {
+    el.classList.toggle('active', el === btn);
   });
 }
 
