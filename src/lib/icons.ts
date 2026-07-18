@@ -35,6 +35,8 @@ const PATHS = {
   chevronsUp: '<path d="m7 15.5 5-5 5 5"/><path d="m7 9.5 5-5 5 5"/>',
   sortArrows: '<path d="M8 20V5"/><path d="m4.5 8.5 3.5-3.5 3.5 3.5"/><path d="M16 4v15"/><path d="m12.5 15.5 3.5 3.5 3.5-3.5"/>',
   chart: '<path d="M4 20V10M11 20V4M18 20v-7"/><path d="M3 20h18"/>',
+  pieChart: '<circle cx="12" cy="12" r="9"/><path d="M12 3v9h9"/>',
+  lineChart: '<path d="M4 19V5"/><path d="M4 19h16"/><path d="m4.5 14.5 4.5-5 4 3.2 6-7.2"/>',
 } as const;
 
 export type IconName = keyof typeof PATHS;

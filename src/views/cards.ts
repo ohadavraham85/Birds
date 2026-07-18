@@ -12,6 +12,7 @@ import { icon } from '../lib/icons';
 import { qs, input, select } from '../lib/dom';
 import { navigate } from '../main';
 import type { Observation } from '../types';
+import type { ViewParams } from './view';
 
 type GroupMode = 'none' | 'day' | 'month' | 'location' | 'project';
 type SortDir = 'desc' | 'asc';
@@ -63,6 +64,16 @@ export function init(el: HTMLElement): void {
     collapsedGroups = new Set(groupsOf(observations.filter(matches)).keys());
     render();
   });
+}
+
+/** Drill-down from the stats tab: pre-applies a single-value filter and clears the rest. */
+export function setParams(params: ViewParams): void {
+  if (!params.filterSpecies && !params.filterLocation && !params.filterProject) return;
+  selectedSpecies = params.filterSpecies ? new Set([params.filterSpecies]) : new Set();
+  selectedLocations = params.filterLocation ? new Set([params.filterLocation]) : new Set();
+  selectedProjects = params.filterProject ? new Set([params.filterProject]) : new Set();
+  query = '';
+  groupBy = 'none';
 }
 
 export async function activate(): Promise<void> {
@@ -190,6 +201,8 @@ function groupsOf(list: Observation[]): Map<string, { label: string; items: Obse
 }
 
 function render(): void {
+  input(container, '#j-q').value = query;
+  select(container, '#j-group').value = groupBy;
   const filterCount = selectedProjects.size + selectedLocations.size + selectedSpecies.size;
   const badge = qs(container, '#j-filter-badge');
   badge.hidden = !filterCount;
