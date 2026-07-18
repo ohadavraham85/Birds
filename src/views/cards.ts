@@ -5,7 +5,9 @@
 
 import { listObservations } from '../db/repository';
 import { renderObservationCard } from '../lib/obs-card';
-import { qs, select } from '../lib/dom';
+import { speciesNames } from '../lib/observation';
+import { escapeHtml } from '../lib/markdown';
+import { qs, input, select } from '../lib/dom';
 import { navigate } from '../main';
 import type { Observation } from '../types';
 
@@ -14,12 +16,15 @@ type GroupMode = 'none' | 'day' | 'month' | 'location' | 'project';
 let container: HTMLElement;
 let observations: Observation[] = [];
 let groupBy: GroupMode = 'none';
+let query = '';
+let collapsedGroups = new Set<string>();
 
 export function init(el: HTMLElement): void {
   container = el;
   container.innerHTML = `
     <h2>יומן תצפית</h2>
     <div class="filter-bar">
+      <input type="search" id="j-q" class="filter-search" placeholder="חיפוש (מין, מיקום, פרויקט, הערות)...">
       <select id="j-group" class="filter-sel">
         <option value="none">ללא קיבוץ</option>
         <option value="day">קיבוץ לפי יום</option>
@@ -30,6 +35,7 @@ export function init(el: HTMLElement): void {
     </div>
     <div id="cards-feed-wrap"></div>
   `;
+  input(container, '#j-q').addEventListener('input', (e) => { query = (e.target as HTMLInputElement).value; render(); });
   select(container, '#j-group').addEventListener('change', (e) => {
     groupBy = (e.target as HTMLSelectElement).value as GroupMode;
     render();
@@ -39,6 +45,13 @@ export function init(el: HTMLElement): void {
 export async function activate(): Promise<void> {
   observations = await listObservations();
   render();
+}
+
+function matches(o: Observation): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  const haystack = [o.locationName, o.project, o.notes, ...speciesNames(o)].join(' ').toLowerCase();
+  return haystack.includes(q);
 }
 
 function dayKey(iso: string): string {
@@ -85,28 +98,44 @@ function render(): void {
     return;
   }
 
+  const list = observations.filter(matches);
+  if (!list.length) {
+    wrap.innerHTML = '<p style="color:var(--ink-soft)">אין תצפיות תואמות לסינון.</p>';
+    return;
+  }
+
   const feed = document.createElement('div');
   feed.className = 'cards-feed';
   wrap.appendChild(feed);
 
   if (groupBy === 'none') {
-    for (const o of observations) feed.appendChild(cardWithClick(o));
+    for (const o of list) feed.appendChild(cardWithClick(o));
     return;
   }
 
   const groups = new Map<string, { label: string; items: Observation[] }>();
-  for (const o of observations) {
+  for (const o of list) {
     const { key, label } = groupOf(o);
     (groups.get(key) ?? groups.set(key, { label, items: [] }).get(key)!).items.push(o);
   }
   const keys = [...groups.keys()].sort((a, b) => (groupBy === 'day' || groupBy === 'month' ? (a < b ? 1 : a > b ? -1 : 0) : a.localeCompare(b, 'he')));
   for (const key of keys) {
     const group = groups.get(key)!;
-    const head = document.createElement('h3');
+    const collapsed = collapsedGroups.has(key);
+    const head = document.createElement('button');
+    head.type = 'button';
     head.className = 'cards-group-head';
-    head.textContent = group.label;
+    head.dataset.group = key;
+    head.innerHTML = `
+      <span>${escapeHtml(group.label)} <span class="cards-group-n">${group.items.length}</span></span>
+      <span class="sp-caret">${collapsed ? '▼' : '▲'}</span>`;
+    head.addEventListener('click', () => {
+      if (collapsedGroups.has(key)) collapsedGroups.delete(key);
+      else collapsedGroups.add(key);
+      render();
+    });
     feed.appendChild(head);
-    for (const o of group.items) feed.appendChild(cardWithClick(o));
+    if (!collapsed) for (const o of group.items) feed.appendChild(cardWithClick(o));
   }
 }
 
