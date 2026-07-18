@@ -34,6 +34,7 @@ const PATHS = {
   chevronsDown: '<path d="m7 8.5 5 5 5-5"/><path d="m7 14.5 5 5 5-5"/>',
   chevronsUp: '<path d="m7 15.5 5-5 5 5"/><path d="m7 9.5 5-5 5 5"/>',
   sortArrows: '<path d="M8 20V5"/><path d="m4.5 8.5 3.5-3.5 3.5 3.5"/><path d="M16 4v15"/><path d="m12.5 15.5 3.5 3.5 3.5-3.5"/>',
+  chart: '<path d="M4 20V10M11 20V4M18 20v-7"/><path d="M3 20h18"/>',
 } as const;
 
 export type IconName = keyof typeof PATHS;

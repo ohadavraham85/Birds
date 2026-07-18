@@ -24,6 +24,7 @@ import * as detailView from './views/detail';
 import * as speciesView from './views/species';
 import * as calendarView from './views/calendar';
 import * as settingsView from './views/settings';
+import * as statsView from './views/stats';
 
 const VIEWS: Record<string, View> = {
   form: formView,
@@ -34,6 +35,7 @@ const VIEWS: Record<string, View> = {
   species: speciesView,
   calendar: calendarView,
   settings: settingsView,
+  stats: statsView,
 };
 
 /** Views reachable from the bottom tab bar (order matters). */
