@@ -9,6 +9,7 @@ import { escapeHtml } from '../lib/markdown';
 import { parseCsv, toCsv, mapHeaders, parseCoordinates, parseDateTime, type HeaderMap, type CsvField } from '../lib/csv';
 import { exportObservationsPdf } from '../lib/pdf';
 import { qs, input, select } from '../lib/dom';
+import { icon } from '../lib/icons';
 import { speciesNames, totalQuantity, hasSpecies, primarySpecies, speciesLabel, entriesOf } from '../lib/observation';
 import { navigate } from '../main';
 import type { ViewParams } from './view';
@@ -28,7 +29,7 @@ export function init(el: HTMLElement): void {
   container.innerHTML = `
     <h2>רשימת תצפיות</h2>
     <div class="filter-bar">
-      <input type="search" id="flt-q" class="filter-search" placeholder="🔍 חיפוש (מין, מיקום, פרויקט, הערות)...">
+      <input type="search" id="flt-q" class="filter-search" placeholder="חיפוש (מין, מיקום, פרויקט, הערות)...">
       <select id="flt-species" class="filter-sel"><option value="">כל המינים</option></select>
       <select id="flt-project" class="filter-sel"><option value="">כל הפרויקטים</option></select>
       <select id="flt-group" class="filter-sel">
@@ -42,17 +43,17 @@ export function init(el: HTMLElement): void {
     </div>
     <div class="table-toolbar">
       <label class="btn btn-sm" style="cursor:pointer">
-        ⬆️ ייבוא CSV
+        ${icon('upload')} ייבוא CSV
         <input type="file" id="csv-input" accept=".csv,text/csv" hidden>
       </label>
       <div class="export-wrap">
-        <button class="btn btn-sm btn-primary" id="export-btn">⬇️ ייצוא ▾</button>
+        <button class="btn btn-sm btn-primary" id="export-btn">${icon('download')} ייצוא ▾</button>
         <div class="export-menu" id="export-menu" hidden>
-          <button data-fmt="excel">📊 Excel (CSV)</button>
-          <button data-fmt="pdf">🧾 PDF</button>
+          <button data-fmt="excel">${icon('grid')} Excel (CSV)</button>
+          <button data-fmt="pdf">${icon('document')} PDF</button>
         </div>
       </div>
-      <button class="btn btn-sm btn-danger" id="del-btn" disabled>🗑️ מחיקה</button>
+      <button class="btn btn-sm btn-danger" id="del-btn" disabled>${icon('trash')} מחיקה</button>
       <span class="spacer"></span>
       <span class="sel-count" id="sel-count"></span>
     </div>
@@ -213,8 +214,8 @@ function rowHtml(o: Observation): string {
       <td>${o.project ? `<span class="badge">${escapeHtml(o.project)}</span>` : ''}</td>
       <td class="notes-cell" title="${escapeHtml(o.notes || '')}">${escapeHtml((o.notes || '').replace(/\s+/g, ' '))}</td>
       <td class="row-actions">
-        <button class="btn btn-sm act-edit" title="עריכה">✏️</button>
-        <button class="btn btn-sm act-del" title="מחיקה">🗑️</button>
+        <button class="btn btn-sm act-edit" title="עריכה">${icon('edit')}</button>
+        <button class="btn btn-sm act-del" title="מחיקה">${icon('trash')}</button>
       </td>
     </tr>`;
 }
@@ -341,16 +342,16 @@ async function exportPdf(): Promise<void> {
   const source = exportSet();
   if (!source.length) { toast('אין תצפיות לייצוא', true); return; }
   const btn = qs<HTMLButtonElement>(container, '#export-btn');
-  const label = btn.textContent;
+  const label = btn.innerHTML;
   btn.disabled = true;
-  btn.textContent = '⏳ מפיק דו"ח...';
+  btn.textContent = 'מפיק דו"ח...';
   try {
     await exportObservationsPdf(source);
   } catch (err) {
     toast('הפקת ה-PDF נכשלה: ' + (err as Error).message, true, 5000);
   } finally {
     btn.disabled = false;
-    btn.textContent = label;
+    btn.innerHTML = label;
   }
 }
 

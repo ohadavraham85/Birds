@@ -81,7 +81,7 @@ function render(): void {
   const wrap = qs(container, '#cards-feed-wrap');
   wrap.innerHTML = '';
   if (!observations.length) {
-    wrap.innerHTML = '<p style="color:var(--ink-soft)">אין עדיין תצפיות — הוסיפו תצפית עם כפתור ה־➕ 📝</p>';
+    wrap.innerHTML = '<p style="color:var(--ink-soft)">אין עדיין תצפיות — הוסיפו תצפית עם כפתור ההוספה.</p>';
     return;
   }
 

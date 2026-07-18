@@ -3,6 +3,7 @@
  * Optionally locates the device first. Returns the chosen {lat,lng} or null. */
 
 import L from './leaflet-setup';
+import { icon } from './icons';
 
 export interface LatLng { lat: number; lng: number }
 
@@ -20,7 +21,7 @@ export function pickLocation(initial: LatLng | null): Promise<LatLng | null> {
         <div class="picker-coords" id="picker-coords" dir="ltr"></div>
         <div class="modal-actions">
           <button class="btn btn-primary" id="picker-ok">✓ בחירת מיקום</button>
-          <button class="btn" id="picker-locate">📍 המיקום שלי</button>
+          <button class="btn" id="picker-locate">${icon('target')} המיקום שלי</button>
           <button class="btn" id="picker-cancel">ביטול</button>
         </div>
       </div>`;

@@ -9,6 +9,7 @@ import { escapeHtml } from '../lib/markdown';
 import { speciesNames, entriesOf, entryImages } from '../lib/observation';
 import { getImageObjectUrl } from '../lib/media';
 import { qs, input, select } from '../lib/dom';
+import { icon } from '../lib/icons';
 import { navigate } from '../main';
 import type { SpeciesDetail, ObservationImage } from '../types';
 
@@ -30,7 +31,7 @@ export function init(el: HTMLElement): void {
   container.innerHTML = `
     <h2>רשימת המינים</h2>
     <div class="filter-bar">
-      <input type="search" id="sp-q" class="filter-search" placeholder="🔍 חיפוש מין (עברית / אנגלית / מדעי / משפחה)...">
+      <input type="search" id="sp-q" class="filter-search" placeholder="חיפוש מין (עברית / אנגלית / מדעי / משפחה)...">
       <select id="sp-group" class="filter-sel">
         <option value="family">קיבוץ לפי משפחה</option>
         <option value="seen">נצפה / לא נצפה</option>
@@ -40,7 +41,7 @@ export function init(el: HTMLElement): void {
     </div>
     <div class="add-species-row">
       <input type="text" id="sp-new" placeholder="הוספת מין חדש לרשימה...">
-      <button class="btn" id="sp-add">➕ הוספה</button>
+      <button class="btn" id="sp-add">${icon('plus')} הוספה</button>
     </div>
     <p class="sp-summary" id="sp-summary"></p>
     <div id="sp-list" class="sp-cards"></div>
@@ -180,7 +181,7 @@ function cardHtml(name: string): string {
           ${lastObserved[name] ? `<div><b>תצפית אחרונה:</b> ${fmtDateTime(lastObserved[name]!)}</div>` : ''}
           ${!d.en && !d.sci && !d.family ? '<div style="color:var(--ink-soft)">אין פרטים נוספים למין זה.</div>' : ''}
           ${photoCount ? `
-            <div class="sp-photos-label">📷 ${photoCount} תמונות מהתצפיות</div>
+            <div class="sp-photos-label">${icon('camera')} ${photoCount} תמונות מהתצפיות</div>
             <div class="sp-photos" data-name="${escapeHtml(name)}"></div>` : ''}
           <div class="field sp-desc-field">
             <label for="sp-desc-${escapeHtml(name)}">תיאור אישי</label>
@@ -188,8 +189,8 @@ function cardHtml(name: string): string {
               placeholder="הוסיפו כאן תיאור, סימני זיהוי, מיקומים מועדפים...">${escapeHtml(desc)}</textarea>
           </div>
           <div class="sp-actions">
-            ${n ? `<button class="btn btn-sm btn-primary act-obs" data-name="${escapeHtml(name)}">📋 הצגת ${n} התצפיות</button>` : ''}
-            <button class="btn btn-sm act-report" data-name="${escapeHtml(name)}">📝 דיווח תצפית</button>
+            ${n ? `<button class="btn btn-sm btn-primary act-obs" data-name="${escapeHtml(name)}">${icon('list')} הצגת ${n} התצפיות</button>` : ''}
+            <button class="btn btn-sm act-report" data-name="${escapeHtml(name)}">${icon('plus')} דיווח תצפית</button>
           </div>
         </div>` : ''}
     </div>`;
