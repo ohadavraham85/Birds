@@ -9,6 +9,7 @@ import { icon } from '../lib/icons';
 import { qs } from '../lib/dom';
 import { navigate } from '../main';
 import type { Observation } from '../types';
+import type { ViewParams } from './view';
 
 const WEEKDAYS = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'];
 const MONTH_NAMES = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
@@ -47,6 +48,14 @@ export function init(el: HTMLElement): void {
     render();
   });
   qs(container, '#cal-grid').addEventListener('click', onGridClick);
+}
+
+/** Drill-down from the stats tab: opens the calendar in year view for the given year. */
+export function setParams(params: ViewParams): void {
+  if (params.year == null) return;
+  monthCursor = new Date(params.year, monthCursor.getMonth(), 1);
+  viewMode = 'year';
+  selectedDay = null;
 }
 
 export async function activate(): Promise<void> {
