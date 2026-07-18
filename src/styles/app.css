@@ -237,11 +237,16 @@ body {
 /* ---------- journal group headers ---------- */
 
 .cards-group-head {
+  width: 100%; border: 0; font: inherit; cursor: pointer;
   font-weight: 700; color: var(--accent-900);
   background: var(--accent-50); border-radius: var(--radius);
   padding: 8px 12px; margin: 4px 0 2px;
+  display: flex; justify-content: space-between; align-items: center;
 }
 .cards-group-head:first-child { margin-top: 0; }
+.cards-group-head:hover { background: var(--accent-100); }
+.cards-group-head .sp-caret { color: var(--accent-700); font-size: .75rem; }
+.cards-group-n { background: var(--accent-100); color: var(--accent-900); border-radius: 999px; padding: 1px 10px; font-size: .8rem; }
 
 /* ---------- main / views ---------- */
 
