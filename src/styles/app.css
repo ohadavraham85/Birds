@@ -817,6 +817,16 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
   border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--ink);
 }
 
+.dupe-toolbar { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.dupe-list:not(:empty) { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }
+.dupe-group {
+  border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px;
+  background: var(--accent-50);
+}
+.dupe-names { display: flex; flex-direction: column; gap: 5px; margin-bottom: 8px; }
+.dupe-radio { display: flex; align-items: center; gap: 7px; font-size: .87rem; cursor: pointer; }
+.dupe-radio input { margin: 0; }
+
 /* ---------- species tab ---------- */
 
 .sp-summary { color: var(--ink-soft); font-size: .88rem; margin: 4px 0 12px; }
