@@ -10,6 +10,8 @@ import { parseCsv, toCsv, mapHeaders, parseCoordinates, parseDateTime, type Head
 import { exportObservationsPdf } from '../lib/pdf';
 import { qs, input, select } from '../lib/dom';
 import { icon } from '../lib/icons';
+import { renderObservationTile } from '../lib/tile-card';
+import { viewModeToggleHtml, wireViewModeToggle, syncViewModeToggle, type ViewDisplayMode } from '../lib/view-mode';
 import { speciesNames, totalQuantity, hasSpecies, primarySpecies, speciesLabel, entriesOf } from '../lib/observation';
 import { navigate } from '../main';
 import type { ViewParams } from './view';
@@ -23,6 +25,7 @@ const filters = { q: '', species: '', project: '', from: '', to: '' };
 let groupBy: 'none' | 'project' | 'species' = 'none';
 let sortBy: 'dateTime' | 'species' | 'quantity' | 'locationName' | 'project' = 'dateTime';
 let sortDir: 'asc' | 'desc' = 'desc';
+let displayMode: ViewDisplayMode = 'list';
 
 export function init(el: HTMLElement): void {
   container = el;
@@ -40,6 +43,7 @@ export function init(el: HTMLElement): void {
       <label class="date-range">מ־<input type="date" id="flt-from" title="מתאריך"></label>
       <label class="date-range">עד<input type="date" id="flt-to" title="עד תאריך"></label>
       <button class="btn btn-sm" id="flt-clear" title="ניקוי סינון">נקה</button>
+      ${viewModeToggleHtml('tbl-view-mode')}
     </div>
     <div class="table-toolbar">
       <label class="btn btn-sm" style="cursor:pointer">
@@ -75,9 +79,11 @@ export function init(el: HTMLElement): void {
         <tbody id="obs-tbody"></tbody>
       </table>
     </div>
+    <div id="obs-tile-wrap" hidden></div>
     <p id="table-empty" style="color:var(--ink-soft)" hidden>אין תצפיות להצגה.</p>
   `;
 
+  wireViewModeToggle(container, 'tbl-view-mode', (mode) => { displayMode = mode; renderRows(); });
   input(container, '#flt-q').addEventListener('input', (e) => { filters.q = (e.target as HTMLInputElement).value; applyFilters(); });
   select(container, '#flt-species').addEventListener('change', (e) => { filters.species = (e.target as HTMLSelectElement).value; applyFilters(); });
   select(container, '#flt-project').addEventListener('change', (e) => { filters.project = (e.target as HTMLSelectElement).value; applyFilters(); });
@@ -227,9 +233,25 @@ function groupKeys(o: Observation): string[] {
 }
 
 function renderRows(): void {
-  const tbody = qs(container, '#obs-tbody');
+  syncViewModeToggle(container, 'tbl-view-mode', displayMode);
+  qs(container, '.table-wrap').hidden = displayMode !== 'list';
+  qs(container, '#obs-tile-wrap').hidden = displayMode === 'list';
   qs(container, '#table-empty').hidden = filtered.length > 0;
 
+  if (displayMode !== 'list') {
+    const tileWrap = qs(container, '#obs-tile-wrap');
+    tileWrap.className = `obs-tile-grid obs-tile-grid-${displayMode}`;
+    tileWrap.innerHTML = '';
+    for (const o of filtered) {
+      const tile = renderObservationTile(o, displayMode === 'rect' ? 'rect' : 'square');
+      tile.addEventListener('click', () => navigate('form', { editId: o.id }));
+      tileWrap.appendChild(tile);
+    }
+    updateToolbar();
+    return;
+  }
+
+  const tbody = qs(container, '#obs-tbody');
   if (groupBy === 'none') {
     tbody.innerHTML = filtered.map(rowHtml).join('');
   } else {
