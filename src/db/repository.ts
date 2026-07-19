@@ -7,6 +7,7 @@
  */
 
 import { db } from './database';
+import { entriesOf, speciesNames } from '../lib/observation';
 import type {
   Observation,
   SpeciesRow,
@@ -245,6 +246,156 @@ export async function seedLocationsFromObservations(): Promise<number> {
   const ts = now();
   await db.locations.bulkPut([...toAdd].map(([name, { lat, lng }]) => ({ name, lat, lng, updatedAt: ts, deleted: false })));
   return toAdd.size;
+}
+
+/* ---------- duplicate detection & merge (species / locations) ----------
+ * Names that differ only by whitespace, punctuation, or Hebrew niqqud are
+ * treated as the "same" for detection purposes, even though Dexie's
+ * exact-string keys make them distinct rows. Merging rewrites every
+ * observation that used a variant name to the chosen canonical one — the
+ * observation's other fields (quantity, notes, photos, coordinates) are
+ * never touched — then removes the now-redundant variant rows from the
+ * master list. */
+
+function normalizeDupKey(s: string): string {
+  return s
+    .normalize('NFKC')
+    .replace(/[֑-ׇ]/g, '') // Hebrew niqqud / cantillation marks
+    .replace(/['"׳״`]/g, '')
+    .replace(/[-–—]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+export interface DuplicateGroup {
+  key: string;
+  /** Raw variant names as actually stored, most-used first. */
+  names: string[];
+}
+
+function groupDuplicates(names: Iterable<string>, counts: Map<string, number>): DuplicateGroup[] {
+  const groups = new Map<string, string[]>();
+  for (const name of names) {
+    const key = normalizeDupKey(name);
+    if (!key) continue;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(name);
+  }
+  const result: DuplicateGroup[] = [];
+  for (const [key, group] of groups) {
+    if (group.length < 2) continue;
+    group.sort((a, b) => (counts.get(b) || 0) - (counts.get(a) || 0));
+    result.push({ key, names: group });
+  }
+  return result.sort((a, b) => b.names.length - a.names.length);
+}
+
+export async function findDuplicateSpeciesGroups(): Promise<DuplicateGroup[]> {
+  const rows = await listSpeciesRows();
+  const obs = await listObservations();
+  const counts = new Map<string, number>();
+  for (const o of obs) for (const name of speciesNames(o)) counts.set(name, (counts.get(name) || 0) + 1);
+  const allNames = new Set<string>([...rows.map((r) => r.name), ...counts.keys()]);
+  return groupDuplicates(allNames, counts);
+}
+
+export async function findDuplicateLocationGroups(): Promise<DuplicateGroup[]> {
+  const rows = await listLocationRows();
+  const obs = await listObservations();
+  const counts = new Map<string, number>();
+  for (const o of obs) if (o.locationName) counts.set(o.locationName, (counts.get(o.locationName) || 0) + 1);
+  const allNames = new Set<string>([...rows.map((r) => r.name), ...counts.keys()]);
+  return groupDuplicates(allNames, counts);
+}
+
+/** Rewrite every observation using one of `variants` as its species name to
+ * `canonical`, then drop the variant rows from the species master list.
+ * Returns how many observations were updated. */
+export async function mergeSpeciesNames(variants: string[], canonical: string): Promise<number> {
+  canonical = canonical.trim();
+  const toMerge = new Set(variants.filter((v) => v !== canonical));
+  if (!toMerge.size) return 0;
+  let changed = 0;
+  const all = await db.observations.toArray();
+  for (const o of all) {
+    if (o.deleted) continue;
+    const entries = entriesOf(o);
+    let touched = false;
+    for (const e of entries) {
+      if (toMerge.has(e.species)) { e.species = canonical; touched = true; }
+    }
+    if (touched) {
+      o.entries = entries;
+      o.updatedAt = now();
+      o.synced = false;
+      await db.observations.put(o);
+      await enqueue('observation', o.id, 'upsert', o);
+      changed++;
+    }
+  }
+  // Merges are batch operations run from the Settings duplicate-finder, which
+  // already re-renders its own lists locally afterwards — deliberately
+  // avoid addSpecies()/deleteSpecies() here since those call emitChange(),
+  // which would rebuild the whole Settings screen ~150ms later and wipe out
+  // the (possibly still in-progress) duplicate scan the user is working through.
+  const ts = now();
+  const canonicalRow = await db.species.get(canonical);
+  if (!canonicalRow || canonicalRow.deleted) {
+    const row: SpeciesRow = { name: canonical, updatedAt: ts, deleted: false };
+    await db.species.put(row);
+    await enqueue('species', canonical, 'upsert', row);
+  }
+  for (const v of toMerge) {
+    const row = await db.species.get(v);
+    if (row && !row.deleted) {
+      row.deleted = true;
+      row.updatedAt = ts;
+      await db.species.put(row);
+      await enqueue('species', v, 'delete', row);
+    }
+  }
+  return changed;
+}
+
+/** Rewrite every observation using one of `variants` as its location name to
+ * `canonical`, keeping the first available coordinates among the merged
+ * rows, then drop the variant rows from the locations master list.
+ * Returns how many observations were updated. */
+export async function mergeLocationNames(variants: string[], canonical: string): Promise<number> {
+  canonical = canonical.trim();
+  const toMerge = new Set(variants.filter((v) => v !== canonical));
+  if (!toMerge.size) return 0;
+  let changed = 0;
+  const all = await db.observations.toArray();
+  for (const o of all) {
+    if (o.deleted) continue;
+    if (toMerge.has(o.locationName)) {
+      o.locationName = canonical;
+      o.updatedAt = now();
+      o.synced = false;
+      await db.observations.put(o);
+      await enqueue('observation', o.id, 'upsert', o);
+      changed++;
+    }
+  }
+  const canonicalRow = await db.locations.get(canonical);
+  let lat = canonicalRow?.lat ?? null;
+  let lng = canonicalRow?.lng ?? null;
+  if (lat == null || lng == null) {
+    for (const v of toMerge) {
+      const row = await db.locations.get(v);
+      if (row?.lat != null && row?.lng != null) { lat = row.lat; lng = row.lng; break; }
+    }
+  }
+  // See the note in mergeSpeciesNames() — deliberately no emitChange() here either;
+  // deleteLocation() already doesn't emit, keeping this a quiet batch operation.
+  await db.locations.put({ name: canonical, lat, lng, updatedAt: now(), deleted: false });
+  for (const v of toMerge) {
+    const row = await db.locations.get(v);
+    if (row && !row.deleted) await deleteLocation(v);
+  }
+  return changed;
 }
 
 /* ---------- media ---------- */

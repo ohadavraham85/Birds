@@ -3,9 +3,11 @@
 import {
   listSpecies, addSpecies, deleteSpecies, listSpeciesRows,
   listLocationRows, addLocation, updateLocationCoords, deleteLocation, seedLocationsFromObservations,
+  findDuplicateSpeciesGroups, findDuplicateLocationGroups, mergeSpeciesNames, mergeLocationNames,
   clearAllData, listObservations, listObservationsRaw,
   putObservationRaw, saveMedia, mediaForObservation, getSetting,
 } from '../db/repository';
+import type { DuplicateGroup } from '../db/repository';
 import { reconfigureSync, serverUrl, syncNow, onSyncStatus } from '../sync/sync-engine';
 import { pickLocation } from '../lib/location-picker';
 import { toast, confirmDialog, fmtDateTime } from '../lib/ui';
@@ -17,6 +19,8 @@ import type { Observation, SyncStatus, LocationRow } from '../types';
 
 let container: HTMLElement;
 let unsubStatus: (() => void) | null = null;
+let speciesDupeGroups: DuplicateGroup[] = [];
+let locationDupeGroups: DuplicateGroup[] = [];
 
 export function init(el: HTMLElement): void {
   container = el;
@@ -96,6 +100,11 @@ export async function activate(): Promise<void> {
         <input type="text" id="s-sp-new" placeholder="הוספת מין חדש לרשימה...">
         <button class="btn" id="s-sp-add">${icon('plus')} הוספה</button>
       </div>
+      <div class="dupe-toolbar">
+        <button type="button" class="btn btn-sm" id="s-sp-find-dupes">${icon('search')} איתור כפילויות</button>
+        <button type="button" class="btn btn-sm btn-primary" id="s-sp-merge-all" hidden>${icon('layers')} מיזוג הכל</button>
+      </div>
+      <div class="dupe-list" id="s-species-dupes"></div>
       <div class="species-list" id="s-species-list"></div>
     </div>
 
@@ -112,6 +121,11 @@ export async function activate(): Promise<void> {
         <button type="button" class="btn btn-icon" id="s-loc-pick" title="בחירה על המפה" aria-label="בחירה על המפה">${icon('pin')}</button>
         <button class="btn" id="s-loc-add">${icon('plus')} הוספה</button>
       </div>
+      <div class="dupe-toolbar">
+        <button type="button" class="btn btn-sm" id="s-loc-find-dupes">${icon('search')} איתור כפילויות</button>
+        <button type="button" class="btn btn-sm btn-primary" id="s-loc-merge-all" hidden>${icon('layers')} מיזוג הכל</button>
+      </div>
+      <div class="dupe-list" id="s-location-dupes"></div>
       <div class="species-list" id="s-location-list"></div>
       <button class="btn btn-sm" id="s-loc-seed" style="margin-top:10px">${icon('refresh')} ייבוא מיקומים מהתצפיות הקיימות</button>
     </div>
@@ -150,12 +164,22 @@ export async function activate(): Promise<void> {
   qs(container, '#s-species-list').addEventListener('click', (e) => void onSpeciesListClick(e));
   void renderSpeciesManageList();
 
+  speciesDupeGroups = [];
+  qs(container, '#s-sp-find-dupes').addEventListener('click', () => void onFindSpeciesDupes());
+  qs(container, '#s-sp-merge-all').addEventListener('click', () => void onMergeAllSpeciesDupes());
+  qs(container, '#s-species-dupes').addEventListener('click', (e) => void onSpeciesDupesClick(e));
+
   qs(container, '#s-loc-add').addEventListener('click', () => void onAddLocationManaged());
   qs(container, '#s-loc-pick').addEventListener('click', () => void onPickLocationForAdd());
   qs(container, '#s-loc-seed').addEventListener('click', () => void onSeedLocations());
   qs(container, '#s-location-list').addEventListener('click', (e) => void onLocationListClick(e));
   qs(container, '#s-location-list').addEventListener('change', (e) => void onLocationCoordsChange(e));
   void renderLocationManageList();
+
+  locationDupeGroups = [];
+  qs(container, '#s-loc-find-dupes').addEventListener('click', () => void onFindLocationDupes());
+  qs(container, '#s-loc-merge-all').addEventListener('click', () => void onMergeAllLocationDupes());
+  qs(container, '#s-location-dupes').addEventListener('click', (e) => void onLocationDupesClick(e));
 
   unsubStatus?.();
   unsubStatus = onSyncStatus((s) => {
@@ -164,6 +188,31 @@ export async function activate(): Promise<void> {
     el.textContent = STATE_LABEL[s.state] + (s.pending ? ` · ${s.pending} ממתינים` : '') + (s.message ? ` — ${s.message}` : '');
     el.className = 'settings-status ' + (s.state === 'idle' ? 'ok' : s.state === 'error' ? 'err' : '');
   });
+}
+
+/* ---------- shared duplicate-group rendering ---------- */
+
+function renderDupeGroups(el: HTMLElement | null, groups: DuplicateGroup[], radioPrefix: string): void {
+  if (!el) return;
+  if (!groups.length) { el.innerHTML = ''; return; }
+  el.innerHTML = groups.map((g, i) => `
+    <div class="dupe-group" data-idx="${i}">
+      <div class="dupe-names">
+        ${g.names.map((n, j) => `
+          <label class="dupe-radio">
+            <input type="radio" name="${radioPrefix}-canon-${i}" value="${escapeHtml(n)}" ${j === 0 ? 'checked' : ''}>
+            <span>${escapeHtml(n)}</span>
+          </label>`).join('')}
+      </div>
+      <button type="button" class="btn btn-sm merge-btn" data-idx="${i}">${icon('layers')} מיזוג</button>
+    </div>`).join('');
+}
+
+function pickedCanonical(dupeListSelector: string, idx: number, group: DuplicateGroup): string {
+  const checked = container.querySelector<HTMLInputElement>(
+    `${dupeListSelector} .dupe-group[data-idx="${idx}"] input[type="radio"]:checked`,
+  );
+  return checked?.value || group.names[0];
 }
 
 /* ---------- species list management ---------- */
@@ -199,6 +248,53 @@ async function onSpeciesListClick(e: Event): Promise<void> {
   await deleteSpecies(name);
   await renderSpeciesManageList();
   toast(`"${name}" הוסר מהרשימה`);
+}
+
+/* ---------- species duplicate finder / merge ---------- */
+
+async function onFindSpeciesDupes(): Promise<void> {
+  speciesDupeGroups = await findDuplicateSpeciesGroups();
+  renderSpeciesDupes();
+  if (!speciesDupeGroups.length) toast('לא נמצאו כפילויות ברשימת המינים');
+}
+
+function renderSpeciesDupes(): void {
+  renderDupeGroups(container.querySelector<HTMLElement>('#s-species-dupes'), speciesDupeGroups, 'sp');
+  const mergeAllBtn = container.querySelector<HTMLButtonElement>('#s-sp-merge-all');
+  if (mergeAllBtn) mergeAllBtn.hidden = speciesDupeGroups.length < 2;
+}
+
+async function onSpeciesDupesClick(e: Event): Promise<void> {
+  const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('.merge-btn');
+  if (!btn) return;
+  const idx = Number(btn.dataset.idx);
+  const group = speciesDupeGroups[idx];
+  if (!group) return;
+  const canonical = pickedCanonical('#s-species-dupes', idx, group);
+  if (!(await confirmDialog(
+    `למזג ${group.names.length} וריאציות של אותו מין ל-"${canonical}"? כל התצפיות הרלוונטיות יעודכנו, שאר הפרטים (כמות, הערות, תמונות) לא ייפגעו.`,
+    'מיזוג',
+  ))) return;
+  const n = await mergeSpeciesNames(group.names, canonical);
+  toast(`מוזגו ${group.names.length} שמות ל-"${canonical}" (${n} תצפיות עודכנו)`);
+  speciesDupeGroups.splice(idx, 1);
+  renderSpeciesDupes();
+  await renderSpeciesManageList();
+}
+
+async function onMergeAllSpeciesDupes(): Promise<void> {
+  if (!speciesDupeGroups.length) return;
+  if (!(await confirmDialog(
+    `למזג את כל ${speciesDupeGroups.length} קבוצות הכפילויות, כל אחת לפי השם שנבחר לה? התצפיות יעודכנו, שאר הפרטים לא ייפגעו.`,
+    'מיזוג הכל',
+  ))) return;
+  let totalObs = 0;
+  const groups = speciesDupeGroups.map((g, i) => ({ group: g, canonical: pickedCanonical('#s-species-dupes', i, g) }));
+  for (const { group, canonical } of groups) totalObs += await mergeSpeciesNames(group.names, canonical);
+  toast(`מוזגו ${groups.length} קבוצות כפילויות (${totalObs} תצפיות עודכנו)`);
+  speciesDupeGroups = [];
+  renderSpeciesDupes();
+  await renderSpeciesManageList();
 }
 
 /* ---------- locations list management ---------- */
@@ -274,6 +370,53 @@ async function onLocationCoordsChange(e: Event): Promise<void> {
   const lng = lngVal === '' ? null : parseFloat(lngVal);
   await updateLocationCoords(name, lat != null && Number.isFinite(lat) ? lat : null, lng != null && Number.isFinite(lng) ? lng : null);
   toast('הקואורדינטות נשמרו');
+}
+
+/* ---------- location duplicate finder / merge ---------- */
+
+async function onFindLocationDupes(): Promise<void> {
+  locationDupeGroups = await findDuplicateLocationGroups();
+  renderLocationDupes();
+  if (!locationDupeGroups.length) toast('לא נמצאו כפילויות ברשימת המיקומים');
+}
+
+function renderLocationDupes(): void {
+  renderDupeGroups(container.querySelector<HTMLElement>('#s-location-dupes'), locationDupeGroups, 'loc');
+  const mergeAllBtn = container.querySelector<HTMLButtonElement>('#s-loc-merge-all');
+  if (mergeAllBtn) mergeAllBtn.hidden = locationDupeGroups.length < 2;
+}
+
+async function onLocationDupesClick(e: Event): Promise<void> {
+  const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('.merge-btn');
+  if (!btn) return;
+  const idx = Number(btn.dataset.idx);
+  const group = locationDupeGroups[idx];
+  if (!group) return;
+  const canonical = pickedCanonical('#s-location-dupes', idx, group);
+  if (!(await confirmDialog(
+    `למזג ${group.names.length} וריאציות של אותו מיקום ל-"${canonical}"? כל התצפיות הרלוונטיות יעודכנו, שאר הפרטים לא ייפגעו. הקואורדינטות הקיימות (של היעד או של אחת הוריאציות) יישמרו.`,
+    'מיזוג',
+  ))) return;
+  const n = await mergeLocationNames(group.names, canonical);
+  toast(`מוזגו ${group.names.length} שמות ל-"${canonical}" (${n} תצפיות עודכנו)`);
+  locationDupeGroups.splice(idx, 1);
+  renderLocationDupes();
+  await renderLocationManageList();
+}
+
+async function onMergeAllLocationDupes(): Promise<void> {
+  if (!locationDupeGroups.length) return;
+  if (!(await confirmDialog(
+    `למזג את כל ${locationDupeGroups.length} קבוצות הכפילויות, כל אחת לפי השם שנבחר לה? התצפיות יעודכנו, שאר הפרטים לא ייפגעו.`,
+    'מיזוג הכל',
+  ))) return;
+  let totalObs = 0;
+  const groups = locationDupeGroups.map((g, i) => ({ group: g, canonical: pickedCanonical('#s-location-dupes', i, g) }));
+  for (const { group, canonical } of groups) totalObs += await mergeLocationNames(group.names, canonical);
+  toast(`מוזגו ${groups.length} קבוצות כפילויות (${totalObs} תצפיות עודכנו)`);
+  locationDupeGroups = [];
+  renderLocationDupes();
+  await renderLocationManageList();
 }
 
 function onThemePick(e: Event): void {
