@@ -5,10 +5,12 @@
 
 import { listObservations } from '../db/repository';
 import { renderObservationCard } from '../lib/obs-card';
+import { renderObservationTile } from '../lib/tile-card';
 import { speciesNames } from '../lib/observation';
 import { escapeHtml } from '../lib/markdown';
 import { showModal } from '../lib/ui';
 import { icon } from '../lib/icons';
+import { viewModeToggleHtml, wireViewModeToggle, syncViewModeToggle, type ViewDisplayMode } from '../lib/view-mode';
 import { qs, input, select } from '../lib/dom';
 import { navigate } from '../main';
 import type { Observation } from '../types';
@@ -22,6 +24,7 @@ let observations: Observation[] = [];
 let groupBy: GroupMode = 'none';
 let sortDir: SortDir = 'desc';
 let query = '';
+let displayMode: ViewDisplayMode = 'list';
 let collapsedGroups = new Set<string>();
 let selectedProjects = new Set<string>();
 let selectedLocations = new Set<string>();
@@ -46,9 +49,11 @@ export function init(el: HTMLElement): void {
       <button type="button" class="btn btn-icon" id="j-sort-btn" title="היפוך סדר כרונולוגי" aria-label="היפוך סדר כרונולוגי">${icon('sortArrows')}</button>
       <button type="button" class="btn btn-icon" id="j-expand-all" title="פתיחת כל הקבוצות" aria-label="פתיחת כל הקבוצות">${icon('chevronsDown')}</button>
       <button type="button" class="btn btn-icon" id="j-collapse-all" title="סגירת כל הקבוצות" aria-label="סגירת כל הקבוצות">${icon('chevronsUp')}</button>
+      ${viewModeToggleHtml('j-view-mode')}
     </div>
     <div id="cards-feed-wrap"></div>
   `;
+  wireViewModeToggle(container, 'j-view-mode', (mode) => { displayMode = mode; render(); });
   input(container, '#j-q').addEventListener('input', (e) => { query = (e.target as HTMLInputElement).value; render(); });
   select(container, '#j-group').addEventListener('change', (e) => {
     groupBy = (e.target as HTMLSelectElement).value as GroupMode;
@@ -213,6 +218,7 @@ function render(): void {
   const sortBtn = qs(container, '#j-sort-btn');
   sortBtn.innerHTML = icon('sortArrows', sortDir === 'asc' ? 'icon-flip' : '');
   sortBtn.title = sortDir === 'desc' ? 'מוצג: מהחדש לישן' : 'מוצג: מהישן לחדש';
+  syncViewModeToggle(container, 'j-view-mode', displayMode);
 
   const wrap = qs(container, '#cards-feed-wrap');
   wrap.innerHTML = '';
@@ -234,7 +240,7 @@ function render(): void {
   wrap.appendChild(feed);
 
   if (groupBy === 'none') {
-    for (const o of list) feed.appendChild(cardWithClick(o));
+    appendItems(feed, list);
     return;
   }
 
@@ -260,8 +266,20 @@ function render(): void {
       render();
     });
     feed.appendChild(head);
-    if (!collapsed) for (const o of group.items) feed.appendChild(cardWithClick(o));
+    if (!collapsed) appendItems(feed, group.items);
   }
+}
+
+/** Renders `items` either as full cards (list mode) or into a tile grid (square/rect mode). */
+function appendItems(feed: HTMLElement, items: Observation[]): void {
+  if (displayMode === 'list') {
+    for (const o of items) feed.appendChild(cardWithClick(o));
+    return;
+  }
+  const grid = document.createElement('div');
+  grid.className = `obs-tile-grid obs-tile-grid-${displayMode}`;
+  for (const o of items) grid.appendChild(tileWithClick(o));
+  feed.appendChild(grid);
 }
 
 function cardWithClick(o: Observation): HTMLElement {
@@ -272,6 +290,12 @@ function cardWithClick(o: Observation): HTMLElement {
     navigate('detail', { viewId: o.id });
   });
   return card;
+}
+
+function tileWithClick(o: Observation): HTMLElement {
+  const tile = renderObservationTile(o, displayMode === 'rect' ? 'rect' : 'square');
+  tile.addEventListener('click', () => navigate('detail', { viewId: o.id }));
+  return tile;
 }
 
 // Called by the FAB in the app chrome.
