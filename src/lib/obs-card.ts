@@ -1,7 +1,9 @@
 /* lib/obs-card.ts — shared observation-card renderer used by the journal
  * feed (views/cards.ts) and the single-observation detail view
  * (views/detail.ts): place (linked to maps), meta, numbered species list
- * (each with its own note + photos), and general notes. */
+ * (each with its own note + photos), and general notes. Also exports a
+ * compact summary (place/time/project/coordinates only, no species or
+ * notes) for the journal's "list" display mode. */
 
 import { fmtDateTime, fmtCoords, showImageModal } from './ui';
 import { renderMarkdown, escapeHtml } from './markdown';
@@ -16,11 +18,9 @@ function mapsUrl(o: Observation): string | null {
   return null;
 }
 
-export function renderObservationCard(o: Observation): HTMLElement {
+function headMetaHtml(o: Observation): string {
   const url = mapsUrl(o);
-  const card = document.createElement('article');
-  card.className = 'obs-card';
-  card.innerHTML = `
+  return `
     <div class="card-head">
       <div class="card-place">
         ${url
@@ -32,7 +32,23 @@ export function renderObservationCard(o: Observation): HTMLElement {
     <div class="meta">
       <span>${icon('clock')} ${fmtDateTime(o.dateTime)}</span>
       ${fmtCoords(o.lat, o.lng) ? `<span dir="ltr">${icon('compass')} ${fmtCoords(o.lat, o.lng)}</span>` : ''}
-    </div>
+    </div>`;
+}
+
+/** Compact row: location, time, project and coordinates only — no species
+ * or notes. Used by the journal's "list" display mode. */
+export function renderObservationSummary(o: Observation): HTMLElement {
+  const card = document.createElement('article');
+  card.className = 'obs-card obs-card-compact';
+  card.innerHTML = headMetaHtml(o);
+  return card;
+}
+
+export function renderObservationCard(o: Observation): HTMLElement {
+  const card = document.createElement('article');
+  card.className = 'obs-card';
+  card.innerHTML = `
+    ${headMetaHtml(o)}
     <ol class="species-ol"></ol>
     ${o.notes ? `<div class="notes">${renderMarkdown(o.notes)}</div>` : ''}
   `;

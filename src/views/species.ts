@@ -242,7 +242,7 @@ function tileHtml(name: string, mode: ViewDisplayMode): string {
       <button type="button" class="sp-tile-head" data-name="${escapeHtml(name)}">
         <div class="sp-tile-media obs-tile-media" data-name="${escapeHtml(name)}">${icon('bird', 'obs-tile-fallback-icon')}</div>
         <div class="sp-tile-info obs-tile-info">
-          <span class="sp-tile-he obs-tile-species">${escapeHtml(d.he)}</span>
+          <span class="sp-tile-he obs-tile-headline">${escapeHtml(d.he)}</span>
           ${mode === 'rect' && d.en ? `<span class="obs-tile-meta" dir="ltr">${escapeHtml(d.en)}</span>` : ''}
           ${n ? `<span class="obs-tile-meta">${n} תצפיות</span>` : ''}
         </div>
