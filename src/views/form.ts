@@ -4,7 +4,7 @@
 
 import {
   saveObservation, getObservation, listObservations, listSpecies,
-  saveMedia, mediaForObservation, deleteMedia,
+  saveMedia, mediaForObservation, deleteMedia, getLocation, listLocationRows,
 } from '../db/repository';
 import { toast, toLocalInputValue, fromLocalInputValue } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
@@ -91,7 +91,9 @@ export function init(el: HTMLElement): void {
   `;
 
   wireCombo(input(container, '#f-project'), qs(container, '#project-list'), () => projectSuggestions);
-  wireCombo(input(container, '#f-location'), qs(container, '#location-list'), () => locationSuggestions);
+  wireCombo(input(container, '#f-location'), qs(container, '#location-list'), () => locationSuggestions, {
+    onSelect: (name) => void onLocationSelected(name),
+  });
   qs(container, '#pick-map-btn').addEventListener('click', () => void openPicker());
   qs(container, '#add-species-row').addEventListener('click', () => addSpeciesRow({ species: '', quantity: 1 }, true));
   qs(container, '#back-btn').addEventListener('click', () => navigate('cards'));
@@ -113,7 +115,9 @@ export async function activate(): Promise<void> {
   for (const o of all) for (const name of speciesNames(o)) seen.add(name);
   seenSpeciesCache = speciesCache.filter((s) => seen.has(s));
   projectSuggestions = [...new Set(all.map((o) => o.project).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'he'));
-  locationSuggestions = [...new Set(all.map((o) => o.locationName).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'he'));
+  const savedLocationNames = (await listLocationRows()).map((l) => l.name);
+  locationSuggestions = [...new Set([...all.map((o) => o.locationName), ...savedLocationNames].filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'he'));
 
   if (editId) { await loadForEdit(editId); return; }
 
@@ -168,6 +172,19 @@ async function loadForEdit(id: string): Promise<void> {
 
 /* ---------- location ---------- */
 
+/** When a saved location (Settings → ניהול רשימת המיקומים) is picked from the
+ * combo, fill in its coordinates — but never overwrite a value already set. */
+async function onLocationSelected(name: string): Promise<void> {
+  const latEl = input(container, '#f-lat');
+  const lngEl = input(container, '#f-lng');
+  if (latEl.value || lngEl.value) return;
+  const loc = await getLocation(name);
+  if (!loc || loc.lat == null || loc.lng == null) return;
+  latEl.value = loc.lat.toFixed(6);
+  lngEl.value = loc.lng.toFixed(6);
+  qs(container, '#gps-status').textContent = '(ממיקום שמור)';
+}
+
 function autoFillGps(): void {
   const latEl = input(container, '#f-lat');
   const lngEl = input(container, '#f-lng');
@@ -208,6 +225,8 @@ interface ComboOptions {
   matchMode?: 'contains' | 'prefix';
   /** Suggestions shown when the field is empty (e.g. previously-seen species), if different from the full list. */
   getDefault?: () => string[];
+  /** Fired when a suggestion is picked (click or Enter) — not on free typing. */
+  onSelect?: (value: string) => void;
 }
 
 function wireCombo(inp: HTMLInputElement, list: HTMLElement, getSuggestions: () => string[], opts: ComboOptions = {}): void {
@@ -246,11 +265,17 @@ function wireCombo(inp: HTMLInputElement, list: HTMLElement, getSuggestions: () 
       e.preventDefault();
       inp.value = items[hlIndex]!.dataset.name!;
       list.hidden = true;
+      opts.onSelect?.(inp.value);
     } else if (e.key === 'Escape') { list.hidden = true; }
   });
   list.addEventListener('mousedown', (e) => {
     const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-name]');
-    if (btn) { e.preventDefault(); inp.value = btn.dataset.name!; list.hidden = true; }
+    if (btn) {
+      e.preventDefault();
+      inp.value = btn.dataset.name!;
+      list.hidden = true;
+      opts.onSelect?.(inp.value);
+    }
   });
   toggle?.addEventListener('mousedown', (e) => {
     e.preventDefault();

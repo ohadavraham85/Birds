@@ -10,6 +10,7 @@ import { db } from './database';
 import type {
   Observation,
   SpeciesRow,
+  LocationRow,
   MediaRecord,
   OutboxEntry,
 } from '../types';
@@ -157,6 +158,16 @@ export async function putSpeciesRaw(row: SpeciesRow): Promise<void> {
   emitChange();
 }
 
+export async function deleteSpecies(name: string): Promise<void> {
+  const row = await db.species.get(name);
+  if (!row) return;
+  row.deleted = true;
+  row.updatedAt = now();
+  await db.species.put(row);
+  await enqueue('species', name, 'delete', row);
+  emitChange();
+}
+
 /** Seed the master list on first run, and replace it when the bundled list
  * version increases so existing installs pick up an updated list. */
 export async function seedSpeciesIfEmpty(names: string[], version = 1): Promise<boolean> {
@@ -169,6 +180,71 @@ export async function seedSpeciesIfEmpty(names: string[], version = 1): Promise<
   await setSetting('speciesSeedVersion', version);
   emitChange();
   return true;
+}
+
+/* ---------- locations (local-only master list; not yet synced to server) ---------- */
+
+/** All non-deleted saved locations, name-sorted. */
+export async function listLocationRows(): Promise<LocationRow[]> {
+  const all = await db.locations.toArray();
+  return all.filter((l) => !l.deleted).sort((a, b) => a.name.localeCompare(b.name, 'he'));
+}
+
+export async function getLocation(name: string): Promise<LocationRow | undefined> {
+  const row = await db.locations.get(name);
+  return row && !row.deleted ? row : undefined;
+}
+
+// Note: these deliberately don't call emitChange() — nothing else currently
+// reads the locations table reactively, and Settings already re-renders its
+// own list locally after each call. Triggering the app-wide change listener
+// here would rebuild the whole Settings screen ~150ms later and steal focus
+// while the user is still editing coordinates.
+
+export async function addLocation(name: string, lat: number | null, lng: number | null): Promise<boolean> {
+  name = String(name || '').trim();
+  if (!name) return false;
+  await db.locations.put({ name, lat, lng, updatedAt: now(), deleted: false });
+  return true;
+}
+
+export async function updateLocationCoords(name: string, lat: number | null, lng: number | null): Promise<void> {
+  const row = await db.locations.get(name);
+  if (!row) return;
+  row.lat = lat;
+  row.lng = lng;
+  row.updatedAt = now();
+  await db.locations.put(row);
+}
+
+export async function deleteLocation(name: string): Promise<void> {
+  const row = await db.locations.get(name);
+  if (!row) return;
+  row.deleted = true;
+  row.updatedAt = now();
+  await db.locations.put(row);
+}
+
+export async function putLocationRaw(row: LocationRow): Promise<void> {
+  await db.locations.put(row);
+  emitChange();
+}
+
+/** One-time convenience: populate the locations list from the (name, first-seen
+ * coordinates) pairs already present in existing observations. Skips names
+ * already saved. Returns how many were added. */
+export async function seedLocationsFromObservations(): Promise<number> {
+  const obs = await listObservations();
+  const existing = new Set((await listLocationRows()).map((l) => l.name));
+  const toAdd = new Map<string, { lat: number | null; lng: number | null }>();
+  for (const o of obs) {
+    const name = o.locationName.trim();
+    if (!name || existing.has(name) || toAdd.has(name)) continue;
+    toAdd.set(name, { lat: o.lat, lng: o.lng });
+  }
+  const ts = now();
+  await db.locations.bulkPut([...toAdd].map(([name, { lat, lng }]) => ({ name, lat, lng, updatedAt: ts, deleted: false })));
+  return toAdd.size;
 }
 
 /* ---------- media ---------- */

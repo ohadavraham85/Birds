@@ -48,6 +48,16 @@ export interface SpeciesRow {
   description?: string;
 }
 
+/** Master locations-list entry: a saved place name with canonical
+ * coordinates, editable in Settings. Local-only (not yet synced to server). */
+export interface LocationRow {
+  name: string;
+  lat: number | null;
+  lng: number | null;
+  updatedAt: string;
+  deleted?: boolean;
+}
+
 /** Original-quality image blob, linked to an observation. */
 export interface MediaRecord {
   id: string;
