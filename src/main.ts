@@ -11,6 +11,7 @@ import { qs } from './lib/dom';
 import { initTheme } from './lib/theme';
 import { hydrateIcons } from './lib/icons';
 import { initSync, onSyncStatus, requestSync } from './sync/sync-engine';
+import { initFirebaseSyncFromSettings } from './firebase/firestore-sync';
 import type { View, ViewParams } from './views/view';
 import type { SyncStatus } from './types';
 
@@ -130,6 +131,7 @@ async function init(): Promise<void> {
   registerSW({ immediate: true });
 
   await initSync();
+  await initFirebaseSyncFromSettings();
 
   // when a sync pulls remote changes, refresh whatever screen is open
   let refreshTimer: ReturnType<typeof setTimeout> | undefined;

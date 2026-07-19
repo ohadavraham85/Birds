@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "dexie": "^4.0.10",
+    "firebase": "^12.16.0",
     "html2pdf.js": "^0.10.3",
     "leaflet": "^1.9.4",
     "workbox-cacheable-response": "^7.4.1",

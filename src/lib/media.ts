@@ -14,6 +14,18 @@ export async function getImageObjectUrl(img: ObservationImage, obsId = ''): Prom
   }
   const remoteId = img?.remoteId || img?.localId;
   if (remoteId && navigator.onLine) {
+    // Firebase Storage stamps a full download URL as remoteId; the Cloudflare
+    // Worker instead uses an opaque id fetched via its own /api/media/:id.
+    if (/^https?:\/\//.test(remoteId)) {
+      try {
+        const blob = await (await fetch(remoteId)).blob();
+        await saveMedia({ id: img.localId || remoteId, obsId, name: img.name || '', mime: blob.type, blob, remoteId });
+        return URL.createObjectURL(blob);
+      } catch {
+        /* offline / Storage object not reachable — nothing to show */
+      }
+      return null;
+    }
     const base = await serverUrl();
     if (base) {
       try {
