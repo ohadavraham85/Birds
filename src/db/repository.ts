@@ -262,7 +262,9 @@ function normalizeDupKey(s: string): string {
     .normalize('NFKC')
     .replace(/[֑-ׇ]/g, '') // Hebrew niqqud / cantillation marks
     .replace(/['"׳״`]/g, '')
+    .replace(/[()[\]{}]/g, ' ') // parentheses/brackets don't change identity, just drop them
     .replace(/[-–—]/g, ' ')
+    .replace(/[.,;]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
     .toLowerCase();
