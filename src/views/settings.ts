@@ -4,7 +4,7 @@ import {
   listSpecies, addSpecies, deleteSpecies, listSpeciesRows,
   listLocationRows, addLocation, updateLocationCoords, deleteLocation, seedLocationsFromObservations,
   findDuplicateSpeciesGroups, findDuplicateLocationGroups, mergeSpeciesNames, mergeLocationNames,
-  clearAllData, listObservations, listObservationsRaw,
+  clearAllData, listObservations, listObservationsRaw, getObservation, saveObservation,
   putObservationRaw, saveMedia, mediaForObservation, getSetting,
 } from '../db/repository';
 import type { DuplicateGroup } from '../db/repository';
@@ -14,6 +14,8 @@ import { toast, confirmDialog, fmtDateTime } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
 import { qs, input } from '../lib/dom';
 import { icon } from '../lib/icons';
+import { readExifDate } from '../lib/exif';
+import { primarySpecies } from '../lib/observation';
 import { THEMES, currentTheme, setTheme, type ThemeId } from '../lib/theme';
 import type { Observation, SyncStatus, LocationRow } from '../types';
 
@@ -21,6 +23,16 @@ let container: HTMLElement;
 let unsubStatus: (() => void) | null = null;
 let speciesDupeGroups: DuplicateGroup[] = [];
 let locationDupeGroups: DuplicateGroup[] = [];
+
+interface PhotoImportRow {
+  file: File;
+  date: Date;
+  dateSource: 'exif' | 'file';
+  url: string;
+  obsId: string | null;
+}
+let photoImportRows: PhotoImportRow[] = [];
+let photoImportObsCache: Observation[] = [];
 
 export function init(el: HTMLElement): void {
   container = el;
@@ -91,6 +103,21 @@ export async function activate(): Promise<void> {
     </div>
 
     <div class="settings-card">
+      <h3>${icon('camera')} ייבוא תמונות לפי תאריך</h3>
+      <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
+        בוחרים כמה תמונות בבת אחת — האפליקציה מזהה את תאריך הצילום (מתוך נתוני
+        התמונה, ואם אין — מתאריך הקובץ) ומשייכת אוטומטית כל תמונה לתצפית הקרובה
+        אליה ביותר בזמן. אפשר לשנות שיוך לכל תמונה או לדלג עליה לפני האישור.
+        התמונות מצורפות למין הראשון שנרשם בתצפית.
+      </p>
+      <label class="btn btn-primary" style="cursor:pointer">${icon('upload')} בחירת תמונות
+        <input type="file" id="s-photo-import-input" accept="image/*" multiple hidden>
+      </label>
+      <div class="photo-import-list" id="s-photo-import-list"></div>
+      <button type="button" class="btn btn-primary" id="s-photo-import-confirm" style="margin-top:10px" hidden>${icon('save')} ייבוא תמונות</button>
+    </div>
+
+    <div class="settings-card">
       <h3>${icon('bird')} ניהול רשימת המינים</h3>
       <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
         הרשימה המוצעת בטופס התצפית ובטאב "מינים". מחיקת מין מסירה אותו מהרשימה בלבד —
@@ -155,6 +182,12 @@ export async function activate(): Promise<void> {
   qs(container, '#s-sync-now').addEventListener('click', () => void syncNow());
   qs(container, '#s-backup').addEventListener('click', () => void onBackup());
   input(container, '#s-restore').addEventListener('change', (e) => void onRestore(e));
+  input(container, '#s-photo-import-input').addEventListener('change', (e) => void onPhotoImportFilesChosen(e));
+  qs(container, '#s-photo-import-list').addEventListener('change', (e) => onPhotoImportSelectChange(e));
+  qs(container, '#s-photo-import-list').addEventListener('click', (e) => onPhotoImportRemoveClick(e));
+  qs(container, '#s-photo-import-confirm').addEventListener('click', () => void onPhotoImportConfirm());
+  photoImportRows = [];
+  photoImportObsCache = [];
   qs(container, '#s-demo-load').addEventListener('click', () => void onLoadDemo());
   qs(container, '#s-demo-remove').addEventListener('click', () => void onRemoveDemo());
   qs(container, '#s-clear').addEventListener('click', () => void onClearData());
@@ -491,6 +524,120 @@ async function onRestore(e: Event): Promise<void> {
   }
   toast('השחזור הושלם ✓');
   await activate();
+}
+
+/* ---------- photo import (match by date to existing observations) ---------- */
+
+function nearestObservation(obsList: Observation[], date: Date): Observation | null {
+  let best: Observation | null = null;
+  let bestDiff = Infinity;
+  for (const o of obsList) {
+    const diff = Math.abs(new Date(o.dateTime).getTime() - date.getTime());
+    if (diff < bestDiff) { bestDiff = diff; best = o; }
+  }
+  return best;
+}
+
+async function onPhotoImportFilesChosen(e: Event): Promise<void> {
+  const fileInput = e.target as HTMLInputElement;
+  const files = Array.from(fileInput.files || []);
+  fileInput.value = '';
+  if (!files.length) return;
+  photoImportObsCache = await listObservations();
+  if (!photoImportObsCache.length) { toast('אין תצפיות קיימות לשיוך התמונות', true); return; }
+  for (const file of files) {
+    const exifDate = await readExifDate(file);
+    const date = exifDate || new Date(file.lastModified);
+    const nearest = nearestObservation(photoImportObsCache, date);
+    photoImportRows.push({
+      file, date, dateSource: exifDate ? 'exif' : 'file',
+      url: URL.createObjectURL(file), obsId: nearest?.id ?? null,
+    });
+  }
+  renderPhotoImportList();
+}
+
+function photoCountLabel(n: number): string {
+  return n === 1 ? 'תמונה אחת' : `${n} תמונות`;
+}
+function obsCountLabel(n: number): string {
+  return n === 1 ? 'תצפית אחת' : `${n} תצפיות`;
+}
+
+function renderPhotoImportList(): void {
+  const el = container.querySelector<HTMLElement>('#s-photo-import-list');
+  const confirmBtn = container.querySelector<HTMLButtonElement>('#s-photo-import-confirm');
+  if (!el || !confirmBtn) return;
+  if (!photoImportRows.length) { el.innerHTML = ''; confirmBtn.hidden = true; return; }
+  el.innerHTML = photoImportRows.map((r, i) => {
+    const sorted = [...photoImportObsCache]
+      .sort((a, b) => Math.abs(new Date(a.dateTime).getTime() - r.date.getTime()) - Math.abs(new Date(b.dateTime).getTime() - r.date.getTime()))
+      .slice(0, 30);
+    return `
+      <div class="photo-import-row" data-idx="${i}">
+        <img class="photo-import-thumb" src="${r.url}" alt="">
+        <div class="photo-import-info">
+          <div class="photo-import-date">
+            ${escapeHtml(fmtDateTime(r.date.toISOString()))}
+            <span class="hint">${r.dateSource === 'exif' ? '(מתוך התמונה)' : '(תאריך קובץ)'}</span>
+          </div>
+          <select class="photo-import-select">
+            <option value="">— לא לצרף —</option>
+            ${sorted.map((o) => `
+              <option value="${o.id}" ${o.id === r.obsId ? 'selected' : ''}>
+                ${escapeHtml(fmtDateTime(o.dateTime))} · ${escapeHtml(o.locationName)}${primarySpecies(o) ? ' · ' + escapeHtml(primarySpecies(o)) : ''}
+              </option>`).join('')}
+          </select>
+        </div>
+        <button type="button" class="btn btn-icon photo-import-remove" title="הסרה" aria-label="הסרה">${icon('trash')}</button>
+      </div>`;
+  }).join('');
+  confirmBtn.hidden = false;
+  confirmBtn.innerHTML = `${icon('save')} ייבוא ${photoCountLabel(photoImportRows.filter((r) => r.obsId).length)}`;
+}
+
+function onPhotoImportSelectChange(e: Event): void {
+  const target = e.target as HTMLElement;
+  if (!target.classList.contains('photo-import-select')) return;
+  const row = target.closest<HTMLElement>('.photo-import-row');
+  if (!row) return;
+  const idx = Number(row.dataset.idx);
+  if (photoImportRows[idx]) photoImportRows[idx].obsId = (target as HTMLSelectElement).value || null;
+  const confirmBtn = container.querySelector<HTMLButtonElement>('#s-photo-import-confirm');
+  if (confirmBtn) confirmBtn.innerHTML = `${icon('save')} ייבוא ${photoImportRows.filter((r) => r.obsId).length} תמונות`;
+}
+
+function onPhotoImportRemoveClick(e: Event): void {
+  const btn = (e.target as HTMLElement).closest<HTMLElement>('.photo-import-remove');
+  if (!btn) return;
+  const row = btn.closest<HTMLElement>('.photo-import-row');
+  if (!row) return;
+  const idx = Number(row.dataset.idx);
+  const removed = photoImportRows.splice(idx, 1)[0];
+  if (removed) URL.revokeObjectURL(removed.url);
+  renderPhotoImportList();
+}
+
+async function onPhotoImportConfirm(): Promise<void> {
+  const toImport = photoImportRows.filter((r) => r.obsId);
+  if (!toImport.length) { toast('לא נבחרו תצפיות לשיוך', true); return; }
+  if (!(await confirmDialog(`לצרף ${photoCountLabel(toImport.length)} לתצפיות שנבחרו?`, 'ייבוא'))) return;
+  const touchedObsIds = new Set<string>();
+  for (const row of toImport) {
+    const obs = await getObservation(row.obsId!);
+    if (!obs) continue;
+    const mediaId = crypto.randomUUID();
+    await saveMedia({ id: mediaId, obsId: obs.id, name: row.file.name || 'image', mime: row.file.type, blob: row.file });
+    const entries = obs.entries?.length ? obs.entries : [{ species: '', quantity: 1 }];
+    entries[0].images = [...(entries[0].images || []), { localId: mediaId, name: row.file.name || 'image' }];
+    obs.entries = entries;
+    await saveObservation(obs);
+    touchedObsIds.add(obs.id);
+  }
+  for (const r of photoImportRows) URL.revokeObjectURL(r.url);
+  photoImportRows = [];
+  renderPhotoImportList();
+  toast(`יובאו ${photoCountLabel(toImport.length)} ל-${obsCountLabel(touchedObsIds.size)} ✓`);
 }
 
 /* ---------- demo & clear ---------- */
