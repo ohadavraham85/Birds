@@ -807,6 +807,16 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
 .add-species-row { display: flex; gap: 8px; margin-top: 10px; }
 .add-species-row input { flex: 1; }
 
+.loc-add-row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.loc-add-row input[type="text"] { flex: 1 1 160px; min-width: 120px; }
+.loc-add-row input[type="number"] { width: 100px; flex: 0 0 auto; }
+.species-list .loc-row { gap: 8px; }
+.loc-row-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.loc-row input[type="number"] {
+  width: 92px; flex-shrink: 0; padding: 5px 6px; font-size: .82rem;
+  border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--ink);
+}
+
 /* ---------- species tab ---------- */
 
 .sp-summary { color: var(--ink-soft); font-size: .88rem; margin: 4px 0 12px; }

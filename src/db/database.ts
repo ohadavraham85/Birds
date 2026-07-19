@@ -4,6 +4,7 @@ import Dexie, { type EntityTable } from 'dexie';
 import type {
   Observation,
   SpeciesRow,
+  LocationRow,
   MediaRecord,
   SettingRow,
   OutboxEntry,
@@ -12,6 +13,7 @@ import type {
 export class BirdsDatabase extends Dexie {
   observations!: EntityTable<Observation, 'id'>;
   species!: EntityTable<SpeciesRow, 'name'>;
+  locations!: EntityTable<LocationRow, 'name'>;
   media!: EntityTable<MediaRecord, 'id'>;
   settings!: EntityTable<SettingRow, 'key'>;
   outbox!: EntityTable<OutboxEntry, 'id'>;
@@ -48,6 +50,8 @@ export class BirdsDatabase extends Dexie {
         }
       });
     });
+    // v4: locations master list (name + canonical coordinates), managed in Settings
+    this.version(4).stores({ ...stores, locations: 'name, updatedAt' });
   }
 }
 
