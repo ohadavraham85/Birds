@@ -1,25 +1,27 @@
 /* lib/tile-card.ts — compact observation tile for the "square"/"rectangular
  * tiles" view modes (journal + table). Shows a photo thumbnail when the
  * observation has one, otherwise a plain accent-colored placeholder, plus
- * species/date/location text sized to the tile shape. */
+ * the observation's main fields (location, time, project, coordinates) —
+ * not the species, which the list/detail views already cover. */
 
-import { fmtDateTime } from './ui';
+import { fmtDateTime, fmtCoords } from './ui';
 import { escapeHtml } from './markdown';
 import { getImageObjectUrl } from './media';
-import { entriesOf, entryImages, speciesLabel, primarySpecies } from './observation';
+import { entriesOf, entryImages } from './observation';
 import { icon } from './icons';
 import type { Observation } from '../types';
 
 export function renderObservationTile(o: Observation, mode: 'square' | 'rect'): HTMLElement {
   const tile = document.createElement('article');
   tile.className = `obs-tile obs-tile-${mode}`;
-  const label = mode === 'square' ? primarySpecies(o) || 'ללא מין' : speciesLabel(o) || 'ללא מין';
+  const coords = fmtCoords(o.lat, o.lng);
   tile.innerHTML = `
     <div class="obs-tile-media">${icon('bird', 'obs-tile-fallback-icon')}</div>
     <div class="obs-tile-info">
-      <span class="obs-tile-species">${escapeHtml(label)}</span>
+      <span class="obs-tile-headline">${escapeHtml(o.locationName || 'ללא מיקום')}</span>
       <span class="obs-tile-meta">${icon('clock')} ${fmtDateTime(o.dateTime)}</span>
-      ${mode === 'rect' && o.locationName ? `<span class="obs-tile-meta">${icon('pin')} ${escapeHtml(o.locationName)}</span>` : ''}
+      ${mode === 'rect' && coords ? `<span class="obs-tile-meta" dir="ltr">${icon('compass')} ${coords}</span>` : ''}
+      ${mode === 'rect' && o.project ? `<span class="badge obs-tile-badge">${escapeHtml(o.project)}</span>` : ''}
     </div>
   `;
 
@@ -32,7 +34,7 @@ export function renderObservationTile(o: Observation, mode: 'square' | 'rect'): 
       media.innerHTML = '';
       const el = document.createElement('img');
       el.src = url;
-      el.alt = entry.species;
+      el.alt = o.locationName || 'תצפית';
       el.loading = 'lazy';
       media.appendChild(el);
     });

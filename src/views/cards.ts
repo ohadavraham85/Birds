@@ -4,7 +4,7 @@
  * תאריך, מיקום או פרויקט, וכפתור FAB להוספת תצפית. */
 
 import { listObservations } from '../db/repository';
-import { renderObservationCard } from '../lib/obs-card';
+import { renderObservationSummary } from '../lib/obs-card';
 import { renderObservationTile } from '../lib/tile-card';
 import { speciesNames } from '../lib/observation';
 import { escapeHtml } from '../lib/markdown';
@@ -283,10 +283,10 @@ function appendItems(feed: HTMLElement, items: Observation[]): void {
 }
 
 function cardWithClick(o: Observation): HTMLElement {
-  const card = renderObservationCard(o);
+  const card = renderObservationSummary(o);
   card.addEventListener('click', (e) => {
     const target = e.target as HTMLElement;
-    if (target.closest('.place-link, .species-imgs img')) return;
+    if (target.closest('.place-link')) return;
     navigate('detail', { viewId: o.id });
   });
   return card;
