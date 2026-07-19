@@ -29,6 +29,23 @@ function emitChange(): void {
   for (const fn of listeners) fn();
 }
 
+/** Per-record mutation feed — separate from onDataChanged (which just says
+ * "something changed, re-render"). Sync backends that need to know exactly
+ * which record changed (e.g. the Firebase sync engine) subscribe here
+ * instead of re-scanning the whole database on every change. */
+export type MutationEntity = 'observation' | 'species' | 'location';
+export type MutationOp = 'upsert' | 'delete';
+type MutationListener = (entity: MutationEntity, id: string, op: MutationOp, payload: unknown) => void;
+const mutationListeners = new Set<MutationListener>();
+
+export function onMutation(fn: MutationListener): () => void {
+  mutationListeners.add(fn);
+  return () => mutationListeners.delete(fn);
+}
+function emitMutation(entity: MutationEntity, id: string, op: MutationOp, payload: unknown): void {
+  for (const fn of mutationListeners) fn(entity, id, op, payload);
+}
+
 function now(): string {
   return new Date().toISOString();
 }
@@ -68,6 +85,7 @@ export async function saveObservation(
   await db.observations.put(obs);
   if (shouldSync) await enqueue('observation', obs.id, obs.deleted ? 'delete' : 'upsert', obs);
   emitChange();
+  emitMutation('observation', obs.id, obs.deleted ? 'delete' : 'upsert', obs);
   return obs;
 }
 
@@ -92,6 +110,7 @@ export function listObservationsRaw(): Promise<Observation[]> {
 export async function putObservationRaw(obs: Observation): Promise<void> {
   await db.observations.put(obs);
   emitChange();
+  emitMutation('observation', obs.id, obs.deleted ? 'delete' : 'upsert', obs);
 }
 
 export async function deleteObservation(id: string): Promise<void> {
@@ -107,6 +126,7 @@ export async function deleteObservation(id: string): Promise<void> {
     obs.synced = false;
     await db.observations.put(obs);
     await enqueue('observation', id, 'delete', obs);
+    emitMutation('observation', id, 'delete', obs);
   }
   emitChange();
 }
@@ -128,12 +148,18 @@ export async function addSpecies(name: string, opts: SaveOptions = {}): Promise<
   await db.species.put(row);
   if (opts.sync ?? true) await enqueue('species', name, 'upsert', row);
   emitChange();
+  emitMutation('species', name, 'upsert', row);
   return true;
 }
 
 export async function speciesExists(name: string): Promise<boolean> {
   const row = await db.species.get(name);
   return !!row && !row.deleted;
+}
+
+/** Raw fetch including tombstones — for last-write-wins comparisons. */
+export function getSpeciesRaw(name: string): Promise<SpeciesRow | undefined> {
+  return db.species.get(name);
 }
 
 /** All non-deleted species rows (with their description), name-sorted. */
@@ -152,11 +178,13 @@ export async function setSpeciesDescription(name: string, description: string): 
   await db.species.put(row);
   await enqueue('species', name, 'upsert', row);
   emitChange();
+  emitMutation('species', name, 'upsert', row);
 }
 
 export async function putSpeciesRaw(row: SpeciesRow): Promise<void> {
   await db.species.put(row);
   emitChange();
+  emitMutation('species', row.name, row.deleted ? 'delete' : 'upsert', row);
 }
 
 export async function deleteSpecies(name: string): Promise<void> {
@@ -167,6 +195,7 @@ export async function deleteSpecies(name: string): Promise<void> {
   await db.species.put(row);
   await enqueue('species', name, 'delete', row);
   emitChange();
+  emitMutation('species', name, 'delete', row);
 }
 
 /** Seed the master list on first run, and replace it when the bundled list
@@ -196,16 +225,24 @@ export async function getLocation(name: string): Promise<LocationRow | undefined
   return row && !row.deleted ? row : undefined;
 }
 
+/** Raw fetch including tombstones — for last-write-wins comparisons. */
+export function getLocationRaw(name: string): Promise<LocationRow | undefined> {
+  return db.locations.get(name);
+}
+
 // Note: these deliberately don't call emitChange() — nothing else currently
 // reads the locations table reactively, and Settings already re-renders its
 // own list locally after each call. Triggering the app-wide change listener
 // here would rebuild the whole Settings screen ~150ms later and steal focus
-// while the user is still editing coordinates.
+// while the user is still editing coordinates. They still emitMutation() so
+// an optional cloud sync backend (e.g. Firebase) can pick up the change.
 
 export async function addLocation(name: string, lat: number | null, lng: number | null): Promise<boolean> {
   name = String(name || '').trim();
   if (!name) return false;
-  await db.locations.put({ name, lat, lng, updatedAt: now(), deleted: false });
+  const row: LocationRow = { name, lat, lng, updatedAt: now(), deleted: false };
+  await db.locations.put(row);
+  emitMutation('location', name, 'upsert', row);
   return true;
 }
 
@@ -216,6 +253,7 @@ export async function updateLocationCoords(name: string, lat: number | null, lng
   row.lng = lng;
   row.updatedAt = now();
   await db.locations.put(row);
+  emitMutation('location', name, 'upsert', row);
 }
 
 export async function deleteLocation(name: string): Promise<void> {
@@ -224,11 +262,13 @@ export async function deleteLocation(name: string): Promise<void> {
   row.deleted = true;
   row.updatedAt = now();
   await db.locations.put(row);
+  emitMutation('location', name, 'delete', row);
 }
 
 export async function putLocationRaw(row: LocationRow): Promise<void> {
   await db.locations.put(row);
   emitChange();
+  emitMutation('location', row.name, row.deleted ? 'delete' : 'upsert', row);
 }
 
 /** One-time convenience: populate the locations list from the (name, first-seen
@@ -333,6 +373,7 @@ export async function mergeSpeciesNames(variants: string[], canonical: string): 
       o.synced = false;
       await db.observations.put(o);
       await enqueue('observation', o.id, 'upsert', o);
+      emitMutation('observation', o.id, 'upsert', o);
       changed++;
     }
   }
@@ -347,6 +388,7 @@ export async function mergeSpeciesNames(variants: string[], canonical: string): 
     const row: SpeciesRow = { name: canonical, updatedAt: ts, deleted: false };
     await db.species.put(row);
     await enqueue('species', canonical, 'upsert', row);
+    emitMutation('species', canonical, 'upsert', row);
   }
   for (const v of toMerge) {
     const row = await db.species.get(v);
@@ -355,6 +397,7 @@ export async function mergeSpeciesNames(variants: string[], canonical: string): 
       row.updatedAt = ts;
       await db.species.put(row);
       await enqueue('species', v, 'delete', row);
+      emitMutation('species', v, 'delete', row);
     }
   }
   return changed;
@@ -378,6 +421,7 @@ export async function mergeLocationNames(variants: string[], canonical: string):
       o.synced = false;
       await db.observations.put(o);
       await enqueue('observation', o.id, 'upsert', o);
+      emitMutation('observation', o.id, 'upsert', o);
       changed++;
     }
   }
@@ -392,7 +436,9 @@ export async function mergeLocationNames(variants: string[], canonical: string):
   }
   // See the note in mergeSpeciesNames() — deliberately no emitChange() here either;
   // deleteLocation() already doesn't emit, keeping this a quiet batch operation.
-  await db.locations.put({ name: canonical, lat, lng, updatedAt: now(), deleted: false });
+  const mergedRow: LocationRow = { name: canonical, lat, lng, updatedAt: now(), deleted: false };
+  await db.locations.put(mergedRow);
+  emitMutation('location', canonical, 'upsert', mergedRow);
   for (const v of toMerge) {
     const row = await db.locations.get(v);
     if (row && !row.deleted) await deleteLocation(v);

@@ -9,6 +9,7 @@ import {
 } from '../db/repository';
 import type { DuplicateGroup } from '../db/repository';
 import { reconfigureSync, serverUrl, syncNow, onSyncStatus } from '../sync/sync-engine';
+import { getFirebaseSyncCode, configureFirebaseSync, isFirebaseSyncActive } from '../firebase/firestore-sync';
 import { pickLocation } from '../lib/location-picker';
 import { toast, confirmDialog, fmtDateTime } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
@@ -48,6 +49,7 @@ export async function activate(): Promise<void> {
   const url = await serverUrl();
   const token = await getSetting<string>('syncToken', '');
   const lastSync = await getSetting<string | null>('lastSync', null);
+  const fbCode = await getFirebaseSyncCode();
   let version = '';
   try { version = (await (await fetch('version.json')).json()).version; } catch { /* dev */ }
 
@@ -87,6 +89,23 @@ export async function activate(): Promise<void> {
       </div>
       <div class="settings-status" id="s-sync-status"></div>
       ${lastSync ? `<div class="settings-status">סנכרון אחרון: ${fmtDateTime(lastSync)}</div>` : ''}
+    </div>
+
+    <div class="settings-card">
+      <h3>${icon('cloud')} סנכרון לענן (Firebase)</h3>
+      <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
+        חלופה ל"סנכרון לשרת" למעלה — סנכרון דו-כיווני בזמן-אמת דרך Firebase.
+        מזינים אותו "קוד משפחה" בכל המכשירים (טלפון, מחשב וכו') ותצפיות/מינים/
+        מיקומים/תמונות שנשמרים באחד מופיעים אוטומטית בשאר, כולל אופליין.
+      </p>
+      <div class="field">
+        <label for="s-fb-code">קוד משפחה <span class="hint">(בחרו מחרוזת ייחודית וסודית; אותו הקוד בכל המכשירים)</span></label>
+        <input type="text" id="s-fb-code" dir="ltr" style="text-align:left" placeholder="לדוגמה: ohad-birds-2026" value="${escapeHtml(fbCode)}">
+      </div>
+      <button class="btn btn-primary" id="s-fb-save">${icon('save')} שמירה והפעלה</button>
+      <div class="settings-status ${isFirebaseSyncActive() ? 'ok' : ''}" id="s-fb-status">
+        ${fbCode ? (isFirebaseSyncActive() ? 'פעיל — מסתנכרן עם Firebase' : 'קוד שמור, מתחבר...') : 'לא מוגדר'}
+      </div>
     </div>
 
     <div class="settings-card">
@@ -180,6 +199,7 @@ export async function activate(): Promise<void> {
   qs(container, '#s-theme-picker').addEventListener('click', onThemePick);
   qs(container, '#s-save-server').addEventListener('click', () => void onSaveServer());
   qs(container, '#s-sync-now').addEventListener('click', () => void syncNow());
+  qs(container, '#s-fb-save').addEventListener('click', () => void onSaveFirebaseSync());
   qs(container, '#s-backup').addEventListener('click', () => void onBackup());
   input(container, '#s-restore').addEventListener('change', (e) => void onRestore(e));
   input(container, '#s-photo-import-input').addEventListener('change', (e) => void onPhotoImportFilesChosen(e));
@@ -466,6 +486,27 @@ async function onSaveServer(): Promise<void> {
   const token = input(container, '#s-token').value.trim();
   await reconfigureSync(url, token);
   toast(url ? 'הגדרות הסנכרון נשמרו — מסנכרן...' : 'סנכרון כובה (עבודה מקומית)');
+}
+
+async function onSaveFirebaseSync(): Promise<void> {
+  const code = input(container, '#s-fb-code').value.trim();
+  const btn = qs<HTMLButtonElement>(container, '#s-fb-save');
+  const statusEl = qs(container, '#s-fb-status');
+  btn.disabled = true;
+  try {
+    await configureFirebaseSync(code);
+    statusEl.textContent = code ? 'מתחבר ל-Firebase...' : 'לא מוגדר';
+    statusEl.classList.remove('err');
+    statusEl.classList.toggle('ok', !!code);
+    toast(code ? 'קוד המשפחה נשמר — מסתנכרן עם Firebase...' : 'סנכרון Firebase כובה');
+  } catch (err) {
+    statusEl.textContent = 'שגיאת חיבור ל-Firebase — ודאו ש-Firestore ו-Storage מופעלים בפרויקט';
+    statusEl.classList.remove('ok');
+    statusEl.classList.add('err');
+    toast('שגיאה בהתחברות ל-Firebase: ' + (err as Error).message, true, 6000);
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 /* ---------- backup / restore ---------- */
