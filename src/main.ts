@@ -47,9 +47,36 @@ const TAB_VIEWS = ['home', 'cards', 'calendar', 'map', 'species'];
 const HOME_VIEW = 'home';
 
 let currentView: string | null = null;
+/** How many in-app history entries we've pushed beyond the initial screen —
+ * lets goBack() fall back to the home screen instead of leaving the PWA
+ * entirely when there's nothing left in our own stack to pop. */
+let navDepth = 0;
 
-async function showView(name: string): Promise<void> {
+function mainScrollTop(): number {
+  return document.getElementById('main')?.scrollTop ?? 0;
+}
+
+interface NavState { view: string; scrollTop: number }
+
+/** All navigation goes through here. `mode` controls how it's recorded in
+ * the browser's history:
+ *  - 'push' (regular forward navigation, e.g. navigate()): snapshots the
+ *    screen being left (so returning to it later restores its scroll
+ *    position — each view's own filters/toggles already persist in its
+ *    module state) and pushes a fresh entry for the destination.
+ *  - 'replace': swaps the current entry in place (used only at boot).
+ *  - 'pop': the browser already moved the history pointer (back/forward
+ *    button, or an in-app back action via goBack()) — just render the
+ *    view the popstate event told us about and restore its saved scroll,
+ *    without touching history again. */
+async function showView(name: string, params?: ViewParams, mode: 'push' | 'replace' | 'pop' = 'push'): Promise<void> {
   if (!VIEWS[name]) name = HOME_VIEW;
+
+  if (mode === 'push' && currentView) {
+    const leavingState: NavState = { view: currentView, scrollTop: mainScrollTop() };
+    history.replaceState(leavingState, '', location.hash || `#${currentView}`);
+  }
+
   currentView = name;
   for (const key of Object.keys(VIEWS)) {
     document.getElementById(`view-${key}`)!.hidden = key !== name;
@@ -58,8 +85,23 @@ async function showView(name: string): Promise<void> {
     tab.classList.toggle('active', tab.dataset.view === name);
   });
   updateChrome(name);
-  if (location.hash !== `#${name}`) history.replaceState(null, '', `#${name}`);
+
+  if (mode === 'push') {
+    const enteringState: NavState = { view: name, scrollTop: 0 };
+    history.pushState(enteringState, '', `#${name}`);
+    navDepth++;
+  } else if (mode === 'replace') {
+    const enteringState: NavState = { view: name, scrollTop: 0 };
+    history.replaceState(enteringState, '', `#${name}`);
+  }
+
+  if (params && mode !== 'pop' && VIEWS[name]!.setParams) VIEWS[name]!.setParams!(params);
   await VIEWS[name]!.activate();
+
+  if (mode === 'pop') {
+    const savedTop = (history.state as NavState | null)?.scrollTop ?? 0;
+    requestAnimationFrame(() => { const main = document.getElementById('main'); if (main) main.scrollTop = savedTop; });
+  }
 }
 
 /** Top-bar action button (⋯ overflow menu / ← back) and the FAB visibility. */
@@ -67,27 +109,35 @@ function updateChrome(name: string): void {
   const isTab = TAB_VIEWS.includes(name);
   const action = document.getElementById('nav-action')!;
   action.textContent = isTab ? '⋯' : '→';
-  action.title = isTab ? 'תפריט' : 'חזרה לבית';
+  action.title = isTab ? 'תפריט' : 'חזרה';
   if (!isTab) document.getElementById('topbar-menu-list')!.hidden = true;
   const fab = document.getElementById('fab') as HTMLElement;
   fab.hidden = name !== 'cards' && name !== HOME_VIEW;
 }
 
 export function navigate(name: string, params?: ViewParams): void {
-  const view = VIEWS[name];
-  if (params && view?.setParams) view.setParams(params);
-  void showView(name);
+  void showView(name, params, 'push');
+}
+
+/** The single "go back" action — used by the topbar back arrow and every
+ * screen's explicit back button, so in-app back and the device/browser back
+ * button behave identically and always land exactly where the user came
+ * from. Falls back to the home screen if there's nothing left to pop (e.g.
+ * the app was opened directly on an inner screen via a deep link). */
+export function goBack(): void {
+  if (navDepth > 0) { navDepth--; history.back(); }
+  else navigate(HOME_VIEW);
 }
 
 function setupNav(): void {
   document.querySelectorAll<HTMLElement>('.tab').forEach((tab) => {
-    tab.addEventListener('click', () => void showView(tab.dataset.view!));
+    tab.addEventListener('click', () => navigate(tab.dataset.view!));
   });
 
   const menuList = document.getElementById('topbar-menu-list')!;
   document.getElementById('nav-action')!.addEventListener('click', () => {
     if (TAB_VIEWS.includes(currentView || '')) { menuList.hidden = !menuList.hidden; }
-    else navigate(HOME_VIEW);
+    else goBack();
   });
   menuList.querySelectorAll<HTMLElement>('button[data-view]').forEach((btn) => {
     btn.addEventListener('click', () => { menuList.hidden = true; navigate(btn.dataset.view!); });
@@ -97,7 +147,12 @@ function setupNav(): void {
   });
 
   document.getElementById('fab')!.addEventListener('click', () => navigate('form'));
-  window.addEventListener('hashchange', () => void showView(location.hash.replace('#', '') || HOME_VIEW));
+
+  window.addEventListener('popstate', (e: PopStateEvent) => {
+    const state = e.state as NavState | null;
+    if (navDepth > 0) navDepth--;
+    void showView(state?.view || HOME_VIEW, undefined, 'pop');
+  });
 }
 
 function setupStatusIndicator(): void {
@@ -145,7 +200,7 @@ async function init(): Promise<void> {
     refreshTimer = setTimeout(() => { if (currentView) void VIEWS[currentView]!.activate(); }, 150);
   });
 
-  await showView(location.hash.replace('#', '') || HOME_VIEW);
+  await showView(location.hash.replace('#', '') || HOME_VIEW, undefined, 'replace');
 }
 
 void init().catch((err: unknown) => {

@@ -13,7 +13,7 @@ import { pickLocation } from '../lib/location-picker';
 import { entriesOf, entryImages, speciesNames } from '../lib/observation';
 import { qs, input } from '../lib/dom';
 import { icon } from '../lib/icons';
-import { navigate } from '../main';
+import { navigate, goBack } from '../main';
 import type { ViewParams } from './view';
 import type { Observation, ObservationImage, SpeciesEntry } from '../types';
 
@@ -37,7 +37,7 @@ export function init(el: HTMLElement): void {
   container = el;
   container.innerHTML = `
     <div class="form-head">
-      <button type="button" class="btn btn-sm" id="back-btn">→ חזרה לבית</button>
+      <button type="button" class="btn btn-sm" id="back-btn">→ חזרה</button>
       <h2 id="form-title">תצפית חדשה</h2>
     </div>
     <form id="obs-form" autocomplete="off">
@@ -96,7 +96,7 @@ export function init(el: HTMLElement): void {
   });
   qs(container, '#pick-map-btn').addEventListener('click', () => void openPicker());
   qs(container, '#add-species-row').addEventListener('click', () => addSpeciesRow({ species: '', quantity: 1 }, true));
-  qs(container, '#back-btn').addEventListener('click', () => navigate('home'));
+  qs(container, '#back-btn').addEventListener('click', goBack);
   qs<HTMLFormElement>(container, '#obs-form').addEventListener('submit', (e) => void onSave(e));
 }
 

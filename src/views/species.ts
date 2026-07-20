@@ -28,6 +28,11 @@ let sortMode: SortMode = 'family';
 let displayMode: ViewDisplayMode = 'list';
 let openKey: string | null = null;
 let collapsedGroups = new Set<string>();
+/** Set by setParams when arriving via a direct deep link (e.g. the home
+ * screen's "Bird of the Day"); consumed once in the next activate() to
+ * scroll straight to that species' card, so the trip feels like opening its
+ * details directly rather than landing on the general list. */
+let scrollToOnActivate: string | null = null;
 
 export function init(el: HTMLElement): void {
   container = el;
@@ -62,7 +67,15 @@ export function init(el: HTMLElement): void {
 /** Opens a specific species' card directly (e.g. from the home screen's
  * "Bird of the Day" widget) instead of the default collapsed list. */
 export function setParams(params: ViewParams): void {
-  if (params.species) openKey = params.species;
+  if (!params.species) return;
+  openKey = params.species;
+  scrollToOnActivate = params.species;
+  // make sure the arriving species isn't hidden inside a collapsed group,
+  // regardless of which grouping mode is currently selected
+  const family = detailsFor(params.species).family || '(ללא משפחה)';
+  collapsedGroups.delete(family);
+  collapsedGroups.delete('נצפה');
+  collapsedGroups.delete('לא נצפה');
 }
 
 export async function activate(): Promise<void> {
@@ -88,6 +101,15 @@ export async function activate(): Promise<void> {
     }
   }
   render();
+
+  if (scrollToOnActivate) {
+    const name = scrollToOnActivate;
+    scrollToOnActivate = null;
+    requestAnimationFrame(() => {
+      const el = container.querySelector<HTMLElement>(`.sp-card[data-name="${CSS.escape(name)}"], .sp-tile[data-name="${CSS.escape(name)}"]`);
+      el?.scrollIntoView({ block: 'start' });
+    });
+  }
 }
 
 function detailsFor(name: string): SpeciesDetail {

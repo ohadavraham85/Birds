@@ -29,6 +29,9 @@ let collapsedGroups = new Set<string>();
 let selectedProjects = new Set<string>();
 let selectedLocations = new Set<string>();
 let selectedSpecies = new Set<string>();
+/** Date-range drill-down from the home screen's "תצפיות" stats tile (YYYY-MM-DD, inclusive; '' = unbounded). */
+let filterFrom = '';
+let filterTo = '';
 
 export function init(el: HTMLElement): void {
   container = el;
@@ -71,14 +74,38 @@ export function init(el: HTMLElement): void {
   });
 }
 
-/** Drill-down from the stats tab: pre-applies a single-value filter and clears the rest. */
+/** Drill-down from the stats tab / home screen: pre-applies exactly one of a
+ * single-value filter, a date range, or a grouping mode, clearing the rest. */
 export function setParams(params: ViewParams): void {
-  if (!params.filterSpecies && !params.filterLocation && !params.filterProject) return;
-  selectedSpecies = params.filterSpecies ? new Set([params.filterSpecies]) : new Set();
-  selectedLocations = params.filterLocation ? new Set([params.filterLocation]) : new Set();
-  selectedProjects = params.filterProject ? new Set([params.filterProject]) : new Set();
-  query = '';
-  groupBy = 'none';
+  if (params.filterSpecies || params.filterLocation || params.filterProject) {
+    selectedSpecies = params.filterSpecies ? new Set([params.filterSpecies]) : new Set();
+    selectedLocations = params.filterLocation ? new Set([params.filterLocation]) : new Set();
+    selectedProjects = params.filterProject ? new Set([params.filterProject]) : new Set();
+    filterFrom = '';
+    filterTo = '';
+    query = '';
+    groupBy = 'none';
+    return;
+  }
+  if (params.filterFrom !== undefined || params.filterTo !== undefined) {
+    filterFrom = params.filterFrom || '';
+    filterTo = params.filterTo || '';
+    selectedSpecies = new Set();
+    selectedLocations = new Set();
+    selectedProjects = new Set();
+    query = '';
+    groupBy = 'none';
+    return;
+  }
+  if (params.groupBy) {
+    groupBy = params.groupBy;
+    selectedSpecies = new Set();
+    selectedLocations = new Set();
+    selectedProjects = new Set();
+    filterFrom = '';
+    filterTo = '';
+    query = '';
+  }
 }
 
 export async function activate(): Promise<void> {
@@ -95,6 +122,9 @@ function matches(o: Observation): boolean {
   if (selectedProjects.size && !selectedProjects.has(o.project || '(ללא פרויקט)')) return false;
   if (selectedLocations.size && !selectedLocations.has(o.locationName || '(ללא מיקום)')) return false;
   if (selectedSpecies.size && !speciesNames(o).some((s) => selectedSpecies.has(s))) return false;
+  const day = o.dateTime.slice(0, 10);
+  if (filterFrom && day < filterFrom) return false;
+  if (filterTo && day > filterTo) return false;
   return true;
 }
 

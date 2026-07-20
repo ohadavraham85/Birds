@@ -44,15 +44,6 @@ let rangeMonth = new Date().getMonth() + 1;
 let customFrom = '';
 let customTo = '';
 
-/** Preserved across navigating away and back, so returning to Home (via the
- * tab bar, or the generic top-bar back button) restores the exact scroll
- * position the user was at — e.g. right after tapping a chart to drill down. */
-let savedScrollTop = 0;
-function rememberScroll(): void {
-  const main = document.getElementById('main');
-  if (main) savedScrollTop = main.scrollTop;
-}
-
 export function init(el: HTMLElement): void {
   container = el;
   container.innerHTML = `<h2>בית</h2><div id="home-body"></div>`;
@@ -65,8 +56,6 @@ export async function activate(): Promise<void> {
   allObservations = await listObservations();
   speciesMasterList = (await listSpeciesRows()).map((r) => r.name);
   render();
-  const main = document.getElementById('main');
-  requestAnimationFrame(() => { if (main) main.scrollTop = savedScrollTop; });
 }
 
 /* ---------- Bird of the Day ---------- */
@@ -99,15 +88,17 @@ function birdOfDayHtml(): string {
   const seenCount = allObservations.filter((o) => speciesNames(o).includes(name)).length;
   return `
     <button type="button" class="bod-card" id="bod-card" data-name="${escapeHtml(name)}">
+      <span class="bod-eyebrow">${icon('compass')} ציפור היום</span>
       <div class="bod-media" id="bod-media">${icon('bird', 'bod-fallback-icon')}</div>
       <div class="bod-info">
-        <span class="bod-eyebrow">${icon('compass')} ציפור היום</span>
-        <span class="bod-he">${escapeHtml(d.he)}</span>
-        ${d.en ? `<span class="bod-en" dir="ltr">${escapeHtml(d.en)}</span>` : ''}
-        ${d.family ? `<span class="bod-family">${escapeHtml(d.family)}</span>` : ''}
-        ${seenCount ? `<span class="bod-seen">${icon('journal')} נצפה ${seenCount} פעמים על ידך</span>` : `<span class="bod-seen bod-not-seen">עוד לא נצפה על ידך</span>`}
+        <div class="bod-info-main">
+          <span class="bod-he">${escapeHtml(d.he)}</span>
+          ${d.en ? `<span class="bod-en" dir="ltr">${escapeHtml(d.en)}</span>` : ''}
+          ${d.family ? `<span class="bod-family">${escapeHtml(d.family)}</span>` : ''}
+          ${seenCount ? `<span class="bod-seen">${icon('journal')} נצפה ${seenCount} פעמים על ידך</span>` : `<span class="bod-seen bod-not-seen">עוד לא נצפה על ידך</span>`}
+        </div>
+        <span class="bod-chevron">›</span>
       </div>
-      <span class="bod-chevron">›</span>
     </button>`;
 }
 
@@ -147,6 +138,20 @@ function filteredObservations(): Observation[] {
     });
   }
   return allObservations;
+}
+
+/** Converts whichever range filter is currently selected on the home screen
+ * into concrete YYYY-MM-DD bounds, so the "תצפיות" stats tile can hand the
+ * journal an equivalent date-range filter (empty strings = unbounded). */
+function activeRangeAsDates(): { from: string; to: string } {
+  const pad = (n: number): string => String(n).padStart(2, '0');
+  if (rangeMode === 'year') return { from: `${rangeYear}-01-01`, to: `${rangeYear}-12-31` };
+  if (rangeMode === 'month') {
+    const lastDay = new Date(rangeYear, rangeMonth, 0).getDate();
+    return { from: `${rangeYear}-${pad(rangeMonth)}-01`, to: `${rangeYear}-${pad(rangeMonth)}-${pad(lastDay)}` };
+  }
+  if (rangeMode === 'custom') return { from: customFrom, to: customTo };
+  return { from: '', to: '' };
 }
 
 function availableYears(): number[] {
@@ -213,21 +218,26 @@ function statsHtml(observations: Observation[]): string {
     const year = new Date(o.dateTime).getFullYear();
     if (!isNaN(year)) yearCounts.set(String(year), (yearCounts.get(String(year)) || 0) + 1);
   }
-  const tiles = [
-    { label: 'תצפיות', value: observations.length },
-    { label: 'מינים', value: speciesCounts.size },
+  const tiles: { label: string; value: number; tile?: 'species' | 'location' | 'observations' | 'project' }[] = [
+    { label: 'תצפיות', value: observations.length, tile: 'observations' },
+    { label: 'מינים', value: speciesCounts.size, tile: 'species' },
     { label: 'פרטים', value: totalIndividuals },
-    { label: 'מיקומים', value: locationCounts.size },
-    { label: 'פרויקטים', value: projectCounts.size },
+    { label: 'מיקומים', value: locationCounts.size, tile: 'location' },
+    { label: 'פרויקטים', value: projectCounts.size, tile: 'project' },
   ];
+
+  const tileHtml = (t: (typeof tiles)[number]): string => {
+    const inner = `
+      <span class="stat-tile-value">${t.value.toLocaleString('he-IL')}</span>
+      <span class="stat-tile-label">${escapeHtml(t.label)}</span>`;
+    return t.tile
+      ? `<button type="button" class="stat-tile stat-tile-link" data-tile="${t.tile}">${inner}</button>`
+      : `<div class="stat-tile">${inner}</div>`;
+  };
 
   const tilesHtml = `
     <div class="stat-tiles">
-      ${tiles.map((t) => `
-        <div class="stat-tile">
-          <span class="stat-tile-value">${t.value.toLocaleString('he-IL')}</span>
-          <span class="stat-tile-label">${escapeHtml(t.label)}</span>
-        </div>`).join('')}
+      ${tiles.map(tileHtml).join('')}
     </div>
     <p class="stat-range">מהתצפית הראשונה (${fmtDateTime(minDate)}) ועד האחרונה (${fmtDateTime(maxDate)})</p>`;
 
@@ -370,7 +380,17 @@ function onClick(e: Event): void {
   const target = e.target as HTMLElement;
 
   const bod = target.closest<HTMLElement>('#bod-card');
-  if (bod) { rememberScroll(); navigate('species', { species: bod.dataset.name! }); return; }
+  if (bod) { navigate('species', { species: bod.dataset.name! }); return; }
+
+  const tile = target.closest<HTMLElement>('[data-tile]');
+  if (tile) {
+    const kind = tile.dataset.tile!;
+    if (kind === 'species') navigate('species');
+    else if (kind === 'location') navigate('map');
+    else if (kind === 'observations') { const { from, to } = activeRangeAsDates(); navigate('cards', { filterFrom: from, filterTo: to }); }
+    else if (kind === 'project') navigate('cards', { groupBy: 'project' });
+    return;
+  }
 
   const toggle = target.closest<HTMLElement>('[data-toggle]');
   if (toggle) {
@@ -383,7 +403,6 @@ function onClick(e: Event): void {
 
   const drill = target.closest<HTMLElement>('[data-drill]');
   if (!drill) return;
-  rememberScroll();
   const kind = drill.dataset.drill!;
   const value = drill.dataset.value!;
   if (kind === 'species') navigate('cards', { filterSpecies: value });

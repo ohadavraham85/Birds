@@ -15,6 +15,13 @@ export interface ViewParams {
   filterProject?: string;
   /** Drill-down from the stats tab: opens the calendar in year view for this year. */
   year?: number;
+  /** Drill-down from the home screen's stats tiles: pre-applies a date-range
+   * filter (YYYY-MM-DD, inclusive) matching whichever range is currently
+   * selected there ('' means no bound on that side). */
+  filterFrom?: string;
+  filterTo?: string;
+  /** Drill-down from the home screen's "פרויקטים" tile: opens the journal grouped by project. */
+  groupBy?: 'day' | 'month' | 'location' | 'project';
 }
 
 export interface View {

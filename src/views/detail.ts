@@ -7,7 +7,7 @@ import { renderObservationCard } from '../lib/obs-card';
 import { exportObservationsPdf } from '../lib/pdf';
 import { icon } from '../lib/icons';
 import { qs } from '../lib/dom';
-import { navigate } from '../main';
+import { navigate, goBack } from '../main';
 import type { ViewParams } from './view';
 import type { Observation } from '../types';
 
@@ -19,7 +19,7 @@ export function init(el: HTMLElement): void {
   container = el;
   container.innerHTML = `
     <div class="form-head">
-      <button type="button" class="btn btn-sm" id="detail-back">→ חזרה לבית</button>
+      <button type="button" class="btn btn-sm" id="detail-back">→ חזרה</button>
       <h2>פרטי תצפית</h2>
     </div>
     <div id="detail-body"></div>
@@ -28,7 +28,7 @@ export function init(el: HTMLElement): void {
       <button class="btn" id="detail-pdf">${icon('document')} ייצוא PDF</button>
     </div>
   `;
-  qs(container, '#detail-back').addEventListener('click', () => navigate('home'));
+  qs(container, '#detail-back').addEventListener('click', goBack);
   qs(container, '#detail-edit').addEventListener('click', () => {
     if (current) navigate('form', { editId: current.id });
   });
