@@ -39,6 +39,9 @@ const PATHS = {
   pieChart: '<circle cx="12" cy="12" r="9"/><path d="M12 3v9h9"/>',
   lineChart: '<path d="M4 19V5"/><path d="M4 19h16"/><path d="m4.5 14.5 4.5-5 4 3.2 6-7.2"/>',
   gridRect: '<rect x="3.5" y="4.5" width="17" height="6.5" rx="1.2"/><rect x="3.5" y="13" width="17" height="6.5" rx="1.2"/>',
+  check: '<path d="M5 12.5 10 17.5 19 7"/>',
+  wifiOff: '<path d="M2 8.5a15.5 15.5 0 0 1 5-3M9.5 4.5A15.5 15.5 0 0 1 22 8.5"/><path d="M5 12a11 11 0 0 1 3.3-2.1M15.7 9.9A11 11 0 0 1 19 12"/><path d="M8.5 15.5a6 6 0 0 1 7 0"/><circle cx="12" cy="19.5" r="1" fill="currentColor" stroke="none"/><path d="M3 3l18 18"/>',
+  alert: '<path d="M12 3 22 20H2L12 3Z"/><path d="M12 10v4"/><circle cx="12" cy="17.3" r=".9" fill="currentColor" stroke="none"/>',
 } as const;
 
 export type IconName = keyof typeof PATHS;

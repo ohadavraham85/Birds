@@ -6,7 +6,7 @@
  * "household code" the user enters in Settings (see firestore-sync.ts). */
 
 import { initializeApp, type FirebaseApp } from 'firebase/app';
-import { initializeFirestore, type Firestore } from 'firebase/firestore';
+import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, type Firestore } from 'firebase/firestore';
 import { getStorage, type FirebaseStorage } from 'firebase/storage';
 
 const firebaseConfig = {
@@ -28,11 +28,20 @@ function getApp(): FirebaseApp {
 }
 
 export function firebaseDb(): Firestore {
-  // Some networks (corporate proxies, some mobile carriers) reset Firestore's
-  // default streaming (WebChannel) connection outright, before auto-detection
-  // even gets a chance to fall back — forcing long-polling unconditionally
-  // makes sync work everywhere at a small latency cost.
-  if (!db) db = initializeFirestore(getApp(), { experimentalForceLongPolling: true });
+  if (!db) {
+    db = initializeFirestore(getApp(), {
+      // Some networks (corporate proxies, some mobile carriers) reset
+      // Firestore's default streaming (WebChannel) connection outright,
+      // before auto-detection even gets a chance to fall back — forcing
+      // long-polling unconditionally makes sync work everywhere at a small
+      // latency cost.
+      experimentalForceLongPolling: true,
+      // Durable offline cache: writes made while offline (or mid-restart)
+      // queue in IndexedDB and flush automatically once connectivity
+      // returns, instead of only living in memory for the current tab.
+      localCache: persistentLocalCache({ tabManager: persistentSingleTabManager({}) }),
+    });
+  }
   return db;
 }
 

@@ -9,11 +9,9 @@ import { SPECIES_SEED, SPECIES_SEED_VERSION } from './data/species-seed';
 import { toast } from './lib/ui';
 import { qs } from './lib/dom';
 import { initTheme } from './lib/theme';
-import { hydrateIcons } from './lib/icons';
-import { initSync, onSyncStatus, requestSync } from './sync/sync-engine';
-import { initFirebaseSyncFromSettings } from './firebase/firestore-sync';
+import { hydrateIcons, icon, type IconName } from './lib/icons';
+import { initFirebaseSyncFromSettings, onFirebaseSyncStatus, type FirebaseSyncStatus } from './firebase/firestore-sync';
 import type { View, ViewParams } from './views/view';
-import type { SyncStatus } from './types';
 
 initTheme();
 
@@ -155,25 +153,39 @@ function setupNav(): void {
   });
 }
 
+const SYNC_LABEL: Record<FirebaseSyncStatus['state'], string> = {
+  disabled: '', syncing: 'מסנכרן...', offline: 'לא מקוון', idle: 'מסונכרן', error: 'שגיאת סנכרון',
+};
+const SYNC_ICON: Record<FirebaseSyncStatus['state'], IconName | null> = {
+  disabled: null, syncing: 'refresh', offline: 'wifiOff', idle: 'check', error: 'alert',
+};
+
+/** Topbar sync pill, driven by the Firebase sync engine: a spinning icon
+ * while actively pushing/pulling, an offline icon with no network, and a
+ * brief success flash that fades out once idle (hidden entirely when no
+ * Firebase household code is configured). */
 function setupStatusIndicator(): void {
   const dot = qs(document.body, '#net-status');
   const pill = qs(document.body, '#sync-pill');
-  const paint = (s: SyncStatus): void => {
+  let hideTimer: ReturnType<typeof setTimeout> | undefined;
+
+  const paintNet = (): void => {
     dot.classList.toggle('offline', !navigator.onLine);
     dot.title = navigator.onLine ? 'מחובר לרשת' : 'ללא רשת — הכול נשמר מקומית';
-    const map: Record<SyncStatus['state'], string> = {
-      idle: '✓ מסונכרן', syncing: '↻ מסנכרן', offline: '⌁ לא מקוון',
-      error: '⚠ שגיאת סנכרון', disabled: '', // hidden when local-only
-    };
-    const label = map[s.state] + (s.pending ? ` (${s.pending})` : '');
-    pill.textContent = label;
+  };
+  window.addEventListener('online', paintNet);
+  window.addEventListener('offline', paintNet);
+  paintNet();
+
+  onFirebaseSyncStatus((s) => {
+    clearTimeout(hideTimer);
+    const iconName = SYNC_ICON[s.state];
+    pill.innerHTML = iconName ? icon(iconName) + ` <span>${SYNC_LABEL[s.state]}</span>` : '';
+    pill.title = s.message || SYNC_LABEL[s.state];
     pill.hidden = s.state === 'disabled';
     pill.className = 'sync-pill ' + s.state;
-  };
-  window.addEventListener('online', () => paint({ ...lastStatus }));
-  window.addEventListener('offline', () => paint({ ...lastStatus, state: 'offline' }));
-  let lastStatus: SyncStatus = { state: 'disabled', pending: 0, lastSync: null };
-  onSyncStatus((s) => { lastStatus = s; paint(s); });
+    if (s.state === 'idle') hideTimer = setTimeout(() => { pill.hidden = true; }, 2500);
+  });
 }
 
 async function init(): Promise<void> {
@@ -189,18 +201,21 @@ async function init(): Promise<void> {
   // register the Workbox service worker (auto-updates on new deploys)
   registerSW({ immediate: true });
 
-  await initSync();
   await initFirebaseSyncFromSettings();
 
   // when a sync pulls remote changes, refresh whatever screen is open
   let refreshTimer: ReturnType<typeof setTimeout> | undefined;
   onDataChanged(() => {
-    requestSync();
     clearTimeout(refreshTimer);
     refreshTimer = setTimeout(() => { if (currentView) void VIEWS[currentView]!.activate(); }, 150);
   });
 
-  await showView(location.hash.replace('#', '') || HOME_VIEW, undefined, 'replace');
+  // A hard refresh always lands on Home — in-session back/forward is the only
+  // thing the hash fragment is meant to drive; per-view params (which
+  // observation, which filter) live only in memory and can't survive a
+  // reload anyway, so reopening whatever view the hash names would show a
+  // stale/empty screen instead of a working one.
+  await showView(HOME_VIEW, undefined, 'replace');
 }
 
 void init().catch((err: unknown) => {

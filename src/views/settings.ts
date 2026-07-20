@@ -1,15 +1,14 @@
-/* views/settings.ts — הגדרות: סנכרון לשרת, גיבוי/שחזור, נתוני דמה, ניהול נתונים. */
+/* views/settings.ts — הגדרות: סנכרון לענן (Firebase), עיצוב, גיבוי/שחזור, ניהול נתונים. */
 
 import {
   listSpecies, addSpecies, deleteSpecies, listSpeciesRows,
   listLocationRows, addLocation, updateLocationCoords, deleteLocation, seedLocationsFromObservations,
   findDuplicateSpeciesGroups, findDuplicateLocationGroups, mergeSpeciesNames, mergeLocationNames,
   clearAllData, listObservations, listObservationsRaw, getObservation, saveObservation,
-  putObservationRaw, saveMedia, mediaForObservation, getSetting,
+  putObservationRaw, saveMedia, mediaForObservation,
 } from '../db/repository';
 import type { DuplicateGroup } from '../db/repository';
-import { reconfigureSync, serverUrl, syncNow, onSyncStatus } from '../sync/sync-engine';
-import { getFirebaseSyncCode, configureFirebaseSync, isFirebaseSyncActive } from '../firebase/firestore-sync';
+import { getFirebaseSyncCode, configureFirebaseSync, onFirebaseSyncStatus, type FirebaseSyncStatus } from '../firebase/firestore-sync';
 import { pickLocation } from '../lib/location-picker';
 import { toast, confirmDialog, fmtDateTime } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
@@ -17,8 +16,13 @@ import { qs, input } from '../lib/dom';
 import { icon } from '../lib/icons';
 import { readExifDate } from '../lib/exif';
 import { primarySpecies } from '../lib/observation';
-import { THEMES, currentTheme, setTheme, type ThemeId } from '../lib/theme';
-import type { Observation, SyncStatus, LocationRow } from '../types';
+import {
+  THEMES, ACCENTS, FONT_COLORS, FONT_SIZES, FONT_WEIGHTS,
+  currentTheme, currentAccent, currentFontColor, currentFontSize, currentFontWeight,
+  setTheme, setAccent, setFontColor, setFontSize, setFontWeight,
+  type ThemeId, type AccentId, type FontColorId, type FontSizeId, type FontWeightId,
+} from '../lib/theme';
+import type { Observation, LocationRow } from '../types';
 
 let container: HTMLElement;
 let unsubStatus: (() => void) | null = null;
@@ -39,27 +43,35 @@ export function init(el: HTMLElement): void {
   container = el;
 }
 
-const STATE_LABEL: Record<SyncStatus['state'], string> = {
-  idle: 'מסונכרן', syncing: 'מסנכרן...', offline: 'לא מקוון — ימתין לחיבור',
-  error: 'שגיאת סנכרון', disabled: 'סנכרון כבוי (מקומי בלבד)',
-};
+function fbStatusText(s: FirebaseSyncStatus): string {
+  if (s.state === 'idle' && s.lastSync) return `הסנכרון לענן הושלם בהצלחה (${fmtDateTime(s.lastSync)})`;
+  if (s.state === 'syncing') return 'מסנכרן עם הענן...';
+  if (s.state === 'offline') return 'הסנכרון לענן כשל — מצב אופליין / יש לבדוק חיבור לרשת';
+  if (s.state === 'error') return 'הסנכרון לענן כשל — יש לבדוק חיבור לרשת' + (s.message ? ` (${s.message})` : '');
+  return 'לא מוגדר';
+}
 
 export async function activate(): Promise<void> {
   const obsCount = (await listObservations()).length;
-  const url = await serverUrl();
-  const token = await getSetting<string>('syncToken', '');
-  const lastSync = await getSetting<string | null>('lastSync', null);
   const fbCode = await getFirebaseSyncCode();
   let version = '';
   try { version = (await (await fetch('version.json')).json()).version; } catch { /* dev */ }
 
   const activeTheme = currentTheme();
+  const activeAccent = currentAccent();
+  const activeFontColor = currentFontColor();
+  const activeFontSize = currentFontSize();
+  const activeFontWeight = currentFontWeight();
   container.innerHTML = `
     <h2>הגדרות</h2>
 
     <div class="settings-card">
       <h3>${icon('palette')} עיצוב</h3>
-      <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">בחרו ערכת צבעים לאפליקציה — משתנה מיד, ונשמרת במכשיר זה.</p>
+      <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
+        התאימו את מראה האפליקציה — כל שינוי חל מיד ונשמר במכשיר זה.
+      </p>
+
+      <h4>ערכת נושא (רקע)</h4>
       <div class="theme-picker" id="s-theme-picker">
         ${THEMES.map((t) => `
           <button type="button" class="theme-swatch${t.id === activeTheme ? ' active' : ''}" data-theme="${t.id}" title="${escapeHtml(t.label)}">
@@ -67,45 +79,65 @@ export async function activate(): Promise<void> {
             <span>${escapeHtml(t.label)}</span>
           </button>`).join('')}
       </div>
-    </div>
 
-    <div class="settings-card">
-      <h3>${icon('cloud')} סנכרון לשרת</h3>
-      <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
-        עבודה מלאה גם ללא רשת; כשמוגדרת כתובת שרת, השינויים מסתנכרנים אוטומטית
-        כשחוזרת התקשורת. השאירו ריק לעבודה מקומית בלבד.
-      </p>
-      <div class="field">
-        <label for="s-server">כתובת שרת הסנכרון (URL)</label>
-        <input type="url" id="s-server" dir="ltr" style="text-align:left" placeholder="https://birds-sync.xxxxx.workers.dev" value="${escapeHtml(url)}">
+      <h4>צבע דגש (Accent)</h4>
+      <div class="theme-picker" id="s-accent-picker">
+        ${ACCENTS.map((a) => `
+          <button type="button" class="theme-swatch${a.id === activeAccent ? ' active' : ''}" data-accent="${a.id}" title="${escapeHtml(a.label)}">
+            <span class="theme-dot${a.swatch ? '' : ' theme-dot-none'}" style="${a.swatch ? `background:${a.swatch}` : ''}"></span>
+            <span>${escapeHtml(a.label)}</span>
+          </button>`).join('')}
       </div>
-      <div class="field">
-        <label for="s-token">קוד סנכרון <span class="hint">(סוד משותף לך ולחברים)</span></label>
-        <input type="password" id="s-token" dir="ltr" style="text-align:left" placeholder="••••••••" value="${escapeHtml(token)}">
+
+      <h4>צבע טקסט</h4>
+      <div class="theme-picker" id="s-font-color-picker">
+        ${FONT_COLORS.map((f) => `
+          <button type="button" class="theme-swatch${f.id === activeFontColor ? ' active' : ''}" data-font-color="${f.id}" title="${escapeHtml(f.label)}">
+            <span class="theme-dot${f.swatch ? '' : ' theme-dot-none'}" style="${f.swatch ? `background:${f.swatch}` : ''}"></span>
+            <span>${escapeHtml(f.label)}</span>
+          </button>`).join('')}
       </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-primary" id="s-save-server">${icon('save')} שמירה</button>
-        <button class="btn" id="s-sync-now">${icon('refresh')} סנכרון עכשיו</button>
+
+      <div class="row-2">
+        <div>
+          <h4>גודל טקסט</h4>
+          <div class="seg-toggle" id="s-font-size-picker">
+            ${FONT_SIZES.map((f) => `<button type="button" class="seg-btn${f.id === activeFontSize ? ' active' : ''}" data-font-size="${f.id}">${escapeHtml(f.label)}</button>`).join('')}
+          </div>
+        </div>
+        <div>
+          <h4>משקל טקסט</h4>
+          <div class="seg-toggle" id="s-font-weight-picker">
+            ${FONT_WEIGHTS.map((f) => `<button type="button" class="seg-btn${f.id === activeFontWeight ? ' active' : ''}" data-font-weight="${f.id}">${escapeHtml(f.label)}</button>`).join('')}
+          </div>
+        </div>
       </div>
-      <div class="settings-status" id="s-sync-status"></div>
-      ${lastSync ? `<div class="settings-status">סנכרון אחרון: ${fmtDateTime(lastSync)}</div>` : ''}
+
+      <h4>תצוגה מקדימה</h4>
+      <div class="appearance-preview">
+        <div class="appearance-preview-card">
+          <span class="appearance-preview-eyebrow">${icon('bird')} ציפור היום</span>
+          <span class="appearance-preview-title">חוגלה</span>
+          <span class="appearance-preview-body">דוגמת טקסט משני — כך ייראו תיאורים ופרטים נוספים באפליקציה.</span>
+          <button type="button" class="btn btn-primary appearance-preview-btn">${icon('save')} כפתור לדוגמה</button>
+        </div>
+      </div>
     </div>
 
     <div class="settings-card">
       <h3>${icon('cloud')} סנכרון לענן (Firebase)</h3>
       <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
-        חלופה ל"סנכרון לשרת" למעלה — סנכרון דו-כיווני בזמן-אמת דרך Firebase.
-        מזינים אותו "קוד משפחה" בכל המכשירים (טלפון, מחשב וכו') ותצפיות/מינים/
-        מיקומים/תמונות שנשמרים באחד מופיעים אוטומטית בשאר, כולל אופליין.
+        סנכרון דו-כיווני בזמן-אמת דרך Firebase. מזינים אותו "קוד משפחה" בכל
+        המכשירים (טלפון, מחשב וכו') ותצפיות/מינים/מיקומים/תמונות שנשמרים באחד
+        מופיעים אוטומטית בשאר. עובד גם ללא רשת — השינויים נשמרים מיידית
+        במכשיר ומסתנכרנים אוטומטית כשחוזר החיבור.
       </p>
       <div class="field">
         <label for="s-fb-code">קוד משפחה <span class="hint">(בחרו מחרוזת ייחודית וסודית; אותו הקוד בכל המכשירים)</span></label>
         <input type="text" id="s-fb-code" dir="ltr" style="text-align:left" placeholder="לדוגמה: ohad-birds-2026" value="${escapeHtml(fbCode)}">
       </div>
       <button class="btn btn-primary" id="s-fb-save">${icon('save')} שמירה והפעלה</button>
-      <div class="settings-status ${isFirebaseSyncActive() ? 'ok' : ''}" id="s-fb-status">
-        ${fbCode ? (isFirebaseSyncActive() ? 'פעיל — מסתנכרן עם Firebase' : 'קוד שמור, מתחבר...') : 'לא מוגדר'}
-      </div>
+      <div class="settings-status" id="s-fb-status"></div>
     </div>
 
     <div class="settings-card">
@@ -177,17 +209,6 @@ export async function activate(): Promise<void> {
     </div>
 
     <div class="settings-card">
-      <h3>נתוני הדגמה</h3>
-      <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
-        טעינת 20 תצפיות לדוגמה. אפשר להסירן בלחיצה בלי לפגוע בתצפיות אמיתיות.
-      </p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-primary" id="s-demo-load">טעינת נתוני דמה</button>
-        <button class="btn" id="s-demo-remove">${icon('trash')} הסרת נתוני הדמה</button>
-      </div>
-    </div>
-
-    <div class="settings-card">
       <h3>${icon('database')} נתונים מקומיים</h3>
       <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
         במכשיר זה שמורות כרגע ${obsCount} תצפיות. ${version ? `· גרסת אפליקציה: v${escapeHtml(version)}` : ''}
@@ -197,8 +218,10 @@ export async function activate(): Promise<void> {
   `;
 
   qs(container, '#s-theme-picker').addEventListener('click', onThemePick);
-  qs(container, '#s-save-server').addEventListener('click', () => void onSaveServer());
-  qs(container, '#s-sync-now').addEventListener('click', () => void syncNow());
+  qs(container, '#s-accent-picker').addEventListener('click', onAccentPick);
+  qs(container, '#s-font-color-picker').addEventListener('click', onFontColorPick);
+  qs(container, '#s-font-size-picker').addEventListener('click', onFontSizePick);
+  qs(container, '#s-font-weight-picker').addEventListener('click', onFontWeightPick);
   qs(container, '#s-fb-save').addEventListener('click', () => void onSaveFirebaseSync());
   qs(container, '#s-backup').addEventListener('click', () => void onBackup());
   input(container, '#s-restore').addEventListener('change', (e) => void onRestore(e));
@@ -208,8 +231,6 @@ export async function activate(): Promise<void> {
   qs(container, '#s-photo-import-confirm').addEventListener('click', () => void onPhotoImportConfirm());
   photoImportRows = [];
   photoImportObsCache = [];
-  qs(container, '#s-demo-load').addEventListener('click', () => void onLoadDemo());
-  qs(container, '#s-demo-remove').addEventListener('click', () => void onRemoveDemo());
   qs(container, '#s-clear').addEventListener('click', () => void onClearData());
 
   qs(container, '#s-sp-add').addEventListener('click', () => void onAddSpeciesManaged());
@@ -235,11 +256,11 @@ export async function activate(): Promise<void> {
   qs(container, '#s-location-dupes').addEventListener('click', (e) => void onLocationDupesClick(e));
 
   unsubStatus?.();
-  unsubStatus = onSyncStatus((s) => {
-    const el = container.querySelector<HTMLElement>('#s-sync-status');
+  unsubStatus = onFirebaseSyncStatus((s) => {
+    const el = container.querySelector<HTMLElement>('#s-fb-status');
     if (!el) return;
-    el.textContent = STATE_LABEL[s.state] + (s.pending ? ` · ${s.pending} ממתינים` : '') + (s.message ? ` — ${s.message}` : '');
-    el.className = 'settings-status ' + (s.state === 'idle' ? 'ok' : s.state === 'error' ? 'err' : '');
+    el.textContent = fbStatusText(s);
+    el.className = 'settings-status ' + (s.state === 'idle' ? 'ok' : (s.state === 'error' || s.state === 'offline') ? 'err' : '');
   });
 }
 
@@ -472,37 +493,48 @@ async function onMergeAllLocationDupes(): Promise<void> {
   await renderLocationManageList();
 }
 
-function onThemePick(e: Event): void {
+function pickSwatch(groupSelector: string, e: Event, apply: (btn: HTMLElement) => void): void {
   const btn = (e.target as HTMLElement).closest<HTMLElement>('.theme-swatch');
   if (!btn) return;
-  setTheme(btn.dataset.theme as ThemeId);
-  qs(container, '#s-theme-picker').querySelectorAll('.theme-swatch').forEach((el) => {
+  apply(btn);
+  qs(container, groupSelector).querySelectorAll('.theme-swatch').forEach((el) => {
     el.classList.toggle('active', el === btn);
   });
 }
 
-async function onSaveServer(): Promise<void> {
-  const url = input(container, '#s-server').value.trim();
-  const token = input(container, '#s-token').value.trim();
-  await reconfigureSync(url, token);
-  toast(url ? 'הגדרות הסנכרון נשמרו — מסנכרן...' : 'סנכרון כובה (עבודה מקומית)');
+function pickSeg(groupSelector: string, e: Event, apply: (btn: HTMLElement) => void): void {
+  const btn = (e.target as HTMLElement).closest<HTMLElement>('.seg-btn');
+  if (!btn) return;
+  apply(btn);
+  qs(container, groupSelector).querySelectorAll('.seg-btn').forEach((el) => {
+    el.classList.toggle('active', el === btn);
+  });
+}
+
+function onThemePick(e: Event): void {
+  pickSwatch('#s-theme-picker', e, (btn) => setTheme(btn.dataset.theme as ThemeId));
+}
+function onAccentPick(e: Event): void {
+  pickSwatch('#s-accent-picker', e, (btn) => setAccent(btn.dataset.accent as AccentId));
+}
+function onFontColorPick(e: Event): void {
+  pickSwatch('#s-font-color-picker', e, (btn) => setFontColor(btn.dataset.fontColor as FontColorId));
+}
+function onFontSizePick(e: Event): void {
+  pickSeg('#s-font-size-picker', e, (btn) => setFontSize(btn.dataset.fontSize as FontSizeId));
+}
+function onFontWeightPick(e: Event): void {
+  pickSeg('#s-font-weight-picker', e, (btn) => setFontWeight(btn.dataset.fontWeight as FontWeightId));
 }
 
 async function onSaveFirebaseSync(): Promise<void> {
   const code = input(container, '#s-fb-code').value.trim();
   const btn = qs<HTMLButtonElement>(container, '#s-fb-save');
-  const statusEl = qs(container, '#s-fb-status');
   btn.disabled = true;
   try {
     await configureFirebaseSync(code);
-    statusEl.textContent = code ? 'מתחבר ל-Firebase...' : 'לא מוגדר';
-    statusEl.classList.remove('err');
-    statusEl.classList.toggle('ok', !!code);
     toast(code ? 'קוד המשפחה נשמר — מסתנכרן עם Firebase...' : 'סנכרון Firebase כובה');
   } catch (err) {
-    statusEl.textContent = 'שגיאת חיבור ל-Firebase — ודאו ש-Firestore ו-Storage מופעלים בפרויקט';
-    statusEl.classList.remove('ok');
-    statusEl.classList.add('err');
     toast('שגיאה בהתחברות ל-Firebase: ' + (err as Error).message, true, 6000);
   } finally {
     btn.disabled = false;
@@ -550,7 +582,7 @@ async function onRestore(e: Event): Promise<void> {
     if (backup.app !== 'birds-journal' || !Array.isArray(backup.observations)) throw new Error();
   } catch { toast('קובץ גיבוי לא תקין', true); return; }
   if (!(await confirmDialog(`לשחזר ${backup.observations!.length} תצפיות מהגיבוי?`, 'שחזור'))) return;
-  for (const name of backup.species || []) await addSpecies(name, { sync: false });
+  for (const name of backup.species || []) await addSpecies(name);
   for (const l of backup.locations || []) await addLocation(l.name, l.lat, l.lng);
   for (const o of backup.observations!) {
     // migrate older backups that used a single species/quantity per row
@@ -681,25 +713,7 @@ async function onPhotoImportConfirm(): Promise<void> {
   toast(`יובאו ${photoCountLabel(toImport.length)} ל-${obsCountLabel(touchedObsIds.size)} ✓`);
 }
 
-/* ---------- demo & clear ---------- */
-
-async function onLoadDemo(): Promise<void> {
-  const btn = qs<HTMLButtonElement>(container, '#s-demo-load');
-  btn.disabled = true;
-  try {
-    const { loadDemoData } = await import('../data/demo-data');
-    const n = await loadDemoData();
-    toast(`נטענו ${n} תצפיות לדוגמה — עברו למסכי היומן, הרשימה והמפה`, false, 5000);
-    await activate();
-  } finally { btn.disabled = false; }
-}
-
-async function onRemoveDemo(): Promise<void> {
-  const { removeDemoData } = await import('../data/demo-data');
-  const n = await removeDemoData();
-  toast(n ? `הוסרו ${n} תצפיות דמה` : 'אין נתוני דמה להסרה');
-  await activate();
-}
+/* ---------- clear ---------- */
 
 async function onClearData(): Promise<void> {
   if (!(await confirmDialog('למחוק את כל התצפיות והתמונות במכשיר זה? מומלץ להוריד גיבוי קודם.', 'מחיקת הכל'))) return;

@@ -10,8 +10,12 @@
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
   <script>
     try {
-      var t = localStorage.getItem('birds-theme');
-      if (t) document.documentElement.setAttribute('data-theme', t);
+      var root = document.documentElement;
+      var t = localStorage.getItem('birds-theme'); if (t) root.setAttribute('data-theme', t);
+      var a = localStorage.getItem('birds-accent'); if (a) root.setAttribute('data-accent', a);
+      var fc = localStorage.getItem('birds-font-color'); if (fc) root.setAttribute('data-font-color', fc);
+      var fs = localStorage.getItem('birds-font-size'); if (fs) root.setAttribute('data-font-size', fs);
+      var fw = localStorage.getItem('birds-font-weight'); if (fw) root.setAttribute('data-font-weight', fw);
     } catch (e) {}
   </script>
 </head>
