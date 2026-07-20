@@ -135,9 +135,18 @@ async function handleLocalMutation(entity: MutationEntity, id: string, _op: Muta
   }
 }
 
+/** Species/location names can contain characters Firestore treats specially
+ * in a document path — most notably "/", which would otherwise split the ID
+ * into extra path segments and break the reference. Observation ids are
+ * random UUIDs and pass through unchanged. The original, unencoded name is
+ * still stored in the document's own data, so reads are unaffected. */
+function docSafeId(id: string): string {
+  return encodeURIComponent(id);
+}
+
 async function pushDoc(col: string, id: string, data: unknown): Promise<void> {
   if (!activeCode) return;
-  await setDoc(doc(firebaseDb(), 'households', activeCode, col, id), sanitize(data) as Record<string, unknown>);
+  await setDoc(doc(firebaseDb(), 'households', activeCode, col, docSafeId(id)), sanitize(data) as Record<string, unknown>);
 }
 
 /** Uploads any of this observation's photos that haven't reached Firebase
