@@ -46,7 +46,7 @@ export function init(el: HTMLElement): void {
     <div id="map-container"></div>
     <div class="map-hint">לחיצה ארוכה על המפה מוסיפה תצפית במיקום חדש · לחיצה על נקודה קיימת מציגה את היסטוריית התצפיות שם</div>
     <button id="locate-btn" class="map-locate-btn" type="button" title="התמרכזות על המיקום הנוכחי" aria-label="התמרכזות על המיקום הנוכחי">${icon('target')}</button>
-    <button id="layer-toggle-btn" class="map-layer-btn" type="button" title="הצגת שכבת לוויין" aria-label="הצגת שכבת לוויין">${icon('layers')}</button>
+    <button id="layer-toggle-btn" class="map-layer-btn" type="button" title="הצגת מפת רחובות" aria-label="הצגת מפת רחובות">${icon('map')}</button>
     <div class="map-empty" id="map-empty" hidden>אין עדיין תצפיות עם קואורדינטות.<br>הוסיפו תצפית עם מיקום GPS והיא תופיע כאן.</div>
   `;
   qs(container, '#locate-btn').addEventListener('click', onLocateClick);
@@ -59,8 +59,8 @@ function ensureMap(): void {
   streetLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '&copy; OpenStreetMap',
-  }).addTo(map);
-  // hybrid satellite: aerial imagery + a transparent labels/roads/places overlay on top
+  });
+  // hybrid satellite: aerial imagery + a transparent labels/roads/places overlay on top — the default view
   const satelliteImagery = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
     maxZoom: 19,
     zIndex: 1,
@@ -70,7 +70,8 @@ function ensureMap(): void {
     maxZoom: 19,
     zIndex: 2,
   });
-  satelliteLayer = L.layerGroup([satelliteImagery, satelliteLabels]);
+  satelliteLayer = L.layerGroup([satelliteImagery, satelliteLabels]).addTo(map);
+  usingSatellite = true;
   markersLayer = L.layerGroup().addTo(map);
 
   // long-press (contextmenu on touch) drops a pin at a new location
