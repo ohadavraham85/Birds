@@ -93,7 +93,12 @@ async function startFirebaseSync(code: string): Promise<void> {
       for (const o of await listObservationsRaw()) await pushDoc('observations', o.id, o);
       for (const s of await listSpeciesRows()) await pushDoc('species', s.name, s);
       for (const l of await listLocationRows()) await pushDoc('locations', l.name, l);
-      for (const o of await listObservationsRaw()) await pushObservationMedia(o);
+      // Photo upload (Storage) is best-effort and optional — a project that
+      // hasn't enabled Storage yet (e.g. still on the free Spark plan) must
+      // not lose text-data sync (Firestore) just because photos can't upload.
+      for (const o of await listObservationsRaw()) {
+        try { await pushObservationMedia(o); } catch (err) { console.warn('Firebase: photo sync skipped', err); }
+      }
     });
     await setSetting(seedFlagKey, true);
   }
@@ -125,7 +130,9 @@ async function startFirebaseSync(code: string): Promise<void> {
 
 async function handleLocalMutation(entity: MutationEntity, id: string, _op: MutationOp, payload: unknown): Promise<void> {
   await pushDoc(COLLECTION_BY_ENTITY[entity], id, payload);
-  if (entity === 'observation') await pushObservationMedia(payload as Observation);
+  if (entity === 'observation') {
+    try { await pushObservationMedia(payload as Observation); } catch (err) { console.warn('Firebase: photo sync skipped', err); }
+  }
 }
 
 async function pushDoc(col: string, id: string, data: unknown): Promise<void> {
@@ -145,10 +152,16 @@ async function pushObservationMedia(obs: Observation): Promise<void> {
       if (img.remoteId?.startsWith('http')) continue; // already uploaded to Firebase
       const media = await getMedia(img.localId);
       if (!media?.blob) continue;
-      const path = `households/${activeCode}/media/${img.localId}`;
-      await uploadBytes(ref(firebaseStorage(), path), media.blob, { contentType: media.mime || 'application/octet-stream' });
-      img.remoteId = await getDownloadURL(ref(firebaseStorage(), path));
-      touched = true;
+      try {
+        const path = `households/${activeCode}/media/${img.localId}`;
+        await uploadBytes(ref(firebaseStorage(), path), media.blob, { contentType: media.mime || 'application/octet-stream' });
+        img.remoteId = await getDownloadURL(ref(firebaseStorage(), path));
+        touched = true;
+      } catch (err) {
+        // Storage not enabled yet, offline, etc. — leave this image for a
+        // later retry (next mutation/app start) without failing the rest.
+        console.warn('Firebase: could not upload photo', img.localId, err);
+      }
     }
   }
   if (touched) {
