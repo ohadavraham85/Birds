@@ -31,6 +31,32 @@ let activeCode: string | null = null;
 let unsubs: Unsubscribe[] = [];
 let stopMutationListener: (() => void) | null = null;
 
+/* ---------- real-time sync status, for the topbar indicator and Settings ---------- */
+
+export type FirebaseSyncState = 'disabled' | 'offline' | 'syncing' | 'idle' | 'error';
+export interface FirebaseSyncStatus { state: FirebaseSyncState; lastSync: string | null; message?: string }
+
+let status: FirebaseSyncStatus = { state: 'disabled', lastSync: null };
+const statusListeners = new Set<(s: FirebaseSyncStatus) => void>();
+
+function setStatus(patch: Partial<FirebaseSyncStatus>): void {
+  status = { ...status, ...patch };
+  for (const fn of statusListeners) fn(status);
+}
+
+export function onFirebaseSyncStatus(fn: (s: FirebaseSyncStatus) => void): () => void {
+  statusListeners.add(fn);
+  fn(status);
+  return () => statusListeners.delete(fn);
+}
+
+export function getFirebaseSyncStatus(): FirebaseSyncStatus {
+  return status;
+}
+
+window.addEventListener('online', () => { if (activeCode) setStatus({ state: 'syncing' }); });
+window.addEventListener('offline', () => { if (activeCode) setStatus({ state: 'offline' }); });
+
 /** Reentrant guard: while >0, our own writes (initial seed push, remote
  * merges, media-URL patch-ups) must not bounce back out through the
  * local-mutation listener as if the user had just made that change. */
@@ -76,11 +102,13 @@ export function stopFirebaseSync(): void {
   stopMutationListener?.();
   stopMutationListener = null;
   activeCode = null;
+  setStatus({ state: 'disabled', message: undefined });
 }
 
 async function startFirebaseSync(code: string): Promise<void> {
   activeCode = code;
   const db = firebaseDb();
+  setStatus({ state: navigator.onLine ? 'syncing' : 'offline', message: undefined });
 
   // One-time initial full push per code — anything created locally before
   // Firebase was configured (or while offline) needs to reach the cloud too.
@@ -88,39 +116,47 @@ async function startFirebaseSync(code: string): Promise<void> {
   // Only runs once (not on every app boot) to stay well within Firestore's
   // free-tier write quota; ongoing changes are pushed live via onMutation.
   const seedFlagKey = `firebaseSeeded_${code}`;
-  if (!(await getSetting<boolean>(seedFlagKey, false))) {
-    await withSuppressedPush(async () => {
-      for (const o of await listObservationsRaw()) await pushDoc('observations', o.id, o);
-      for (const s of await listSpeciesRows()) await pushDoc('species', s.name, s);
-      for (const l of await listLocationRows()) await pushDoc('locations', l.name, l);
-      // Photo upload (Storage) is best-effort and optional — a project that
-      // hasn't enabled Storage yet (e.g. still on the free Spark plan) must
-      // not lose text-data sync (Firestore) just because photos can't upload.
-      for (const o of await listObservationsRaw()) {
-        try { await pushObservationMedia(o); } catch (err) { console.warn('Firebase: photo sync skipped', err); }
-      }
-    });
-    await setSetting(seedFlagKey, true);
+  try {
+    if (!(await getSetting<boolean>(seedFlagKey, false))) {
+      await withSuppressedPush(async () => {
+        for (const o of await listObservationsRaw()) await pushDoc('observations', o.id, o);
+        for (const s of await listSpeciesRows()) await pushDoc('species', s.name, s);
+        for (const l of await listLocationRows()) await pushDoc('locations', l.name, l);
+        // Photo upload (Storage) is best-effort and optional — a project that
+        // hasn't enabled Storage yet (e.g. still on the free Spark plan) must
+        // not lose text-data sync (Firestore) just because photos can't upload.
+        for (const o of await listObservationsRaw()) {
+          try { await pushObservationMedia(o); } catch (err) { console.warn('Firebase: photo sync skipped', err); }
+        }
+      });
+      await setSetting(seedFlagKey, true);
+    }
+    setStatus({ state: 'idle', lastSync: new Date().toISOString() });
+  } catch (err) {
+    setStatus({ state: 'error', message: (err as Error).message });
   }
 
+  const onSnapError = (err: Error): void => {
+    setStatus({ state: navigator.onLine ? 'error' : 'offline', message: err.message });
+  };
   unsubs.push(onSnapshot(collection(db, 'households', code, 'observations'), (snap) => {
     snap.docChanges().forEach((change) => {
       if (change.type === 'removed') return;
       void mergeRemoteObservation(change.doc.data() as Observation);
     });
-  }));
+  }, onSnapError));
   unsubs.push(onSnapshot(collection(db, 'households', code, 'species'), (snap) => {
     snap.docChanges().forEach((change) => {
       if (change.type === 'removed') return;
       void mergeRemoteSpecies(change.doc.data() as SpeciesRow);
     });
-  }));
+  }, onSnapError));
   unsubs.push(onSnapshot(collection(db, 'households', code, 'locations'), (snap) => {
     snap.docChanges().forEach((change) => {
       if (change.type === 'removed') return;
       void mergeRemoteLocation(change.doc.data() as LocationRow);
     });
-  }));
+  }, onSnapError));
 
   stopMutationListener = onMutation((entity, id, op, payload) => {
     if (suppressDepth > 0 || !activeCode) return;
@@ -129,9 +165,15 @@ async function startFirebaseSync(code: string): Promise<void> {
 }
 
 async function handleLocalMutation(entity: MutationEntity, id: string, _op: MutationOp, payload: unknown): Promise<void> {
-  await pushDoc(COLLECTION_BY_ENTITY[entity], id, payload);
-  if (entity === 'observation') {
-    try { await pushObservationMedia(payload as Observation); } catch (err) { console.warn('Firebase: photo sync skipped', err); }
+  setStatus({ state: navigator.onLine ? 'syncing' : 'offline' });
+  try {
+    await pushDoc(COLLECTION_BY_ENTITY[entity], id, payload);
+    if (entity === 'observation') {
+      try { await pushObservationMedia(payload as Observation); } catch (err) { console.warn('Firebase: photo sync skipped', err); }
+    }
+    setStatus({ state: 'idle', lastSync: new Date().toISOString() });
+  } catch (err) {
+    setStatus({ state: navigator.onLine ? 'error' : 'offline', message: (err as Error).message });
   }
 }
 

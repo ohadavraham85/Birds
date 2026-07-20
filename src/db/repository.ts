@@ -1,9 +1,9 @@
 /* db/repository.ts — offline-first data access.
  *
  * Every mutation writes to the local Dexie store immediately (so the UI is
- * instant and works offline) and, when it represents user data, enqueues an
- * entry in the outbox for the sync engine to push to the server later.
- * Reads always come from the local store.
+ * instant and works offline) and emits an onMutation event so the Firebase
+ * sync engine can push exactly that record to the cloud. Reads always come
+ * from the local store.
  */
 
 import { db } from './database';
@@ -13,7 +13,6 @@ import type {
   SpeciesRow,
   LocationRow,
   MediaRecord,
-  OutboxEntry,
 } from '../types';
 
 /* ---------- change notifications ---------- */
@@ -50,40 +49,11 @@ function now(): string {
   return new Date().toISOString();
 }
 
-/* ---------- outbox ---------- */
-
-async function enqueue(
-  entity: OutboxEntry['entity'],
-  entityId: string,
-  op: OutboxEntry['op'],
-  payload: OutboxEntry['payload'],
-): Promise<void> {
-  await db.outbox.add({ entity, entityId, op, payload, createdAt: now() } as OutboxEntry);
-}
-
-export function listOutbox(): Promise<OutboxEntry[]> {
-  return db.outbox.orderBy('id').toArray();
-}
-export function countPending(): Promise<number> {
-  return db.outbox.count();
-}
-export async function removeOutbox(ids: number[]): Promise<void> {
-  await db.outbox.bulkDelete(ids);
-}
-
 /* ---------- observations ---------- */
 
-export interface SaveOptions { sync?: boolean }
-
-export async function saveObservation(
-  obs: Observation,
-  opts: SaveOptions = {},
-): Promise<Observation> {
-  const shouldSync = opts.sync ?? !obs.demo;
+export async function saveObservation(obs: Observation): Promise<Observation> {
   obs.updatedAt = now();
-  obs.synced = false;
   await db.observations.put(obs);
-  if (shouldSync) await enqueue('observation', obs.id, obs.deleted ? 'delete' : 'upsert', obs);
   emitChange();
   emitMutation('observation', obs.id, obs.deleted ? 'delete' : 'upsert', obs);
   return obs;
@@ -106,7 +76,7 @@ export function listObservationsRaw(): Promise<Observation[]> {
   return db.observations.toArray();
 }
 
-/** Write a row exactly as given, without touching the outbox (used by sync). */
+/** Write a row exactly as given (used by the Firebase sync engine to apply a remote merge). */
 export async function putObservationRaw(obs: Observation): Promise<void> {
   await db.observations.put(obs);
   emitChange();
@@ -118,16 +88,10 @@ export async function deleteObservation(id: string): Promise<void> {
   if (!obs) return;
   const media = await mediaForObservation(id);
   for (const m of media) await db.media.delete(m.id);
-  if (obs.demo) {
-    await db.observations.delete(id); // demo rows never sync — hard delete
-  } else {
-    obs.deleted = true;
-    obs.updatedAt = now();
-    obs.synced = false;
-    await db.observations.put(obs);
-    await enqueue('observation', id, 'delete', obs);
-    emitMutation('observation', id, 'delete', obs);
-  }
+  obs.deleted = true;
+  obs.updatedAt = now();
+  await db.observations.put(obs);
+  emitMutation('observation', id, 'delete', obs);
   emitChange();
 }
 
@@ -141,12 +105,11 @@ export async function listSpecies(): Promise<string[]> {
     .sort((a, b) => a.localeCompare(b, 'he'));
 }
 
-export async function addSpecies(name: string, opts: SaveOptions = {}): Promise<boolean> {
+export async function addSpecies(name: string): Promise<boolean> {
   name = String(name || '').trim();
   if (!name) return false;
   const row: SpeciesRow = { name, updatedAt: now(), deleted: false };
   await db.species.put(row);
-  if (opts.sync ?? true) await enqueue('species', name, 'upsert', row);
   emitChange();
   emitMutation('species', name, 'upsert', row);
   return true;
@@ -176,7 +139,6 @@ export async function setSpeciesDescription(name: string, description: string): 
   row.description = description;
   row.updatedAt = now();
   await db.species.put(row);
-  await enqueue('species', name, 'upsert', row);
   emitChange();
   emitMutation('species', name, 'upsert', row);
 }
@@ -193,7 +155,6 @@ export async function deleteSpecies(name: string): Promise<void> {
   row.deleted = true;
   row.updatedAt = now();
   await db.species.put(row);
-  await enqueue('species', name, 'delete', row);
   emitChange();
   emitMutation('species', name, 'delete', row);
 }
@@ -370,9 +331,7 @@ export async function mergeSpeciesNames(variants: string[], canonical: string): 
     if (touched) {
       o.entries = entries;
       o.updatedAt = now();
-      o.synced = false;
       await db.observations.put(o);
-      await enqueue('observation', o.id, 'upsert', o);
       emitMutation('observation', o.id, 'upsert', o);
       changed++;
     }
@@ -387,7 +346,6 @@ export async function mergeSpeciesNames(variants: string[], canonical: string): 
   if (!canonicalRow || canonicalRow.deleted) {
     const row: SpeciesRow = { name: canonical, updatedAt: ts, deleted: false };
     await db.species.put(row);
-    await enqueue('species', canonical, 'upsert', row);
     emitMutation('species', canonical, 'upsert', row);
   }
   for (const v of toMerge) {
@@ -396,7 +354,6 @@ export async function mergeSpeciesNames(variants: string[], canonical: string): 
       row.deleted = true;
       row.updatedAt = ts;
       await db.species.put(row);
-      await enqueue('species', v, 'delete', row);
       emitMutation('species', v, 'delete', row);
     }
   }
@@ -418,9 +375,7 @@ export async function mergeLocationNames(variants: string[], canonical: string):
     if (toMerge.has(o.locationName)) {
       o.locationName = canonical;
       o.updatedAt = now();
-      o.synced = false;
       await db.observations.put(o);
-      await enqueue('observation', o.id, 'upsert', o);
       emitMutation('observation', o.id, 'upsert', o);
       changed++;
     }

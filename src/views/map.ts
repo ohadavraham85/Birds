@@ -8,7 +8,7 @@
  * אמת, עם כפתור להתמרכזות עליו. */
 
 import L from '../lib/leaflet-setup';
-import { listObservations } from '../db/repository';
+import { listObservations, getSetting, setSetting } from '../db/repository';
 import { toast } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
 import { speciesLabel } from '../lib/observation';
@@ -24,10 +24,16 @@ let dropMarker: L.Marker | undefined;
 let myLocationMarker: L.CircleMarker | undefined;
 let geoWatchId: number | null = null;
 let streetLayer: L.TileLayer;
-let satelliteLayer: L.LayerGroup;
-let usingSatellite = false;
+let satelliteLayer: L.TileLayer;
+let roadsLayer: L.TileLayer;
+let labelsLayer: L.TileLayer;
 let allObservations: Observation[] = [];
 let closeSheet: (() => void) | null = null;
+
+/** Which base/overlay tiles are showing — persisted per device (like the color
+ * theme) so the map reopens the way the user last left it. */
+interface MapLayerState { satellite: boolean; roads: boolean; labels: boolean }
+let layerState: MapLayerState = { satellite: true, roads: false, labels: true };
 
 /** Round green badge with a bird glyph, replacing Leaflet's default pin.
  * tooltipAnchor keeps the small permanent name label snug against the badge. */
@@ -46,11 +52,55 @@ export function init(el: HTMLElement): void {
     <div id="map-container"></div>
     <div class="map-hint">לחיצה ארוכה על המפה מוסיפה תצפית במיקום חדש · לחיצה על נקודה קיימת מציגה את היסטוריית התצפיות שם</div>
     <button id="locate-btn" class="map-locate-btn" type="button" title="התמרכזות על המיקום הנוכחי" aria-label="התמרכזות על המיקום הנוכחי">${icon('target')}</button>
-    <button id="layer-toggle-btn" class="map-layer-btn" type="button" title="הצגת מפת רחובות" aria-label="הצגת מפת רחובות">${icon('map')}</button>
+    <button id="layer-toggle-btn" class="map-layer-btn" type="button" title="שכבות מפה" aria-label="שכבות מפה">${icon('layers')}</button>
+    <div class="map-layers-menu" id="map-layers-menu" hidden>
+      <label><input type="checkbox" id="ml-satellite"> שכבת לוויין</label>
+      <label><input type="checkbox" id="ml-roads"> שכבת כבישים</label>
+      <label><input type="checkbox" id="ml-labels"> תוויות גיאוגרפיות</label>
+    </div>
     <div class="map-empty" id="map-empty" hidden>אין עדיין תצפיות עם קואורדינטות.<br>הוסיפו תצפית עם מיקום GPS והיא תופיע כאן.</div>
   `;
   qs(container, '#locate-btn').addEventListener('click', onLocateClick);
-  qs(container, '#layer-toggle-btn').addEventListener('click', toggleLayer);
+  const menu = qs(container, '#map-layers-menu');
+  qs(container, '#layer-toggle-btn').addEventListener('click', () => { menu.hidden = !menu.hidden; });
+  document.addEventListener('click', (e) => {
+    if (!menu.hidden && !(e.target as HTMLElement).closest('.map-layer-btn, .map-layers-menu')) menu.hidden = true;
+  });
+  menu.addEventListener('change', (e) => void onLayerCheckboxChange(e));
+}
+
+async function loadLayerState(): Promise<void> {
+  layerState = {
+    satellite: await getSetting('mapLayerSatellite', true),
+    roads: await getSetting('mapLayerRoads', false),
+    labels: await getSetting('mapLayerLabels', true),
+  };
+}
+
+function syncLayerCheckboxes(): void {
+  qs<HTMLInputElement>(container, '#ml-satellite').checked = layerState.satellite;
+  qs<HTMLInputElement>(container, '#ml-roads').checked = layerState.roads;
+  qs<HTMLInputElement>(container, '#ml-labels').checked = layerState.labels;
+}
+
+/** Applies the current layerState to the live map — satellite/street are a
+ * mutually-exclusive base, roads and labels are independent overlays that
+ * can layer on top of either base. */
+function applyLayerState(): void {
+  if (!map) return;
+  if (layerState.satellite) { map.removeLayer(streetLayer); satelliteLayer.addTo(map); }
+  else { map.removeLayer(satelliteLayer); streetLayer.addTo(map); }
+  if (layerState.roads) roadsLayer.addTo(map); else map.removeLayer(roadsLayer);
+  if (layerState.labels) labelsLayer.addTo(map); else map.removeLayer(labelsLayer);
+}
+
+async function onLayerCheckboxChange(e: Event): Promise<void> {
+  const target = e.target as HTMLInputElement;
+  if (target.id === 'ml-satellite') { layerState.satellite = target.checked; await setSetting('mapLayerSatellite', layerState.satellite); }
+  else if (target.id === 'ml-roads') { layerState.roads = target.checked; await setSetting('mapLayerRoads', layerState.roads); }
+  else if (target.id === 'ml-labels') { layerState.labels = target.checked; await setSetting('mapLayerLabels', layerState.labels); }
+  else return;
+  applyLayerState();
 }
 
 function ensureMap(): void {
@@ -60,18 +110,19 @@ function ensureMap(): void {
     maxZoom: 19,
     attribution: '&copy; OpenStreetMap',
   });
-  // hybrid satellite: aerial imagery + a transparent labels/roads/places overlay on top — the default view
-  const satelliteImagery = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
     maxZoom: 19,
     zIndex: 1,
     attribution: 'Tiles &copy; Esri',
   });
-  const satelliteLabels = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+  roadsLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}', {
     maxZoom: 19,
     zIndex: 2,
   });
-  satelliteLayer = L.layerGroup([satelliteImagery, satelliteLabels]).addTo(map);
-  usingSatellite = true;
+  labelsLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 19,
+    zIndex: 3,
+  });
   markersLayer = L.layerGroup().addTo(map);
 
   // long-press (contextmenu on touch) drops a pin at a new location
@@ -163,9 +214,18 @@ function groupByLocation(withCoords: Observation[]): LocationGroup[] {
   });
 }
 
+let layersInitialized = false;
+
 export async function activate(): Promise<void> {
   ensureMap();
   setTimeout(() => map?.invalidateSize(), 60);
+
+  if (!layersInitialized) {
+    layersInitialized = true;
+    await loadLayerState();
+    syncLayerCheckboxes();
+    applyLayerState();
+  }
 
   markersLayer!.clearLayers();
   allObservations = await listObservations();
@@ -225,14 +285,3 @@ function qsEmpty(show: boolean): void {
   if (e) e.hidden = !show;
 }
 
-/* ---------- base layer (street / satellite) ---------- */
-
-function toggleLayer(): void {
-  if (!map) return;
-  usingSatellite = !usingSatellite;
-  if (usingSatellite) { map.removeLayer(streetLayer); satelliteLayer.addTo(map); }
-  else { map.removeLayer(satelliteLayer); streetLayer.addTo(map); }
-  const btn = qs<HTMLButtonElement>(container, '#layer-toggle-btn');
-  btn.innerHTML = usingSatellite ? icon('map') : icon('layers');
-  btn.title = usingSatellite ? 'הצגת מפת רחובות' : 'הצגת שכבת לוויין';
-}

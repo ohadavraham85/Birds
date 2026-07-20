@@ -34,9 +34,6 @@ export interface Observation {
   deleted: boolean;
   /** Last local modification, ISO. Used for last-write-wins merging. */
   updatedAt: string;
-  /** True once the server has acknowledged this version. */
-  synced?: boolean;
-  demo?: boolean;
 }
 
 /** Master species-list entry (name only; details come from the bundle). */
@@ -76,20 +73,15 @@ export interface SpeciesDetail {
   family: string;
 }
 
-export type SettingsKey =
-  | 'syncServerUrl'
-  | 'syncToken'
-  | 'syncCursor'
-  | 'lastSync'
-  | 'speciesSeedVersion'
-  | 'deviceId';
-
 export interface SettingRow<T = unknown> {
   key: string;
   value: T;
 }
 
-/** A pending mutation waiting to be pushed to the server (outbox pattern). */
+/** A pending mutation, historically drained to a sync server (outbox
+ * pattern) — the table is kept in the Dexie schema so existing installs
+ * don't need a migration, but nothing writes to it anymore now that sync is
+ * Firebase-only (see firebase/firestore-sync.ts). */
 export interface OutboxEntry {
   id: number; // auto-increment
   entity: 'observation' | 'species';
@@ -97,13 +89,4 @@ export interface OutboxEntry {
   op: 'upsert' | 'delete';
   payload: Observation | SpeciesRow;
   createdAt: string;
-}
-
-export type SyncState = 'idle' | 'syncing' | 'offline' | 'error' | 'disabled';
-
-export interface SyncStatus {
-  state: SyncState;
-  pending: number;
-  lastSync: string | null;
-  message?: string;
 }
