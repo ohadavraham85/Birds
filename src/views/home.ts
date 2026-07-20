@@ -8,7 +8,7 @@
 
 import { listObservations, listSpeciesRows } from '../db/repository';
 import { SPECIES_DETAILS } from '../data/species-data';
-import { speciesNames, totalQuantity, entriesOf, entryImages } from '../lib/observation';
+import { speciesNames, speciesLabel, totalQuantity, entriesOf, entryImages } from '../lib/observation';
 import { getImageObjectUrl } from '../lib/media';
 import { escapeHtml } from '../lib/markdown';
 import { fmtDateTime } from '../lib/ui';
@@ -115,6 +115,70 @@ function renderBirdOfDayPhoto(): void {
     const el = document.createElement('img');
     el.src = url;
     el.alt = name;
+    media.appendChild(el);
+  });
+}
+
+/* ---------- On This Day ---------- */
+
+/** The most recent past-year observation whose month/day matches today, if any. */
+function pickOnThisDay(): Observation | null {
+  const today = new Date();
+  const mm = today.getMonth();
+  const dd = today.getDate();
+  const matches = allObservations.filter((o) => {
+    const d = new Date(o.dateTime);
+    return d.getMonth() === mm && d.getDate() === dd && d.getFullYear() < today.getFullYear();
+  });
+  if (!matches.length) return null;
+  matches.sort((a, b) => new Date(b.dateTime).getFullYear() - new Date(a.dateTime).getFullYear());
+  return matches[0]!;
+}
+
+function firstPhotoForObservation(o: Observation): { img: ObservationImage; obsId: string } | null {
+  for (const entry of entriesOf(o)) {
+    const imgs = entryImages(entry);
+    if (imgs.length) return { img: imgs[0]!, obsId: o.id };
+  }
+  return null;
+}
+
+function yearsAgoLabel(dateTime: string): string {
+  const years = new Date().getFullYear() - new Date(dateTime).getFullYear();
+  return years === 1 ? 'לפני שנה' : `לפני ${years} שנים`;
+}
+
+function onThisDayHtml(): string {
+  const obs = pickOnThisDay();
+  if (!obs) return '';
+  const name = speciesLabel(obs) || 'ללא מין';
+  const dateLabel = new Date(obs.dateTime).toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  return `
+    <button type="button" class="otd-card" id="otd-card" data-id="${obs.id}">
+      <div class="otd-media" id="otd-media">${icon('clock', 'otd-fallback-icon')}</div>
+      <div class="otd-info">
+        <span class="otd-eyebrow">${icon('clock')} בתאריך זה בהיסטוריה</span>
+        <span class="otd-when">${yearsAgoLabel(obs.dateTime)}, ${dateLabel}</span>
+        <span class="otd-species">${escapeHtml(name)}</span>
+        ${obs.locationName ? `<span class="otd-location">${escapeHtml(obs.locationName)}</span>` : ''}
+      </div>
+      <span class="otd-chevron">›</span>
+    </button>`;
+}
+
+function renderOnThisDayPhoto(): void {
+  const obs = pickOnThisDay();
+  if (!obs) return;
+  const media = container.querySelector<HTMLElement>('#otd-media');
+  if (!media) return;
+  const photo = firstPhotoForObservation(obs);
+  if (!photo) return;
+  void getImageObjectUrl(photo.img, photo.obsId).then((url) => {
+    if (!url) return;
+    media.innerHTML = '';
+    const el = document.createElement('img');
+    el.src = url;
+    el.alt = '';
     media.appendChild(el);
   });
 }
@@ -372,8 +436,9 @@ function donut(kind: BreakdownKind, rows: [string, number][], unit: string): str
 /* ---------- render + events ---------- */
 
 function render(): void {
-  qs(container, '#home-body').innerHTML = birdOfDayHtml() + rangeBarHtml() + statsHtml(filteredObservations());
+  qs(container, '#home-body').innerHTML = birdOfDayHtml() + onThisDayHtml() + rangeBarHtml() + statsHtml(filteredObservations());
   renderBirdOfDayPhoto();
+  renderOnThisDayPhoto();
 }
 
 function onClick(e: Event): void {
@@ -381,6 +446,9 @@ function onClick(e: Event): void {
 
   const bod = target.closest<HTMLElement>('#bod-card');
   if (bod) { navigate('species', { species: bod.dataset.name! }); return; }
+
+  const otd = target.closest<HTMLElement>('#otd-card');
+  if (otd) { navigate('detail', { viewId: otd.dataset.id! }); return; }
 
   const tile = target.closest<HTMLElement>('[data-tile]');
   if (tile) {

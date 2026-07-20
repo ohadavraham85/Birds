@@ -46,7 +46,11 @@ export function init(el: HTMLElement): void {
 function fbStatusText(s: FirebaseSyncStatus): string {
   if (s.state === 'idle' && s.lastSync) return `הסנכרון לענן הושלם בהצלחה (${fmtDateTime(s.lastSync)})`;
   if (s.state === 'syncing') return 'מסנכרן עם הענן...';
-  if (s.state === 'offline') return 'הסנכרון לענן כשל — מצב אופליין / יש לבדוק חיבור לרשת';
+  if (s.state === 'offline') {
+    return s.pending
+      ? 'יש שינויים מקומיים שטרם עלו לענן — יסתנכרנו אוטומטית כשיחזור החיבור'
+      : 'הסנכרון לענן כשל — מצב אופליין / יש לבדוק חיבור לרשת';
+  }
   if (s.state === 'error') return 'הסנכרון לענן כשל — יש לבדוק חיבור לרשת' + (s.message ? ` (${s.message})` : '');
   return 'לא מוגדר';
 }
@@ -260,7 +264,8 @@ export async function activate(): Promise<void> {
     const el = container.querySelector<HTMLElement>('#s-fb-status');
     if (!el) return;
     el.textContent = fbStatusText(s);
-    el.className = 'settings-status ' + (s.state === 'idle' ? 'ok' : (s.state === 'error' || s.state === 'offline') ? 'err' : '');
+    const isErr = s.state === 'error' || (s.state === 'offline' && !s.pending);
+    el.className = 'settings-status ' + (s.state === 'idle' ? 'ok' : isErr ? 'err' : '');
   });
 }
 
