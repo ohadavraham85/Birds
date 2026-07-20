@@ -176,7 +176,6 @@ export async function activate(): Promise<void> {
   for (const { first, count } of groupByLocation(withCoords)) {
     const marker = L.marker([first.lat!, first.lng!], { icon: birdIcon });
     const label = (first.locationName || 'מיקום ללא שם') + (count > 1 ? ` (${count})` : '');
-    marker.bindTooltip(escapeHtml(label), { permanent: true, direction: 'top', className: 'map-loc-label-sm' });
     const key = groupKey(first);
     marker.on('click', () => openLocationSheet(label, historyFor(key), { lat: first.lat!, lng: first.lng!, locationName: first.locationName }));
     marker.addTo(markersLayer!);
