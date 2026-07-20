@@ -12,6 +12,7 @@ import { qs, input, select } from '../lib/dom';
 import { icon } from '../lib/icons';
 import { viewModeToggleHtml, wireViewModeToggle, syncViewModeToggle, type ViewDisplayMode } from '../lib/view-mode';
 import { navigate } from '../main';
+import type { ViewParams } from './view';
 import type { SpeciesDetail, ObservationImage } from '../types';
 
 type SortMode = 'family' | 'alpha' | 'recent' | 'seen';
@@ -56,6 +57,12 @@ export function init(el: HTMLElement): void {
   input(container, '#sp-new').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); void onAdd(); } });
   qs(container, '#sp-list').addEventListener('click', onListClick);
   qs(container, '#sp-list').addEventListener('change', (e) => void onDescriptionChange(e));
+}
+
+/** Opens a specific species' card directly (e.g. from the home screen's
+ * "Bird of the Day" widget) instead of the default collapsed list. */
+export function setParams(params: ViewParams): void {
+  if (params.species) openKey = params.species;
 }
 
 export async function activate(): Promise<void> {

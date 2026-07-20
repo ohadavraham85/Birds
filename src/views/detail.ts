@@ -19,7 +19,7 @@ export function init(el: HTMLElement): void {
   container = el;
   container.innerHTML = `
     <div class="form-head">
-      <button type="button" class="btn btn-sm" id="detail-back">→ חזרה ליומן</button>
+      <button type="button" class="btn btn-sm" id="detail-back">→ חזרה לבית</button>
       <h2>פרטי תצפית</h2>
     </div>
     <div id="detail-body"></div>
@@ -28,7 +28,7 @@ export function init(el: HTMLElement): void {
       <button class="btn" id="detail-pdf">${icon('document')} ייצוא PDF</button>
     </div>
   `;
-  qs(container, '#detail-back').addEventListener('click', () => navigate('cards'));
+  qs(container, '#detail-back').addEventListener('click', () => navigate('home'));
   qs(container, '#detail-edit').addEventListener('click', () => {
     if (current) navigate('form', { editId: current.id });
   });

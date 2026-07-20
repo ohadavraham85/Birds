@@ -17,6 +17,7 @@ import type { SyncStatus } from './types';
 
 initTheme();
 
+import * as homeView from './views/home';
 import * as formView from './views/form';
 import * as mapView from './views/map';
 import * as tableView from './views/table';
@@ -25,9 +26,9 @@ import * as detailView from './views/detail';
 import * as speciesView from './views/species';
 import * as calendarView from './views/calendar';
 import * as settingsView from './views/settings';
-import * as statsView from './views/stats';
 
 const VIEWS: Record<string, View> = {
+  home: homeView,
   form: formView,
   map: mapView,
   table: tableView,
@@ -36,16 +37,19 @@ const VIEWS: Record<string, View> = {
   species: speciesView,
   calendar: calendarView,
   settings: settingsView,
-  stats: statsView,
 };
 
 /** Views reachable from the bottom tab bar (order matters). */
-const TAB_VIEWS = ['cards', 'calendar', 'map', 'species'];
+const TAB_VIEWS = ['home', 'cards', 'calendar', 'map', 'species'];
+
+/** The universal "root" screen: default landing view, and where the generic
+ * top-bar back button and other screens' explicit back actions return to. */
+const HOME_VIEW = 'home';
 
 let currentView: string | null = null;
 
 async function showView(name: string): Promise<void> {
-  if (!VIEWS[name]) name = 'cards';
+  if (!VIEWS[name]) name = HOME_VIEW;
   currentView = name;
   for (const key of Object.keys(VIEWS)) {
     document.getElementById(`view-${key}`)!.hidden = key !== name;
@@ -63,10 +67,10 @@ function updateChrome(name: string): void {
   const isTab = TAB_VIEWS.includes(name);
   const action = document.getElementById('nav-action')!;
   action.textContent = isTab ? '⋯' : '→';
-  action.title = isTab ? 'תפריט' : 'חזרה ליומן';
+  action.title = isTab ? 'תפריט' : 'חזרה לבית';
   if (!isTab) document.getElementById('topbar-menu-list')!.hidden = true;
   const fab = document.getElementById('fab') as HTMLElement;
-  fab.hidden = name !== 'cards';
+  fab.hidden = name !== 'cards' && name !== HOME_VIEW;
 }
 
 export function navigate(name: string, params?: ViewParams): void {
@@ -83,7 +87,7 @@ function setupNav(): void {
   const menuList = document.getElementById('topbar-menu-list')!;
   document.getElementById('nav-action')!.addEventListener('click', () => {
     if (TAB_VIEWS.includes(currentView || '')) { menuList.hidden = !menuList.hidden; }
-    else navigate('cards');
+    else navigate(HOME_VIEW);
   });
   menuList.querySelectorAll<HTMLElement>('button[data-view]').forEach((btn) => {
     btn.addEventListener('click', () => { menuList.hidden = true; navigate(btn.dataset.view!); });
@@ -93,7 +97,7 @@ function setupNav(): void {
   });
 
   document.getElementById('fab')!.addEventListener('click', () => navigate('form'));
-  window.addEventListener('hashchange', () => void showView(location.hash.replace('#', '') || 'cards'));
+  window.addEventListener('hashchange', () => void showView(location.hash.replace('#', '') || HOME_VIEW));
 }
 
 function setupStatusIndicator(): void {
@@ -141,7 +145,7 @@ async function init(): Promise<void> {
     refreshTimer = setTimeout(() => { if (currentView) void VIEWS[currentView]!.activate(); }, 150);
   });
 
-  await showView(location.hash.replace('#', '') || 'cards');
+  await showView(location.hash.replace('#', '') || HOME_VIEW);
 }
 
 void init().catch((err: unknown) => {

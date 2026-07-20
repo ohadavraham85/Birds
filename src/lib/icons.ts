@@ -6,6 +6,7 @@
 const PATHS = {
   logo: '<circle cx="7.5" cy="12" r="4.2"/><circle cx="16.5" cy="12" r="4.2"/><path d="M11.2 12h1.6"/><circle cx="7.5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="16.5" cy="12" r="1.4" fill="currentColor" stroke="none"/>',
   journal: '<path d="M4 5.5c2-1 5-1 8 0v13c-3-1-6-1-8 0v-13Z"/><path d="M20 5.5c-2-1-5-1-8 0v13c3-1 6-1 8 0v-13Z"/>',
+  home: '<path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9h12v-9"/><path d="M10 19v-5h4v5"/>',
   calendar: '<rect x="3.5" y="5" width="17" height="15" rx="2.2"/><path d="M8 3v4M16 3v4M3.5 10h17"/>',
   map: '<path d="M9 4 3.5 6v14L9 18l6 2 5.5-2V4L15 6 9 4Z"/><path d="M9 4v14M15 6v14"/>',
   bird: '<path d="M4 15c1.5 2 4 3 7 2.5"/><path d="M4 15c2-6 8-10 15-9-1 1.6-1.9 2.6-3.4 3.2 1 .4 1.8 1 2.4 1.8-3 .4-5 1.6-6.3 3.6-.8 1.2-1.2 2.6-1.2 4.4"/><circle cx="17.3" cy="7.6" r=".8" fill="currentColor" stroke="none"/>',

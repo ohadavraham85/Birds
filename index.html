@@ -28,7 +28,6 @@
         <button id="nav-action" class="topbar-btn" title="תפריט" aria-label="תפריט">⋯</button>
         <div class="topbar-menu-list" id="topbar-menu-list" hidden>
           <button data-view="table"><span class="icon" data-icon="list"></span> רשימה</button>
-          <button data-view="stats"><span class="icon" data-icon="chart"></span> סטטיסטיקה</button>
           <button data-view="settings"><span class="icon" data-icon="gear"></span> הגדרות</button>
         </div>
       </div>
@@ -36,6 +35,7 @@
   </header>
 
   <main id="main">
+    <section id="view-home" class="view" hidden></section>
     <section id="view-form" class="view" hidden></section>
     <section id="view-map" class="view view-flush" hidden></section>
     <section id="view-table" class="view" hidden></section>
@@ -44,12 +44,12 @@
     <section id="view-species" class="view" hidden></section>
     <section id="view-calendar" class="view" hidden></section>
     <section id="view-settings" class="view" hidden></section>
-    <section id="view-stats" class="view" hidden></section>
   </main>
 
   <button id="fab" class="fab" title="הוספת תצפית" aria-label="הוספת תצפית" hidden><span class="icon icon-lg" data-icon="plus"></span></button>
 
   <nav class="tabbar" aria-label="ניווט ראשי">
+    <button data-view="home" class="tab"><span class="tab-icon" data-icon="home"></span><span>בית</span></button>
     <button data-view="cards" class="tab"><span class="tab-icon" data-icon="journal"></span><span>יומן</span></button>
     <button data-view="calendar" class="tab"><span class="tab-icon" data-icon="calendar"></span><span>לוח שנה</span></button>
     <button data-view="map" class="tab"><span class="tab-icon" data-icon="map"></span><span>מפה</span></button>

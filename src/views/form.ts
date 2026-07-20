@@ -37,7 +37,7 @@ export function init(el: HTMLElement): void {
   container = el;
   container.innerHTML = `
     <div class="form-head">
-      <button type="button" class="btn btn-sm" id="back-btn">→ חזרה ליומן</button>
+      <button type="button" class="btn btn-sm" id="back-btn">→ חזרה לבית</button>
       <h2 id="form-title">תצפית חדשה</h2>
     </div>
     <form id="obs-form" autocomplete="off">
@@ -96,7 +96,7 @@ export function init(el: HTMLElement): void {
   });
   qs(container, '#pick-map-btn').addEventListener('click', () => void openPicker());
   qs(container, '#add-species-row').addEventListener('click', () => addSpeciesRow({ species: '', quantity: 1 }, true));
-  qs(container, '#back-btn').addEventListener('click', () => navigate('cards'));
+  qs(container, '#back-btn').addEventListener('click', () => navigate('home'));
   qs<HTMLFormElement>(container, '#obs-form').addEventListener('submit', (e) => void onSave(e));
 }
 
