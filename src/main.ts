@@ -153,21 +153,43 @@ function setupNav(): void {
   });
 }
 
-const SYNC_LABEL: Record<FirebaseSyncStatus['state'], string> = {
-  disabled: '', syncing: 'מסנכרן...', offline: 'לא מקוון', idle: 'מסונכרן', error: 'שגיאת סנכרון',
-};
-const SYNC_ICON: Record<FirebaseSyncStatus['state'], IconName | null> = {
-  disabled: null, syncing: 'refresh', offline: 'wifiOff', idle: 'check', error: 'alert',
-};
+/** Maps a status to what the topbar pill shows. The spinner only appears
+ * while `syncing` (a local write is actively being pushed and we're online);
+ * `idle` is a quiet, static "synced" icon — it does not auto-hide. Offline
+ * with queued-but-unsent changes gets a small badge dot instead of a spin,
+ * since nothing is actually being transmitted while offline. */
+function syncPillContent(s: FirebaseSyncStatus): { icon: IconName | null; label: string; badge: boolean } {
+  if (s.state === 'disabled') return { icon: null, label: '', badge: false };
+  if (s.state === 'syncing') return { icon: 'refresh', label: 'מסנכרן...', badge: false };
+  if (s.state === 'offline') {
+    return s.pending
+      ? { icon: 'wifiOff', label: 'שינויים ממתינים', badge: true }
+      : { icon: 'wifiOff', label: 'לא מקוון', badge: false };
+  }
+  if (s.state === 'error') return { icon: 'alert', label: 'שגיאת סנכרון', badge: false };
+  return { icon: 'check', label: 'מסונכרן', badge: false };
+}
 
-/** Topbar sync pill, driven by the Firebase sync engine: a spinning icon
- * while actively pushing/pulling, an offline icon with no network, and a
- * brief success flash that fades out once idle (hidden entirely when no
- * Firebase household code is configured). */
+/** Live-updating date/time under the (fixed) app title in the top bar. */
+function formatClock(d: Date): string {
+  const weekday = d.toLocaleDateString('he-IL', { weekday: 'long' });
+  const pad = (n: number): string => String(n).padStart(2, '0');
+  const date = `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+  const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return `${weekday}, ${date} | ${time}`;
+}
+
+function setupClock(): void {
+  const el = document.getElementById('topbar-datetime');
+  if (!el) return;
+  const tick = (): void => { el.textContent = formatClock(new Date()); };
+  tick();
+  setInterval(tick, 1000);
+}
+
 function setupStatusIndicator(): void {
   const dot = qs(document.body, '#net-status');
   const pill = qs(document.body, '#sync-pill');
-  let hideTimer: ReturnType<typeof setTimeout> | undefined;
 
   const paintNet = (): void => {
     dot.classList.toggle('offline', !navigator.onLine);
@@ -178,13 +200,11 @@ function setupStatusIndicator(): void {
   paintNet();
 
   onFirebaseSyncStatus((s) => {
-    clearTimeout(hideTimer);
-    const iconName = SYNC_ICON[s.state];
-    pill.innerHTML = iconName ? icon(iconName) + ` <span>${SYNC_LABEL[s.state]}</span>` : '';
-    pill.title = s.message || SYNC_LABEL[s.state];
+    const { icon: iconName, label, badge } = syncPillContent(s);
+    pill.innerHTML = iconName ? icon(iconName) + ` <span>${label}</span>` + (badge ? '<span class="sync-pill-dot"></span>' : '') : '';
+    pill.title = s.message || label;
     pill.hidden = s.state === 'disabled';
     pill.className = 'sync-pill ' + s.state;
-    if (s.state === 'idle') hideTimer = setTimeout(() => { pill.hidden = true; }, 2500);
   });
 }
 
@@ -197,6 +217,7 @@ async function init(): Promise<void> {
   }
   setupNav();
   setupStatusIndicator();
+  setupClock();
 
   // register the Workbox service worker (auto-updates on new deploys)
   registerSW({ immediate: true });

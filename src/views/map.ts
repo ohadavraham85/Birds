@@ -103,9 +103,16 @@ async function onLayerCheckboxChange(e: Event): Promise<void> {
   applyLayerState();
 }
 
+/** Fixed default extent covering all of Israel's territory — the map always
+ * opens here rather than auto-fitting to wherever the user's own pins
+ * happen to be, so its initial view stays predictable regardless of what's
+ * been logged so far. */
+const ISRAEL_BOUNDS: [[number, number], [number, number]] = [[29.4, 34.2], [33.4, 35.95]];
+
 function ensureMap(): void {
   if (map) return;
-  map = L.map('map-container', { zoomControl: true }).setView([31.5, 35.0], 8);
+  map = L.map('map-container', { zoomControl: true });
+  map.fitBounds(ISRAEL_BOUNDS);
   streetLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '&copy; OpenStreetMap',
@@ -232,16 +239,13 @@ export async function activate(): Promise<void> {
   const withCoords = allObservations.filter((o) => o.lat != null && o.lng != null);
   qsEmpty(withCoords.length === 0);
 
-  const bounds: [number, number][] = [];
   for (const { first, count } of groupByLocation(withCoords)) {
     const marker = L.marker([first.lat!, first.lng!], { icon: birdIcon });
     const label = (first.locationName || 'מיקום ללא שם') + (count > 1 ? ` (${count})` : '');
     const key = groupKey(first);
     marker.on('click', () => openLocationSheet(label, historyFor(key), { lat: first.lat!, lng: first.lng!, locationName: first.locationName }));
     marker.addTo(markersLayer!);
-    bounds.push([first.lat!, first.lng!]);
   }
-  if (bounds.length) map!.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
 }
 
 /* ---------- GPS "my location" ---------- */

@@ -7,7 +7,7 @@
  * rest of the app. */
 
 import {
-  collection, doc, setDoc, onSnapshot, type Unsubscribe,
+  collection, doc, setDoc, onSnapshot, type Unsubscribe, type QuerySnapshot, type DocumentData,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { firebaseDb, firebaseStorage } from './app';
@@ -31,12 +31,21 @@ let activeCode: string | null = null;
 let unsubs: Unsubscribe[] = [];
 let stopMutationListener: (() => void) | null = null;
 
-/* ---------- real-time sync status, for the topbar indicator and Settings ---------- */
+/* ---------- real-time sync status, for the topbar indicator and Settings ----------
+ * Driven by Firestore's own `metadata.hasPendingWrites` (set on each of the
+ * three collection listeners below via includeMetadataChanges), not by our
+ * own push calls — with the persistent offline cache enabled, setDoc()
+ * resolves as soon as the write lands in the local cache, so timing our own
+ * calls would report "synced" even while genuinely offline. `pending` means
+ * there is at least one local write not yet acknowledged by the server:
+ * combined with connectivity, that's what tells the topbar whether to spin
+ * (actively flushing), show a quiet "pending" badge (queued, offline), or
+ * just sit at a static "synced" icon. */
 
 export type FirebaseSyncState = 'disabled' | 'offline' | 'syncing' | 'idle' | 'error';
-export interface FirebaseSyncStatus { state: FirebaseSyncState; lastSync: string | null; message?: string }
+export interface FirebaseSyncStatus { state: FirebaseSyncState; pending: boolean; lastSync: string | null; message?: string }
 
-let status: FirebaseSyncStatus = { state: 'disabled', lastSync: null };
+let status: FirebaseSyncStatus = { state: 'disabled', pending: false, lastSync: null };
 const statusListeners = new Set<(s: FirebaseSyncStatus) => void>();
 
 function setStatus(patch: Partial<FirebaseSyncStatus>): void {
@@ -54,8 +63,21 @@ export function getFirebaseSyncStatus(): FirebaseSyncStatus {
   return status;
 }
 
-window.addEventListener('online', () => { if (activeCode) setStatus({ state: 'syncing' }); });
-window.addEventListener('offline', () => { if (activeCode) setStatus({ state: 'offline' }); });
+let pendingObs = false;
+let pendingSpecies = false;
+let pendingLocations = false;
+
+/** Recomputes the derived state from the last-known pending-writes flags and
+ * live connectivity — called whenever either changes. */
+function recomputeStatus(): void {
+  if (!activeCode) { setStatus({ state: 'disabled', pending: false }); return; }
+  const pending = pendingObs || pendingSpecies || pendingLocations;
+  if (!navigator.onLine) { setStatus({ state: 'offline', pending }); return; }
+  setStatus({ state: pending ? 'syncing' : 'idle', pending, lastSync: pending ? status.lastSync : new Date().toISOString() });
+}
+
+window.addEventListener('online', recomputeStatus);
+window.addEventListener('offline', recomputeStatus);
 
 /** Reentrant guard: while >0, our own writes (initial seed push, remote
  * merges, media-URL patch-ups) must not bounce back out through the
@@ -102,22 +124,26 @@ export function stopFirebaseSync(): void {
   stopMutationListener?.();
   stopMutationListener = null;
   activeCode = null;
-  setStatus({ state: 'disabled', message: undefined });
+  pendingObs = pendingSpecies = pendingLocations = false;
+  setStatus({ state: 'disabled', pending: false, message: undefined });
 }
 
 async function startFirebaseSync(code: string): Promise<void> {
   activeCode = code;
   const db = firebaseDb();
-  setStatus({ state: navigator.onLine ? 'syncing' : 'offline', message: undefined });
 
   // One-time initial full push per code — anything created locally before
   // Firebase was configured (or while offline) needs to reach the cloud too.
   // Remote listeners below bring in whatever the *other* device already has.
   // Only runs once (not on every app boot) to stay well within Firestore's
   // free-tier write quota; ongoing changes are pushed live via onMutation.
+  // This is the one phase we mark 'syncing' explicitly — the metadata-driven
+  // listeners below aren't attached yet to observe it themselves.
   const seedFlagKey = `firebaseSeeded_${code}`;
-  try {
-    if (!(await getSetting<boolean>(seedFlagKey, false))) {
+  const isFirstSeed = !(await getSetting<boolean>(seedFlagKey, false));
+  if (isFirstSeed) {
+    setStatus({ state: navigator.onLine ? 'syncing' : 'offline', pending: true, message: undefined });
+    try {
       await withSuppressedPush(async () => {
         for (const o of await listObservationsRaw()) await pushDoc('observations', o.id, o);
         for (const s of await listSpeciesRows()) await pushDoc('species', s.name, s);
@@ -130,32 +156,37 @@ async function startFirebaseSync(code: string): Promise<void> {
         }
       });
       await setSetting(seedFlagKey, true);
+    } catch (err) {
+      setStatus({ state: 'error', message: (err as Error).message });
     }
-    setStatus({ state: 'idle', lastSync: new Date().toISOString() });
-  } catch (err) {
-    setStatus({ state: 'error', message: (err as Error).message });
   }
 
   const onSnapError = (err: Error): void => {
     setStatus({ state: navigator.onLine ? 'error' : 'offline', message: err.message });
   };
-  unsubs.push(onSnapshot(collection(db, 'households', code, 'observations'), (snap) => {
+  unsubs.push(onSnapshot(collection(db, 'households', code, 'observations'), { includeMetadataChanges: true }, (snap: QuerySnapshot<DocumentData>) => {
+    pendingObs = snap.metadata.hasPendingWrites;
     snap.docChanges().forEach((change) => {
       if (change.type === 'removed') return;
       void mergeRemoteObservation(change.doc.data() as Observation);
     });
+    recomputeStatus();
   }, onSnapError));
-  unsubs.push(onSnapshot(collection(db, 'households', code, 'species'), (snap) => {
+  unsubs.push(onSnapshot(collection(db, 'households', code, 'species'), { includeMetadataChanges: true }, (snap: QuerySnapshot<DocumentData>) => {
+    pendingSpecies = snap.metadata.hasPendingWrites;
     snap.docChanges().forEach((change) => {
       if (change.type === 'removed') return;
       void mergeRemoteSpecies(change.doc.data() as SpeciesRow);
     });
+    recomputeStatus();
   }, onSnapError));
-  unsubs.push(onSnapshot(collection(db, 'households', code, 'locations'), (snap) => {
+  unsubs.push(onSnapshot(collection(db, 'households', code, 'locations'), { includeMetadataChanges: true }, (snap: QuerySnapshot<DocumentData>) => {
+    pendingLocations = snap.metadata.hasPendingWrites;
     snap.docChanges().forEach((change) => {
       if (change.type === 'removed') return;
       void mergeRemoteLocation(change.doc.data() as LocationRow);
     });
+    recomputeStatus();
   }, onSnapError));
 
   stopMutationListener = onMutation((entity, id, op, payload) => {
@@ -165,13 +196,11 @@ async function startFirebaseSync(code: string): Promise<void> {
 }
 
 async function handleLocalMutation(entity: MutationEntity, id: string, _op: MutationOp, payload: unknown): Promise<void> {
-  setStatus({ state: navigator.onLine ? 'syncing' : 'offline' });
   try {
     await pushDoc(COLLECTION_BY_ENTITY[entity], id, payload);
     if (entity === 'observation') {
       try { await pushObservationMedia(payload as Observation); } catch (err) { console.warn('Firebase: photo sync skipped', err); }
     }
-    setStatus({ state: 'idle', lastSync: new Date().toISOString() });
   } catch (err) {
     setStatus({ state: navigator.onLine ? 'error' : 'offline', message: (err as Error).message });
   }
