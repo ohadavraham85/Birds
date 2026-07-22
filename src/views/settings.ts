@@ -9,6 +9,11 @@ import {
 } from '../db/repository';
 import type { DuplicateGroup } from '../db/repository';
 import { getFirebaseSyncCode, configureFirebaseSync, onFirebaseSyncStatus, type FirebaseSyncStatus } from '../firebase/firestore-sync';
+import {
+  notificationsSupported, permissionState, requestPermission,
+  isEnabled, setEnabled, isMigrationEnabled, setMigrationEnabled, isOnThisDayEnabled, setOnThisDayEnabled,
+  checkAndNotify,
+} from '../lib/notifications';
 import { pickLocation } from '../lib/location-picker';
 import { toast, confirmDialog, fmtDateTime } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
@@ -60,6 +65,12 @@ export async function activate(): Promise<void> {
   const fbCode = await getFirebaseSyncCode();
   let version = '';
   try { version = (await (await fetch('version.json')).json()).version; } catch { /* dev */ }
+
+  const notifSupported = notificationsSupported();
+  const notifPermission = permissionState();
+  const notifEnabled = await isEnabled();
+  const notifMigration = await isMigrationEnabled();
+  const notifOnThisDay = await isOnThisDayEnabled();
 
   const activeTheme = currentTheme();
   const activeAccent = currentAccent();
@@ -145,6 +156,34 @@ export async function activate(): Promise<void> {
     </div>
 
     <div class="settings-card">
+      <h3>${icon('bell')} התראות</h3>
+      ${!notifSupported ? `
+        <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
+          הדפדפן או המכשיר הזה אינו תומך בהתראות.
+        </p>` : `
+        <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
+          התראות מקומיות בלבד — נבדקות ומוצגות רק כשהאפליקציה נפתחת במכשיר זה,
+          ללא שרת דחיפה מרוחק. ההגדרה נשמרת במכשיר זה בלבד ואינה מסתנכרנת.
+        </p>
+        <label class="notif-toggle-row">
+          <span>הפעלת התראות</span>
+          <input type="checkbox" id="s-notif-enabled" ${notifEnabled && notifPermission === 'granted' ? 'checked' : ''}>
+        </label>
+        ${notifPermission === 'denied' ? `
+          <p class="settings-status err">החסימה נעשתה ברמת הדפדפן — יש לאשר התראות עבור האתר בהגדרות הדפדפן/המכשיר ולרענן.</p>` : ''}
+        <div id="s-notif-sub" ${notifEnabled && notifPermission === 'granted' ? '' : 'hidden'}>
+          <label class="notif-toggle-row">
+            <span>תזכורות עונות נדידה</span>
+            <input type="checkbox" id="s-notif-migration" ${notifMigration ? 'checked' : ''}>
+          </label>
+          <label class="notif-toggle-row">
+            <span>תזכורות "בתאריך הזה" (תצפיות משנים קודמות)</span>
+            <input type="checkbox" id="s-notif-on-this-day" ${notifOnThisDay ? 'checked' : ''}>
+          </label>
+        </div>`}
+    </div>
+
+    <div class="settings-card">
       <h3>${icon('save')} גיבוי ושחזור</h3>
       <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
         קובץ גיבוי יחיד (כולל תמונות באיכות מקור). ניתן לשחזור בכל מכשיר.
@@ -227,6 +266,15 @@ export async function activate(): Promise<void> {
   qs(container, '#s-font-size-picker').addEventListener('click', onFontSizePick);
   qs(container, '#s-font-weight-picker').addEventListener('click', onFontWeightPick);
   qs(container, '#s-fb-save').addEventListener('click', () => void onSaveFirebaseSync());
+  if (notifSupported) {
+    container.querySelector('#s-notif-enabled')?.addEventListener('change', (e) => void onNotifEnabledChange(e));
+    container.querySelector('#s-notif-migration')?.addEventListener('change', (e) => {
+      void setMigrationEnabled((e.target as HTMLInputElement).checked);
+    });
+    container.querySelector('#s-notif-on-this-day')?.addEventListener('change', (e) => {
+      void setOnThisDayEnabled((e.target as HTMLInputElement).checked);
+    });
+  }
   qs(container, '#s-backup').addEventListener('click', () => void onBackup());
   input(container, '#s-restore').addEventListener('change', (e) => void onRestore(e));
   input(container, '#s-photo-import-input').addEventListener('change', (e) => void onPhotoImportFilesChosen(e));
@@ -544,6 +592,31 @@ async function onSaveFirebaseSync(): Promise<void> {
   } finally {
     btn.disabled = false;
   }
+}
+
+/* ---------- notifications ---------- */
+
+async function onNotifEnabledChange(e: Event): Promise<void> {
+  const checkbox = e.target as HTMLInputElement;
+  const subSection = container.querySelector<HTMLElement>('#s-notif-sub');
+  if (!checkbox.checked) {
+    await setEnabled(false);
+    if (subSection) subSection.hidden = true;
+    return;
+  }
+  const result = await requestPermission();
+  if (result !== 'granted') {
+    checkbox.checked = false;
+    await setEnabled(false);
+    if (result === 'denied') {
+      toast('הדפדפן חסם התראות עבור האתר — יש לאשר בהגדרות הדפדפן/המכשיר', true, 6000);
+    }
+    return;
+  }
+  await setEnabled(true);
+  if (subSection) subSection.hidden = false;
+  toast('התראות מקומיות הופעלו');
+  void checkAndNotify(await listObservations());
 }
 
 /* ---------- backup / restore ---------- */

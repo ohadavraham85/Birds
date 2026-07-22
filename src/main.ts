@@ -4,13 +4,14 @@
 import './styles/app.css';
 import { registerSW } from 'virtual:pwa-register';
 
-import { seedSpeciesIfEmpty, onDataChanged } from './db/repository';
+import { seedSpeciesIfEmpty, onDataChanged, listObservations } from './db/repository';
 import { SPECIES_SEED, SPECIES_SEED_VERSION } from './data/species-seed';
 import { toast } from './lib/ui';
 import { qs } from './lib/dom';
 import { initTheme } from './lib/theme';
 import { hydrateIcons, icon, type IconName } from './lib/icons';
 import { initFirebaseSyncFromSettings, onFirebaseSyncStatus, type FirebaseSyncStatus } from './firebase/firestore-sync';
+import { checkAndNotify } from './lib/notifications';
 import type { View, ViewParams } from './views/view';
 
 initTheme();
@@ -223,6 +224,7 @@ async function init(): Promise<void> {
   registerSW({ immediate: true });
 
   await initFirebaseSyncFromSettings();
+  void checkAndNotify(await listObservations());
 
   // when a sync pulls remote changes, refresh whatever screen is open
   let refreshTimer: ReturnType<typeof setTimeout> | undefined;

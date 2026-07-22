@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 /* sw.ts — Workbox service worker (injectManifest).
  * Precaches the app shell for offline use, runtime-caches OSM map tiles,
- * and on a Background Sync event wakes any open client to run a sync. */
+ * and focuses/opens the app when a local notification is tapped. */
 
 import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';
 import { registerRoute } from 'workbox-routing';
@@ -30,13 +30,18 @@ registerRoute(
   }),
 );
 
-// Background Sync: when connectivity returns, wake clients to flush the outbox.
-self.addEventListener('sync', (event: Event) => {
-  const e = event as Event & { tag: string; waitUntil(p: Promise<unknown>): void };
-  if (e.tag === 'birds-sync') e.waitUntil(notifyClients());
+// Tapping a local notification focuses an already-open tab if there is one,
+// otherwise opens a fresh one at the app root.
+self.addEventListener('notificationclick', (event: Event) => {
+  const e = event as Event & { notification: { close(): void }; waitUntil(p: Promise<unknown>): void };
+  e.notification.close();
+  e.waitUntil(focusOrOpen());
 });
 
-async function notifyClients(): Promise<void> {
+async function focusOrOpen(): Promise<void> {
   const clients = await self.clients.matchAll({ includeUncontrolled: true, type: 'window' });
-  for (const c of clients) c.postMessage({ type: 'sync-now' });
+  for (const c of clients) {
+    if ('focus' in c) { await (c as WindowClient).focus(); return; }
+  }
+  await self.clients.openWindow('/');
 }
