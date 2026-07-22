@@ -314,7 +314,7 @@ function statsHtml(observations: Observation[]): string {
   const projects = [...projectCounts.entries()].sort((a, b) => b[1] - a[1]);
   const projectsChart = breakdownChart('project', 'פילוח לפי פרויקט', projects, 'תצפיות');
 
-  return tilesHtml + yearChart + speciesChart + goalsHtml() + locationsChart + projectsChart;
+  return tilesHtml + yearChart + goalsHtml() + speciesChart + familyChartHtml(observations) + locationsChart + projectsChart;
 }
 
 function yearCardHead(title: string): string {
@@ -378,6 +378,13 @@ function yearChartLine(rows: [string, number][]): string {
  * season naturally carries a bigger share of the year's observations). */
 const ANNUAL_GOAL = 200;
 
+/** Fixed pass/fail semantics for goal charts — deliberately not the
+ * qualitative PALETTE, so "met" always reads as green and "missed" as red
+ * regardless of which month/slice it is. */
+const GOAL_COLORS = { met: '#2f9e44', missed: '#e03131', upcoming: '#ced4da' } as const;
+
+let goalsViewMode: 'yearly' | 'monthly' = 'yearly';
+
 interface GoalsData {
   busiestYear: number;
   busiestYearTotal: number;
@@ -387,6 +394,9 @@ interface GoalsData {
   currentYear: number;
   currentYearTotal: number;
   currentYearMonthly: number[];
+  /** Index (0=Jan..11=Dec) of the current calendar month — months after this
+   * one haven't happened yet this year and can't be scored met/missed. */
+  currentMonth: number;
 }
 
 function computeGoals(): GoalsData | null {
@@ -404,7 +414,8 @@ function computeGoals(): GoalsData | null {
   }
 
   const monthlyGoals = new Array(12).fill(0) as number[];
-  const currentYear = new Date().getFullYear();
+  const now = new Date();
+  const currentYear = now.getFullYear();
   const currentYearMonthly = new Array(12).fill(0) as number[];
   let currentYearTotal = 0;
   for (const o of allObservations) {
@@ -413,7 +424,17 @@ function computeGoals(): GoalsData | null {
     if (d.getFullYear() === currentYear) { currentYearMonthly[d.getMonth()]!++; currentYearTotal++; }
   }
 
-  return { busiestYear, busiestYearTotal, monthlyGoals, currentYear, currentYearTotal, currentYearMonthly };
+  return { busiestYear, busiestYearTotal, monthlyGoals, currentYear, currentYearTotal, currentYearMonthly, currentMonth: now.getMonth() };
+}
+
+/** Per-month pass/fail against that month's historical-pace goal — months
+ * that haven't happened yet this year, or that never had a target in the
+ * reference year, are neither met nor missed. */
+function monthStatus(g: GoalsData, i: number): 'met' | 'missed' | 'upcoming' {
+  if (i > g.currentMonth) return 'upcoming';
+  const goal = g.monthlyGoals[i]!;
+  if (goal === 0) return 'upcoming';
+  return g.currentYearMonthly[i]! >= goal ? 'met' : 'missed';
 }
 
 function goalsHtml(): string {
@@ -427,19 +448,20 @@ function goalsHtml(): string {
     const pct = total ? (n / total) * 100 : 0;
     const offset = -running;
     running += pct;
-    return `<circle class="stat-donut-seg" cx="21" cy="21" r="${R}" fill="none" stroke="${colorFor(i)}" stroke-width="7.5"
-      stroke-dasharray="${pct.toFixed(2)} ${(100 - pct).toFixed(2)}" stroke-dashoffset="${offset.toFixed(2)}"><title>${escapeHtml(MONTH_NAMES[i]!)}: יעד ${n}</title></circle>`;
+    const status = monthStatus(g, i);
+    return `<circle class="stat-donut-seg" cx="21" cy="21" r="${R}" fill="none" stroke="${GOAL_COLORS[status]}" stroke-width="7.5"
+      stroke-dasharray="${pct.toFixed(2)} ${(100 - pct).toFixed(2)}" stroke-dashoffset="${offset.toFixed(2)}"><title>${escapeHtml(MONTH_NAMES[i]!)}: יעד ${n}, בפועל ${g.currentYearMonthly[i]}</title></circle>`;
   }).join('');
 
   const legend = MONTH_NAMES.map((name, i) => {
     const goal = g.monthlyGoals[i]!;
     const actual = g.currentYearMonthly[i]!;
-    const met = goal > 0 && actual >= goal;
+    const status = monthStatus(g, i);
     return `
-      <div class="goal-legend-row${met ? ' goal-met' : ''}">
-        <span class="stat-donut-dot" style="background:${colorFor(i)}"></span>
+      <div class="goal-legend-row goal-${status}">
+        <span class="stat-donut-dot" style="background:${GOAL_COLORS[status]}"></span>
         <span class="goal-legend-label">${escapeHtml(name)}</span>
-        <span class="goal-legend-value">${actual} / ${goal}</span>
+        <span class="goal-legend-value" dir="ltr">${actual} / ${goal}</span>
       </div>`;
   }).join('');
 
@@ -460,7 +482,144 @@ function goalsHtml(): string {
           ${legend}
         </div>
       </div>
-      <p class="goal-progress">התקדמות ${g.currentYear}: ${g.currentYearTotal} / ${ANNUAL_GOAL} תצפיות</p>
+      <p class="goal-progress">התקדמות ${g.currentYear}: <span dir="ltr">${g.currentYearTotal} / ${ANNUAL_GOAL}</span> תצפיות</p>
+      ${attainmentHtml(g)}
+    </div>`;
+}
+
+/** Small secondary donut: how many (elapsed) months hit their monthly goal
+ * vs missed it. Toggles between a whole-year tally and a close-up of just
+ * the current month's own progress. */
+function attainmentHtml(g: GoalsData): string {
+  const R = 12;
+  const toggleBtn = `<button type="button" class="btn btn-icon" data-toggle="goalsView" title="החלפת תצוגה שנתית/חודשית" aria-label="החלפת תצוגה שנתית/חודשית">${icon('calendar')}</button>`;
+
+  if (goalsViewMode === 'monthly') {
+    const i = g.currentMonth;
+    const goal = g.monthlyGoals[i]!;
+    const actual = g.currentYearMonthly[i]!;
+    if (!goal) {
+      return `
+        <div class="stat-card goal-attainment-card">
+          <div class="stat-card-head"><h4>עמידה ביעד — ${escapeHtml(MONTH_NAMES[i]!)}</h4>${toggleBtn}</div>
+          <p class="goal-sub">לחודש זה אין יעד (לא נצפו תצפיות בחודש זה בשנה הפעילה ביותר).</p>
+        </div>`;
+    }
+    const pct = Math.min(100, (actual / goal) * 100);
+    const met = actual >= goal;
+    const color = met ? GOAL_COLORS.met : GOAL_COLORS.missed;
+    return `
+      <div class="stat-card goal-attainment-card">
+        <div class="stat-card-head"><h4>עמידה ביעד — ${escapeHtml(MONTH_NAMES[i]!)}</h4>${toggleBtn}</div>
+        <div class="stat-donut-wrap">
+          <svg viewBox="0 0 42 42" class="stat-donut stat-donut-sm" role="img" aria-label="עמידה ביעד החודש">
+            <g transform="rotate(-90 21 21)">
+              <circle cx="21" cy="21" r="${R}" fill="none" stroke="var(--accent-50)" stroke-width="6"></circle>
+              <circle cx="21" cy="21" r="${R}" fill="none" stroke="${color}" stroke-width="6"
+                stroke-dasharray="${pct.toFixed(2)} ${(100 - pct).toFixed(2)}"><title>${actual} / ${goal}</title></circle>
+            </g>
+            <text x="21" y="23" text-anchor="middle" direction="ltr" font-size="7" font-weight="700" fill="var(--accent-900)">${actual}/${goal}</text>
+          </svg>
+          <div class="stat-donut-legend">
+            <div class="goal-legend-row goal-${met ? 'met' : 'missed'}">
+              <span class="stat-donut-dot" style="background:${color}"></span>
+              <span class="goal-legend-label">${met ? 'עומד ביעד החודש' : 'מתחת ליעד החודש'}</span>
+              <span class="goal-legend-value" dir="ltr">${actual} / ${goal}</span>
+            </div>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  const statuses = Array.from({ length: 12 }, (_, i) => monthStatus(g, i));
+  const met = statuses.filter((s) => s === 'met').length;
+  const missed = statuses.filter((s) => s === 'missed').length;
+  const total = met + missed;
+  if (!total) {
+    return `
+      <div class="stat-card goal-attainment-card">
+        <div class="stat-card-head"><h4>עמידה ביעד חודשי</h4>${toggleBtn}</div>
+        <p class="goal-sub">עדיין אין חודשים עם יעד להשוואה השנה.</p>
+      </div>`;
+  }
+  const metPct = (met / total) * 100;
+  const segMet = met ? `<circle cx="21" cy="21" r="${R}" fill="none" stroke="${GOAL_COLORS.met}" stroke-width="6"
+    stroke-dasharray="${metPct.toFixed(2)} ${(100 - metPct).toFixed(2)}"><title>עמדו ביעד: ${met}</title></circle>` : '';
+  const segMissed = missed ? `<circle cx="21" cy="21" r="${R}" fill="none" stroke="${GOAL_COLORS.missed}" stroke-width="6"
+    stroke-dasharray="${(100 - metPct).toFixed(2)} ${metPct.toFixed(2)}" stroke-dashoffset="${(-metPct).toFixed(2)}"><title>לא עמדו ביעד: ${missed}</title></circle>` : '';
+
+  return `
+    <div class="stat-card goal-attainment-card">
+      <div class="stat-card-head"><h4>עמידה ביעד חודשי</h4>${toggleBtn}</div>
+      <div class="stat-donut-wrap">
+        <svg viewBox="0 0 42 42" class="stat-donut stat-donut-sm" role="img" aria-label="עמידה ביעד חודשי לאורך השנה">
+          <g transform="rotate(-90 21 21)">
+            <circle cx="21" cy="21" r="${R}" fill="none" stroke="var(--accent-50)" stroke-width="6"></circle>
+            ${segMet}${segMissed}
+          </g>
+          <text x="21" y="23" text-anchor="middle" direction="ltr" font-size="7" font-weight="700" fill="var(--accent-900)">${met}/${total}</text>
+        </svg>
+        <div class="stat-donut-legend">
+          <div class="goal-legend-row goal-met">
+            <span class="stat-donut-dot" style="background:${GOAL_COLORS.met}"></span>
+            <span class="goal-legend-label">עמדו ביעד</span>
+            <span class="goal-legend-value">${met}</span>
+          </div>
+          <div class="goal-legend-row goal-missed">
+            <span class="stat-donut-dot" style="background:${GOAL_COLORS.missed}"></span>
+            <span class="goal-legend-label">לא עמדו ביעד</span>
+            <span class="goal-legend-value">${missed}</span>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+/** Species breakdown by taxonomic family (from the field-guide data bundled
+ * with the app) — clicking a slice opens the species tab, which already
+ * groups by family by default. */
+function familyChartHtml(observations: Observation[]): string {
+  const familyCounts = new Map<string, number>();
+  for (const o of observations) {
+    for (const name of new Set(speciesNames(o))) {
+      const family = SPECIES_DETAILS[name]?.family || '(ללא משפחה)';
+      familyCounts.set(family, (familyCounts.get(family) || 0) + 1);
+    }
+  }
+  const rows = [...familyCounts.entries()].sort((a, b) => b[1] - a[1]);
+  if (!rows.length) return '';
+
+  const total = rows.reduce((sum, [, n]) => sum + n, 0);
+  const R = 15.9155;
+  let running = 0;
+  const segments = rows.map(([label, n], i) => {
+    const pct = total ? (n / total) * 100 : 0;
+    const offset = -running;
+    running += pct;
+    return `<circle class="stat-donut-seg" data-drill="family" data-value="${escapeHtml(label)}"
+      cx="21" cy="21" r="${R}" fill="none" stroke="${colorFor(i)}" stroke-width="7.5"
+      stroke-dasharray="${pct.toFixed(2)} ${(100 - pct).toFixed(2)}" stroke-dashoffset="${offset.toFixed(2)}"><title>${escapeHtml(label)}: ${n}</title></circle>`;
+  }).join('');
+
+  return `
+    <div class="stat-card">
+      <div class="stat-card-head"><h3>${icon('bird')} פילוח לפי משפחות</h3></div>
+      <div class="stat-donut-wrap">
+        <svg viewBox="0 0 42 42" class="stat-donut" role="img" aria-label="פילוח מינים לפי משפחה">
+          <g transform="rotate(-90 21 21)">
+            <circle cx="21" cy="21" r="${R}" fill="none" stroke="var(--accent-50)" stroke-width="7.5"></circle>
+            ${segments}
+          </g>
+        </svg>
+        <div class="stat-donut-legend">
+          ${rows.map(([label, n], i) => `
+            <button type="button" class="stat-donut-legend-row" data-drill="family" data-value="${escapeHtml(label)}">
+              <span class="stat-donut-dot" style="background:${colorFor(i)}"></span>
+              <span class="stat-donut-legend-label">${escapeHtml(label)}</span>
+              <span class="stat-donut-legend-value">${n.toLocaleString('he-IL')} תצפיות</span>
+            </button>`).join('')}
+        </div>
+      </div>
     </div>`;
 }
 
@@ -553,8 +712,9 @@ function onClick(e: Event): void {
 
   const toggle = target.closest<HTMLElement>('[data-toggle]');
   if (toggle) {
-    const kind = toggle.dataset.toggle as BreakdownKind | 'year';
+    const kind = toggle.dataset.toggle as BreakdownKind | 'year' | 'goalsView';
     if (kind === 'year') yearMode = yearMode === 'bar' ? 'line' : 'bar';
+    else if (kind === 'goalsView') goalsViewMode = goalsViewMode === 'yearly' ? 'monthly' : 'yearly';
     else chartMode[kind] = chartMode[kind] === 'bar' ? 'pie' : 'bar';
     render();
     return;
@@ -568,6 +728,7 @@ function onClick(e: Event): void {
   else if (kind === 'location') navigate('cards', { filterLocation: value });
   else if (kind === 'project') navigate('cards', { filterProject: value });
   else if (kind === 'year') navigate('calendar', { year: Number(value) });
+  else if (kind === 'family') navigate('species');
 }
 
 function onChange(e: Event): void {

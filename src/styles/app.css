@@ -1267,9 +1267,16 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
 }
 .goal-legend-label { font-size: .85rem; flex: 1; }
 .goal-legend-value { font-size: .78rem; color: var(--ink-soft); white-space: nowrap; }
-.goal-legend-row.goal-met .goal-legend-label { font-weight: 700; color: var(--accent-900); }
-.goal-legend-row.goal-met .goal-legend-value { color: var(--accent-700); font-weight: 700; }
+.goal-legend-row.goal-met .goal-legend-label { font-weight: 700; color: #2f9e44; }
+.goal-legend-row.goal-met .goal-legend-value { color: #2f9e44; font-weight: 700; }
+.goal-legend-row.goal-missed .goal-legend-label { font-weight: 700; color: #e03131; }
+.goal-legend-row.goal-missed .goal-legend-value { color: #e03131; font-weight: 700; }
+.goal-legend-row.goal-upcoming .goal-legend-label,
+.goal-legend-row.goal-upcoming .goal-legend-value { color: var(--ink-soft); }
 .goal-progress { font-size: .85rem; color: var(--ink-soft); margin: 12px 0 0; text-align: center; }
+.goal-attainment-card { margin: 16px -16px -16px; border-radius: 0 0 var(--radius) var(--radius); border-top: 1px solid var(--line); background: var(--paper); }
+.goal-attainment-card .stat-card-head h4 { margin: 0; color: var(--accent-700); font-size: .92rem; }
+.stat-donut-sm { width: 90px; height: 90px; }
 
 /* ---------- PDF report template (rendered off-screen) ---------- */
 
