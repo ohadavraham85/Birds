@@ -487,9 +487,6 @@ textarea { min-height: 130px; resize: vertical; white-space: pre-wrap; line-heig
 .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 540px) { .row-2 { grid-template-columns: 1fr; } }
 
-.coords-row { display: flex; gap: 8px; align-items: center; }
-.coords-row input { flex: 1; direction: ltr; text-align: left; }
-
 /* ---------- buttons ---------- */
 
 .btn {
@@ -608,6 +605,7 @@ textarea { min-height: 130px; resize: vertical; white-space: pre-wrap; line-heig
 
 .map-picker { width: min(92vw, 640px); max-width: 640px; }
 .map-picker .picker-hint { color: var(--ink-soft); font-size: .85rem; margin: 0 0 8px; }
+.map-picker .picker-map-wrap { position: relative; }
 .map-picker .picker-map {
   height: 55vh;
   min-height: 280px;
@@ -615,13 +613,18 @@ textarea { min-height: 130px; resize: vertical; white-space: pre-wrap; line-heig
   overflow: hidden;
   border: 1px solid var(--line);
 }
-.map-picker .picker-coords {
-  margin-top: 8px;
-  font-size: .9rem;
-  color: var(--accent-900);
-  font-weight: 600;
-  text-align: center;
+.map-picker .picker-map-wrap .map-layer-btn {
+  position: absolute; top: 10px; left: 10px; bottom: auto;
+  width: 38px; height: 38px; font-size: 1.05rem;
 }
+.map-picker .picker-map-wrap .map-layers-menu {
+  position: absolute; top: 54px; left: 10px; bottom: auto;
+}
+
+/* ---------- observation form: map-pin location button ---------- */
+
+.location-pin-btn { display: inline-flex; align-items: center; gap: 8px; }
+.location-pin-btn.locked { color: var(--accent-700); border-color: var(--accent-300); }
 
 /* ---------- image previews ---------- */
 

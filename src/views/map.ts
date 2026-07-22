@@ -8,13 +8,14 @@
  * אמת, עם כפתור להתמרכזות עליו. */
 
 import L from '../lib/leaflet-setup';
-import { listObservations, getSetting, setSetting } from '../db/repository';
+import { listObservations } from '../db/repository';
 import { toast } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
 import { speciesLabel } from '../lib/observation';
 import { icon } from '../lib/icons';
 import { qs } from '../lib/dom';
 import { navigate } from '../main';
+import { createMapLayers, loadMapLayerState, setMapLayerPref, applyMapLayerState, type MapLayerState, type MapLayers } from '../lib/map-layers';
 import type { Observation } from '../types';
 
 let container: HTMLElement;
@@ -23,16 +24,12 @@ let markersLayer: L.LayerGroup | undefined;
 let dropMarker: L.Marker | undefined;
 let myLocationMarker: L.CircleMarker | undefined;
 let geoWatchId: number | null = null;
-let streetLayer: L.TileLayer;
-let satelliteLayer: L.TileLayer;
-let roadsLayer: L.TileLayer;
-let labelsLayer: L.TileLayer;
+let layers: MapLayers;
 let allObservations: Observation[] = [];
 let closeSheet: (() => void) | null = null;
 
 /** Which base/overlay tiles are showing — persisted per device (like the color
  * theme) so the map reopens the way the user last left it. */
-interface MapLayerState { satellite: boolean; roads: boolean; labels: boolean }
 let layerState: MapLayerState = { satellite: true, roads: false, labels: true };
 
 /** Round green badge with a bird glyph, replacing Leaflet's default pin.
@@ -70,11 +67,7 @@ export function init(el: HTMLElement): void {
 }
 
 async function loadLayerState(): Promise<void> {
-  layerState = {
-    satellite: await getSetting('mapLayerSatellite', true),
-    roads: await getSetting('mapLayerRoads', false),
-    labels: await getSetting('mapLayerLabels', true),
-  };
+  layerState = await loadMapLayerState();
 }
 
 function syncLayerCheckboxes(): void {
@@ -88,18 +81,15 @@ function syncLayerCheckboxes(): void {
  * can layer on top of either base. */
 function applyLayerState(): void {
   if (!map) return;
-  if (layerState.satellite) { map.removeLayer(streetLayer); satelliteLayer.addTo(map); }
-  else { map.removeLayer(satelliteLayer); streetLayer.addTo(map); }
-  if (layerState.roads) roadsLayer.addTo(map); else map.removeLayer(roadsLayer);
-  if (layerState.labels) labelsLayer.addTo(map); else map.removeLayer(labelsLayer);
+  applyMapLayerState(map, layers, layerState);
 }
 
 async function onLayerCheckboxChange(e: Event): Promise<void> {
   const target = e.target as HTMLInputElement;
-  if (target.id === 'ml-satellite') { layerState.satellite = target.checked; await setSetting('mapLayerSatellite', layerState.satellite); }
-  else if (target.id === 'ml-roads') { layerState.roads = target.checked; await setSetting('mapLayerRoads', layerState.roads); }
-  else if (target.id === 'ml-labels') { layerState.labels = target.checked; await setSetting('mapLayerLabels', layerState.labels); }
-  else return;
+  const key = target.id === 'ml-satellite' ? 'satellite' : target.id === 'ml-roads' ? 'roads' : target.id === 'ml-labels' ? 'labels' : null;
+  if (!key) return;
+  layerState = { ...layerState, [key]: target.checked };
+  await setMapLayerPref(key, target.checked);
   applyLayerState();
 }
 
@@ -113,23 +103,7 @@ function ensureMap(): void {
   if (map) return;
   map = L.map('map-container', { zoomControl: true });
   map.fitBounds(ISRAEL_BOUNDS);
-  streetLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution: '&copy; OpenStreetMap',
-  });
-  satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-    maxZoom: 19,
-    zIndex: 1,
-    attribution: 'Tiles &copy; Esri',
-  });
-  roadsLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}', {
-    maxZoom: 19,
-    zIndex: 2,
-  });
-  labelsLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
-    maxZoom: 19,
-    zIndex: 3,
-  });
+  layers = createMapLayers();
   markersLayer = L.layerGroup().addTo(map);
 
   // long-press (contextmenu on touch) drops a pin at a new location
