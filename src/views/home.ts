@@ -8,7 +8,7 @@
 
 import { listObservations, listSpeciesRows } from '../db/repository';
 import { SPECIES_DETAILS } from '../data/species-data';
-import { speciesNames, speciesLabel, totalQuantity, entriesOf, entryImages } from '../lib/observation';
+import { speciesNames, speciesLabel, entriesOf, entryImages } from '../lib/observation';
 import { getImageObjectUrl } from '../lib/media';
 import { escapeHtml } from '../lib/markdown';
 import { fmtDateTime } from '../lib/ui';
@@ -263,7 +263,6 @@ function statsHtml(observations: Observation[]): string {
   const locationCounts = new Map<string, number>();
   const projectCounts = new Map<string, number>();
   const yearCounts = new Map<string, number>();
-  let totalIndividuals = 0;
   let minDate = observations[0]!.dateTime;
   let maxDate = observations[0]!.dateTime;
 
@@ -272,7 +271,6 @@ function statsHtml(observations: Observation[]): string {
     if (o.dateTime > maxDate) maxDate = o.dateTime;
 
     for (const name of new Set(speciesNames(o))) speciesCounts.set(name, (speciesCounts.get(name) || 0) + 1);
-    totalIndividuals += totalQuantity(o);
 
     const loc = o.locationName.trim();
     if (loc) locationCounts.set(loc, (locationCounts.get(loc) || 0) + 1);
@@ -285,7 +283,6 @@ function statsHtml(observations: Observation[]): string {
   const tiles: { label: string; value: number; tile?: 'species' | 'location' | 'observations' | 'project' }[] = [
     { label: 'תצפיות', value: observations.length, tile: 'observations' },
     { label: 'מינים', value: speciesCounts.size, tile: 'species' },
-    { label: 'פרטים', value: totalIndividuals },
     { label: 'מיקומים', value: locationCounts.size, tile: 'location' },
     { label: 'פרויקטים', value: projectCounts.size, tile: 'project' },
   ];
@@ -317,7 +314,7 @@ function statsHtml(observations: Observation[]): string {
   const projects = [...projectCounts.entries()].sort((a, b) => b[1] - a[1]);
   const projectsChart = breakdownChart('project', 'פילוח לפי פרויקט', projects, 'תצפיות');
 
-  return tilesHtml + yearChart + speciesChart + locationsChart + projectsChart;
+  return tilesHtml + yearChart + speciesChart + goalsHtml() + locationsChart + projectsChart;
 }
 
 function yearCardHead(title: string): string {
@@ -370,6 +367,100 @@ function yearChartLine(rows: [string, number][]): string {
           <circle class="stat-line-dot" data-drill="year" data-value="${escapeHtml(p.label)}" cx="${p.x}" cy="${p.y}" r="9"/>
           <text x="${p.x}" y="${H - 6}" text-anchor="middle" class="stat-line-label">${escapeHtml(p.label)}</text>`).join('')}
       </svg>
+    </div>`;
+}
+
+/* ---------- birding goals ---------- */
+
+/** Fixed annual target the user asked for; the monthly breakdown below is
+ * derived from real history rather than an even 200/12 split, so pacing
+ * feedback matches this birder's own seasonal pattern (e.g. spring nesting
+ * season naturally carries a bigger share of the year's observations). */
+const ANNUAL_GOAL = 200;
+
+interface GoalsData {
+  busiestYear: number;
+  busiestYearTotal: number;
+  /** Observation counts per calendar month (index 0=Jan..11=Dec) during the
+   * busiest year — used as this birder's own monthly pace target. */
+  monthlyGoals: number[];
+  currentYear: number;
+  currentYearTotal: number;
+  currentYearMonthly: number[];
+}
+
+function computeGoals(): GoalsData | null {
+  const yearCounts = new Map<number, number>();
+  for (const o of allObservations) {
+    const y = new Date(o.dateTime).getFullYear();
+    if (!isNaN(y)) yearCounts.set(y, (yearCounts.get(y) || 0) + 1);
+  }
+  if (!yearCounts.size) return null;
+
+  let busiestYear = 0;
+  let busiestYearTotal = -1;
+  for (const [y, n] of yearCounts) {
+    if (n > busiestYearTotal) { busiestYear = y; busiestYearTotal = n; }
+  }
+
+  const monthlyGoals = new Array(12).fill(0) as number[];
+  const currentYear = new Date().getFullYear();
+  const currentYearMonthly = new Array(12).fill(0) as number[];
+  let currentYearTotal = 0;
+  for (const o of allObservations) {
+    const d = new Date(o.dateTime);
+    if (d.getFullYear() === busiestYear) monthlyGoals[d.getMonth()]!++;
+    if (d.getFullYear() === currentYear) { currentYearMonthly[d.getMonth()]!++; currentYearTotal++; }
+  }
+
+  return { busiestYear, busiestYearTotal, monthlyGoals, currentYear, currentYearTotal, currentYearMonthly };
+}
+
+function goalsHtml(): string {
+  const g = computeGoals();
+  if (!g) return '';
+  const total = g.monthlyGoals.reduce((a, b) => a + b, 0);
+  const R = 15.9155;
+  let running = 0;
+  const segments = g.monthlyGoals.map((n, i) => {
+    if (!n) return '';
+    const pct = total ? (n / total) * 100 : 0;
+    const offset = -running;
+    running += pct;
+    return `<circle class="stat-donut-seg" cx="21" cy="21" r="${R}" fill="none" stroke="${colorFor(i)}" stroke-width="7.5"
+      stroke-dasharray="${pct.toFixed(2)} ${(100 - pct).toFixed(2)}" stroke-dashoffset="${offset.toFixed(2)}"><title>${escapeHtml(MONTH_NAMES[i]!)}: יעד ${n}</title></circle>`;
+  }).join('');
+
+  const legend = MONTH_NAMES.map((name, i) => {
+    const goal = g.monthlyGoals[i]!;
+    const actual = g.currentYearMonthly[i]!;
+    const met = goal > 0 && actual >= goal;
+    return `
+      <div class="goal-legend-row${met ? ' goal-met' : ''}">
+        <span class="stat-donut-dot" style="background:${colorFor(i)}"></span>
+        <span class="goal-legend-label">${escapeHtml(name)}</span>
+        <span class="goal-legend-value">${actual} / ${goal}</span>
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="stat-card">
+      <div class="stat-card-head"><h3>${icon('target')} יעדי צפרות</h3></div>
+      <p class="goal-sub">פילוח היעד החודשי מבוסס על השנה הפעילה ביותר שלך — ${g.busiestYear} (${g.busiestYearTotal} תצפיות)</p>
+      <div class="stat-donut-wrap">
+        <svg viewBox="0 0 42 42" class="stat-donut" role="img" aria-label="יעדי צפרות חודשיים">
+          <g transform="rotate(-90 21 21)">
+            <circle cx="21" cy="21" r="${R}" fill="none" stroke="var(--accent-50)" stroke-width="7.5"></circle>
+            ${segments}
+          </g>
+          <text x="21" y="19.5" text-anchor="middle" font-size="7" font-weight="700" fill="var(--accent-900)">${ANNUAL_GOAL}</text>
+          <text x="21" y="25" text-anchor="middle" font-size="3.4" fill="var(--ink-soft)">יעד שנתי</text>
+        </svg>
+        <div class="stat-donut-legend goal-legend">
+          ${legend}
+        </div>
+      </div>
+      <p class="goal-progress">התקדמות ${g.currentYear}: ${g.currentYearTotal} / ${ANNUAL_GOAL} תצפיות</p>
     </div>`;
 }
 
