@@ -1260,6 +1260,17 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
 .stat-donut-legend-label { font-size: .85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
 .stat-donut-legend-value { font-size: .78rem; color: var(--ink-soft); white-space: nowrap; }
 
+.goal-sub { font-size: .82rem; color: var(--ink-soft); margin: 0 0 12px; }
+.goal-legend-row {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 4px 2px; border-radius: 6px;
+}
+.goal-legend-label { font-size: .85rem; flex: 1; }
+.goal-legend-value { font-size: .78rem; color: var(--ink-soft); white-space: nowrap; }
+.goal-legend-row.goal-met .goal-legend-label { font-weight: 700; color: var(--accent-900); }
+.goal-legend-row.goal-met .goal-legend-value { color: var(--accent-700); font-weight: 700; }
+.goal-progress { font-size: .85rem; color: var(--ink-soft); margin: 12px 0 0; text-align: center; }
+
 /* ---------- PDF report template (rendered off-screen) ---------- */
 
 .pdf-report { direction: rtl; font-family: Arial, "Noto Sans Hebrew", sans-serif; color: #1d2721; padding: 24px; background: #fff; width: 720px; }
