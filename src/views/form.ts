@@ -4,7 +4,7 @@
 
 import {
   saveObservation, getObservation, listObservations, listSpecies,
-  saveMedia, mediaForObservation, deleteMedia, getLocation, listLocationRows,
+  saveMedia, mediaForObservation, deleteMedia, listLocationRows,
 } from '../db/repository';
 import { toast, toLocalInputValue, fromLocalInputValue } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
@@ -15,7 +15,7 @@ import { qs, input } from '../lib/dom';
 import { icon } from '../lib/icons';
 import { navigate, goBack } from '../main';
 import type { ViewParams } from './view';
-import type { Observation, ObservationImage, SpeciesEntry } from '../types';
+import type { Observation, ObservationImage, SpeciesEntry, LocationRow } from '../types';
 
 interface PendingImage { id: string; file: File; url: string }
 interface RowImages { pending: PendingImage[]; kept: ObservationImage[] }
@@ -31,6 +31,10 @@ let prefillCoords: { lat: number; lng: number } | null = null;
 let prefillLocationName: string | null = null;
 let prefillDate: string | null = null;
 let obsId = '';
+let savedLocations = new Map<string, LocationRow>();
+let currentLat: number | null = null;
+let currentLng: number | null = null;
+let coordsLocked = false;
 const rowImages = new WeakMap<HTMLElement, RowImages>();
 
 export function init(el: HTMLElement): void {
@@ -66,13 +70,11 @@ export function init(el: HTMLElement): void {
       </div>
 
       <div class="field">
-        <label>קואורדינטות <span class="hint" id="gps-status"></span></label>
-        <div class="coords-row">
-          <input type="number" step="any" id="f-lat" placeholder="קו רוחב (Lat)" inputmode="decimal">
-          <input type="number" step="any" id="f-lng" placeholder="קו אורך (Lng)" inputmode="decimal">
-          <button type="button" class="btn btn-icon" id="pick-map-btn" title="בחירת מיקום על המפה">${icon('pin')}</button>
-        </div>
-        <span class="hint">ברירת מחדל: המיקום הנוכחי · לחצו על הסיכה כדי לבחור על המפה</span>
+        <label>מיקום על המפה</label>
+        <button type="button" class="btn location-pin-btn" id="pick-map-btn">
+          ${icon('pin')} <span id="location-pin-label">בחירת מיקום על המפה</span>
+        </button>
+        <span class="hint" id="gps-status"></span>
       </div>
 
       <div class="field">
@@ -92,8 +94,9 @@ export function init(el: HTMLElement): void {
 
   wireCombo(input(container, '#f-project'), qs(container, '#project-list'), () => projectSuggestions);
   wireCombo(input(container, '#f-location'), qs(container, '#location-list'), () => locationSuggestions, {
-    onSelect: (name) => void onLocationSelected(name),
+    onSelect: (name) => applyLocationName(name),
   });
+  input(container, '#f-location').addEventListener('input', (e) => applyLocationName((e.target as HTMLInputElement).value));
   qs(container, '#pick-map-btn').addEventListener('click', () => void openPicker());
   qs(container, '#add-species-row').addEventListener('click', () => addSpeciesRow({ species: '', quantity: 1 }, true));
   qs(container, '#back-btn').addEventListener('click', goBack);
@@ -115,8 +118,9 @@ export async function activate(): Promise<void> {
   for (const o of all) for (const name of speciesNames(o)) seen.add(name);
   seenSpeciesCache = speciesCache.filter((s) => seen.has(s));
   projectSuggestions = [...new Set(all.map((o) => o.project).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'he'));
-  const savedLocationNames = (await listLocationRows()).map((l) => l.name);
-  locationSuggestions = [...new Set([...all.map((o) => o.locationName), ...savedLocationNames].filter(Boolean))]
+  const savedLocationRows = await listLocationRows();
+  savedLocations = new Map(savedLocationRows.map((l) => [l.name, l]));
+  locationSuggestions = [...new Set([...all.map((o) => o.locationName), ...savedLocationRows.map((l) => l.name)].filter(Boolean))]
     .sort((a, b) => a.localeCompare(b, 'he'));
 
   if (editId) { await loadForEdit(editId); return; }
@@ -124,11 +128,12 @@ export async function activate(): Promise<void> {
   resetForm(!prefillCoords);
   if (prefillSpecies) setEntries([{ species: prefillSpecies, quantity: 1 }]);
   if (prefillCoords) {
-    input(container, '#f-lat').value = prefillCoords.lat.toFixed(6);
-    input(container, '#f-lng').value = prefillCoords.lng.toFixed(6);
-    qs(container, '#gps-status').textContent = '(נבחר על המפה)';
+    currentLat = prefillCoords.lat;
+    currentLng = prefillCoords.lng;
   }
   if (prefillLocationName) input(container, '#f-location').value = prefillLocationName;
+  applyLocationName(input(container, '#f-location').value);
+  if (prefillCoords) qs(container, '#gps-status').textContent = coordsLocked ? '(מיקום קבוע)' : '(נבחר על המפה)';
   if (prefillDate) {
     const [y, m, d] = prefillDate.split('-').map(Number);
     const now = new Date();
@@ -148,6 +153,10 @@ function resetForm(locate = true): void {
   setEntries([{ species: '', quantity: 1 }]);
   qs(container, '#form-title').textContent = 'תצפית חדשה';
   qs(container, '#save-btn').innerHTML = `${icon('save')} שמירת התצפית`;
+  currentLat = null;
+  currentLng = null;
+  coordsLocked = false;
+  updateLocationPinUI();
   if (locate) autoFillGps();
 }
 
@@ -160,8 +169,9 @@ async function loadForEdit(id: string): Promise<void> {
   input(container, '#f-datetime').value = toLocalInputValue(new Date(obs.dateTime));
   input(container, '#f-location').value = obs.locationName || '';
   input(container, '#f-project').value = obs.project || '';
-  input(container, '#f-lat').value = obs.lat == null ? '' : String(obs.lat);
-  input(container, '#f-lng').value = obs.lng == null ? '' : String(obs.lng);
+  currentLat = obs.lat ?? null;
+  currentLng = obs.lng ?? null;
+  applyLocationName(obs.locationName || '');
   const entries = entriesOf(obs);
   // legacy top-level images fold into the first entry for editing
   const withLegacy = entries.map((e, i) =>
@@ -172,32 +182,46 @@ async function loadForEdit(id: string): Promise<void> {
 
 /* ---------- location ---------- */
 
-/** When a saved location (Settings → ניהול רשימת המיקומים) is picked from the
- * combo, fill in its coordinates — but never overwrite a value already set. */
-async function onLocationSelected(name: string): Promise<void> {
-  const latEl = input(container, '#f-lat');
-  const lngEl = input(container, '#f-lng');
-  if (latEl.value || lngEl.value) return;
-  const loc = await getLocation(name);
-  if (!loc || loc.lat == null || loc.lng == null) return;
-  latEl.value = loc.lat.toFixed(6);
-  lngEl.value = loc.lng.toFixed(6);
-  qs(container, '#gps-status').textContent = '(ממיקום שמור)';
+/** Locks the coordinates to a saved location's fixed lat/lng whenever the
+ * location field's text matches one (Settings → ניהול רשימת המיקומים) — the
+ * whole point of a saved location is that its coordinates don't drift.
+ * Any other (new/unrecognized) name leaves coordinates editable via the map. */
+function applyLocationName(name: string): void {
+  const saved = savedLocations.get(name.trim());
+  if (saved && saved.lat != null && saved.lng != null) {
+    currentLat = saved.lat;
+    currentLng = saved.lng;
+    coordsLocked = true;
+  } else {
+    // Leaving a locked (saved) location for an unrecognized name: that saved
+    // place's coordinates belong to it, not to whatever's being typed now.
+    if (coordsLocked) { currentLat = null; currentLng = null; }
+    coordsLocked = false;
+  }
+  updateLocationPinUI();
+}
+
+function updateLocationPinUI(): void {
+  const label = qs(container, '#location-pin-label');
+  const btn = qs<HTMLButtonElement>(container, '#pick-map-btn');
+  btn.classList.toggle('locked', coordsLocked);
+  if (coordsLocked) label.textContent = 'מיקום קבוע — הצגה על המפה';
+  else if (currentLat != null && currentLng != null) label.textContent = 'מיקום נבחר — לחיצה לשינוי על המפה';
+  else label.textContent = 'בחירת מיקום על המפה';
 }
 
 function autoFillGps(): void {
-  const latEl = input(container, '#f-lat');
-  const lngEl = input(container, '#f-lng');
   const status = qs(container, '#gps-status');
   if (!navigator.geolocation) { status.textContent = '(GPS לא זמין)'; return; }
-  if (latEl.value || lngEl.value) return;
+  if (currentLat != null || currentLng != null) return;
   status.textContent = '(מאתר מיקום...)';
   navigator.geolocation.getCurrentPosition(
     (pos) => {
-      if (latEl.value || lngEl.value) return; // don't clobber a manual/map choice
-      latEl.value = pos.coords.latitude.toFixed(6);
-      lngEl.value = pos.coords.longitude.toFixed(6);
+      if (currentLat != null || currentLng != null) return; // don't clobber a manual/map choice
+      currentLat = pos.coords.latitude;
+      currentLng = pos.coords.longitude;
       status.textContent = `(דיוק ±${Math.round(pos.coords.accuracy)} מ')`;
+      updateLocationPinUI();
     },
     () => { status.textContent = ''; },
     { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 },
@@ -205,16 +229,14 @@ function autoFillGps(): void {
 }
 
 async function openPicker(): Promise<void> {
-  const latEl = input(container, '#f-lat');
-  const lngEl = input(container, '#f-lng');
-  const lat = parseFloat(latEl.value);
-  const lng = parseFloat(lngEl.value);
-  const initial = Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+  const initial = currentLat != null && currentLng != null ? { lat: currentLat, lng: currentLng } : null;
+  if (coordsLocked) { await pickLocation(initial, { readonly: true }); return; }
   const result = await pickLocation(initial);
   if (result) {
-    latEl.value = result.lat.toFixed(6);
-    lngEl.value = result.lng.toFixed(6);
+    currentLat = result.lat;
+    currentLng = result.lng;
     qs(container, '#gps-status').textContent = '(נבחר על המפה)';
+    updateLocationPinUI();
   }
 }
 
@@ -437,16 +459,14 @@ async function onSave(e: Event): Promise<void> {
     }
   }
 
-  const latRaw = input(container, '#f-lat').value;
-  const lngRaw = input(container, '#f-lng').value;
   const prev = editId ? await getObservation(editId) : null;
   const obs: Observation = {
     ...(prev ?? {}),
     id: obsId,
     dateTime: iso,
     locationName: input(container, '#f-location').value.trim(),
-    lat: latRaw === '' ? null : parseFloat(latRaw),
-    lng: lngRaw === '' ? null : parseFloat(lngRaw),
+    lat: currentLat,
+    lng: currentLng,
     project: input(container, '#f-project').value.trim(),
     entries,
     images: [], // per-species now; keep empty for legacy field
