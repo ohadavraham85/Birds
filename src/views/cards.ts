@@ -3,12 +3,13 @@
  * (View Mode) בלבד — העריכה עוברת דרך כפתור ייעודי שם. כולל קיבוץ/מיון לפי
  * תאריך, מיקום או פרויקט, וכפתור FAB להוספת תצפית. */
 
-import { listObservations } from '../db/repository';
+import { listObservations, deleteObservation } from '../db/repository';
 import { renderObservationSummary } from '../lib/obs-card';
 import { renderObservationTile } from '../lib/tile-card';
 import { speciesNames } from '../lib/observation';
 import { escapeHtml } from '../lib/markdown';
-import { showModal } from '../lib/ui';
+import { showModal, confirmDialog } from '../lib/ui';
+import { wrapSwipeActions } from '../lib/swipe-actions';
 import { icon } from '../lib/icons';
 import { viewModeToggleHtml, wireViewModeToggle, syncViewModeToggle, type ViewDisplayMode } from '../lib/view-mode';
 import { qs, input, select } from '../lib/dom';
@@ -314,12 +315,22 @@ function appendItems(feed: HTMLElement, items: Observation[]): void {
 
 function cardWithClick(o: Observation): HTMLElement {
   const card = renderObservationSummary(o);
-  card.addEventListener('click', (e) => {
-    const target = e.target as HTMLElement;
-    if (target.closest('.place-link')) return;
-    navigate('detail', { viewId: o.id });
+  return wrapSwipeActions(card, {
+    onTap: (e) => {
+      const target = e.target as HTMLElement;
+      if (target.closest('.place-link')) return;
+      navigate('detail', { viewId: o.id });
+    },
+    onEdit: () => navigate('form', { editId: o.id }),
+    onDelete: () => void onSwipeDelete(o),
   });
-  return card;
+}
+
+async function onSwipeDelete(o: Observation): Promise<void> {
+  if (!(await confirmDialog('למחוק את התצפית?', 'מחיקה'))) return;
+  await deleteObservation(o.id);
+  observations = observations.filter((x) => x.id !== o.id);
+  render();
 }
 
 function tileWithClick(o: Observation): HTMLElement {

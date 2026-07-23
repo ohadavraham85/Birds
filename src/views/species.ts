@@ -367,7 +367,7 @@ function tileHtml(name: string, mode: ViewDisplayMode): string {
 function onListClick(e: Event): void {
   const target = e.target as HTMLElement;
   const obs = target.closest<HTMLElement>('.act-obs');
-  if (obs) { e.stopPropagation(); navigate('table', { species: obs.dataset.name! }); return; }
+  if (obs) { e.stopPropagation(); navigate('cards', { filterSpecies: obs.dataset.name! }); return; }
   const report = target.closest<HTMLElement>('.act-report');
   if (report) { navigate('form', { species: report.dataset.name! }); return; }
   const groupHead = target.closest<HTMLElement>('.sp-group-head');
