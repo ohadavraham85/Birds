@@ -767,6 +767,19 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
 
 .cards-feed { display: flex; flex-direction: column; gap: 14px; }
 
+/* ---------- swipe-to-reveal row actions (journal list mode) ---------- */
+
+.swipe-item { position: relative; overflow: hidden; border-radius: var(--radius); }
+.swipe-front { position: relative; z-index: 1; touch-action: pan-y; }
+.swipe-front .obs-card { border-radius: var(--radius); }
+.swipe-action {
+  position: absolute; top: 0; bottom: 0; width: 84px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  border: 0; color: #fff; font-size: .74rem; font-weight: 600; cursor: pointer;
+}
+.swipe-action-edit { left: 0; background: #2f7dff; }
+.swipe-action-delete { right: 0; background: var(--danger); }
+
 .obs-tile-grid { display: grid; gap: 10px; margin-bottom: 4px; }
 .obs-tile-grid-square { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
 .obs-tile-grid-rect { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
