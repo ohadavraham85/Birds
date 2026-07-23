@@ -292,6 +292,23 @@ export async function putProjectRaw(row: ProjectRow): Promise<void> {
   emitMutation('project', row.name, row.deleted ? 'delete' : 'upsert', row);
 }
 
+/** One-time convenience: populate the projects list from the project names
+ * already present in existing observations. Skips names already saved.
+ * Returns how many were added. */
+export async function seedProjectsFromObservations(): Promise<number> {
+  const obs = await listObservations();
+  const existing = new Set((await listProjectRows()).map((p) => p.name));
+  const toAdd = new Set<string>();
+  for (const o of obs) {
+    const name = (o.project || '').trim();
+    if (!name || existing.has(name) || toAdd.has(name)) continue;
+    toAdd.add(name);
+  }
+  const ts = now();
+  await db.projects.bulkPut([...toAdd].map((name) => ({ name, updatedAt: ts, deleted: false })));
+  return toAdd.size;
+}
+
 /* ---------- duplicate detection & merge (species / locations / projects) ----------
  * Names that differ only by whitespace, punctuation, or Hebrew niqqud are
  * treated as the "same" for detection purposes, even though Dexie's

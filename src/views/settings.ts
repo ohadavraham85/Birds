@@ -4,7 +4,7 @@
 import {
   listSpecies, addSpecies, deleteSpecies, listSpeciesRows,
   listLocationRows, addLocation, updateLocationCoords, deleteLocation, seedLocationsFromObservations,
-  listProjectRows, addProject, deleteProject,
+  listProjectRows, addProject, deleteProject, seedProjectsFromObservations,
   findDuplicateSpeciesGroups, findDuplicateLocationGroups, findDuplicateProjectGroups,
   mergeSpeciesNames, mergeLocationNames, mergeProjectNames,
   clearAllData, listObservations, listObservationsRaw, getObservation, saveObservation,
@@ -406,6 +406,7 @@ function listsHtml(): string {
       </div>
       <div class="dupe-list" id="s-project-dupes"></div>
       <div class="species-list" id="s-project-list"></div>
+      <button class="btn btn-sm" id="s-proj-seed" style="margin-top:10px">${icon('refresh')} ייבוא פרויקטים מהתצפיות הקיימות</button>
     </div>
   `;
 }
@@ -436,6 +437,7 @@ function wireLists(): void {
 
   qs(container, '#s-proj-add').addEventListener('click', () => void onAddProjectManaged());
   input(container, '#s-proj-new').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); void onAddProjectManaged(); } });
+  qs(container, '#s-proj-seed').addEventListener('click', () => void onSeedProjects());
   qs(container, '#s-project-list').addEventListener('click', (e) => void onProjectListClick(e));
   void renderProjectManageList();
 
@@ -752,6 +754,12 @@ async function onAddProjectManaged(): Promise<void> {
   inp.value = '';
   await renderProjectManageList();
   toast(`"${name}" נוסף לרשימת הפרויקטים`);
+}
+
+async function onSeedProjects(): Promise<void> {
+  const n = await seedProjectsFromObservations();
+  toast(n ? `נוספו ${n} פרויקטים מהתצפיות הקיימות` : 'אין פרויקטים חדשים לייבוא');
+  if (n) await renderProjectManageList();
 }
 
 async function onProjectListClick(e: Event): Promise<void> {
