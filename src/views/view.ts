@@ -28,4 +28,8 @@ export interface View {
   init(el: HTMLElement): void;
   activate(): void | Promise<void>;
   setParams?(params: ViewParams): void;
+  /** Called right before navigation switches to a different view — lets a
+   * view release anything that must not keep running once it's hidden (e.g.
+   * form.ts stopping an in-progress GPS track recording). */
+  deactivate?(): void;
 }

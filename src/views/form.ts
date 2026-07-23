@@ -4,7 +4,7 @@
 
 import {
   saveObservation, getObservation, listObservations, listSpecies,
-  saveMedia, mediaForObservation, deleteMedia, listLocationRows, listProjectRows,
+  saveMedia, mediaForObservation, deleteMedia, listLocationRows, listProjectRows, saveTrack,
 } from '../db/repository';
 import { toast, toLocalInputValue, fromLocalInputValue } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
@@ -12,11 +12,12 @@ import { getImageObjectUrl } from '../lib/media';
 import { pickLocation } from '../lib/location-picker';
 import { wireCombo } from '../lib/combo';
 import { entriesOf, entryImages, speciesNames } from '../lib/observation';
+import { startTracking, stopTracking, isTracking, elapsedMs } from '../lib/gps-track';
 import { qs, input } from '../lib/dom';
 import { icon } from '../lib/icons';
 import { navigate, goBack } from '../main';
 import type { ViewParams } from './view';
-import type { Observation, ObservationImage, SpeciesEntry, LocationRow } from '../types';
+import type { Observation, ObservationImage, SpeciesEntry, LocationRow, ObservationTrack } from '../types';
 
 interface PendingImage { id: string; file: File; url: string }
 interface RowImages { pending: PendingImage[]; kept: ObservationImage[] }
@@ -36,6 +37,7 @@ let savedLocations = new Map<string, LocationRow>();
 let currentLat: number | null = null;
 let currentLng: number | null = null;
 let coordsLocked = false;
+let trackTimerHandle: ReturnType<typeof setInterval> | null = null;
 const rowImages = new WeakMap<HTMLElement, RowImages>();
 
 export function init(el: HTMLElement): void {
@@ -44,6 +46,10 @@ export function init(el: HTMLElement): void {
     <div class="form-head">
       <button type="button" class="btn btn-sm" id="back-btn">→ חזרה</button>
       <h2 id="form-title">תצפית חדשה</h2>
+    </div>
+    <div class="track-status" id="track-status" hidden>
+      <span class="track-dot"></span>
+      <span>מקליט מסלול GPS · <span id="track-timer">00:00</span></span>
     </div>
     <form id="obs-form" autocomplete="off">
       <div class="row-2">
@@ -100,8 +106,63 @@ export function init(el: HTMLElement): void {
   input(container, '#f-location').addEventListener('input', (e) => applyLocationName((e.target as HTMLInputElement).value));
   qs(container, '#pick-map-btn').addEventListener('click', () => void openPicker());
   qs(container, '#add-species-row').addEventListener('click', () => addSpeciesRow({ species: '', quantity: 1 }, true));
-  qs(container, '#back-btn').addEventListener('click', goBack);
+  qs(container, '#back-btn').addEventListener('click', () => { stopAndDiscardTrack(); goBack(); });
   qs<HTMLFormElement>(container, '#obs-form').addEventListener('submit', (e) => void onSave(e));
+}
+
+/** Called by the router right before navigating away from this view by any
+ * path other than the back button or a successful save (tab bar, browser
+ * back, overflow menu) — otherwise a recording started for an abandoned new
+ * observation would keep the GPS watch running forever in the background. */
+export function deactivate(): void {
+  stopAndDiscardTrack();
+}
+
+/* ---------- GPS track recording (new observations only) ---------- */
+
+function beginTrack(): void {
+  startTracking();
+  qs(container, '#track-status').hidden = false;
+  updateTrackTimer();
+  if (trackTimerHandle) clearInterval(trackTimerHandle);
+  trackTimerHandle = setInterval(updateTrackTimer, 1000);
+}
+
+function updateTrackTimer(): void {
+  const totalSec = Math.floor(elapsedMs() / 1000);
+  const mm = String(Math.floor(totalSec / 60)).padStart(2, '0');
+  const ss = String(totalSec % 60).padStart(2, '0');
+  const el = container.querySelector<HTMLElement>('#track-timer');
+  if (el) el.textContent = `${mm}:${ss}`;
+}
+
+function stopTrackTimer(): void {
+  if (trackTimerHandle) { clearInterval(trackTimerHandle); trackTimerHandle = null; }
+  const status = container.querySelector<HTMLElement>('#track-status');
+  if (status) status.hidden = true;
+}
+
+/** Abandons whatever's been recorded so far — used when leaving without saving. */
+function stopAndDiscardTrack(): void {
+  stopTrackTimer();
+  if (isTracking()) stopTracking();
+}
+
+/** Stops recording and persists the track (keyed by the just-saved observation's id),
+ * unless fewer than 2 points were captured (e.g. GPS denied, or saved instantly). */
+async function stopAndSaveTrack(id: string): Promise<void> {
+  stopTrackTimer();
+  if (!isTracking()) return;
+  const { points, segments, startedAt, endedAt } = stopTracking();
+  if (points.length < 2) return;
+  const track: ObservationTrack = {
+    id, points, segments,
+    startedAt: new Date(startedAt).toISOString(),
+    endedAt: new Date(endedAt).toISOString(),
+    durationMs: endedAt - startedAt,
+    updatedAt: '',
+  };
+  await saveTrack(track);
 }
 
 export function setParams(params: ViewParams): void {
@@ -161,6 +222,7 @@ function resetForm(locate = true): void {
   coordsLocked = false;
   updateLocationPinUI();
   if (locate) autoFillGps();
+  beginTrack();
 }
 
 async function loadForEdit(id: string): Promise<void> {
@@ -412,6 +474,7 @@ async function onSave(e: Event): Promise<void> {
     updatedAt: '',
   };
   await saveObservation(obs);
+  await stopAndSaveTrack(obsId);
   toast(editId ? 'התצפית עודכנה ✓' : 'התצפית נשמרה ✓');
   navigate('cards');
 }

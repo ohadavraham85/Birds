@@ -76,6 +76,8 @@ async function showView(name: string, params?: ViewParams, mode: 'push' | 'repla
     history.replaceState(leavingState, '', location.hash || `#${currentView}`);
   }
 
+  if (currentView && currentView !== name) VIEWS[currentView]!.deactivate?.();
+
   currentView = name;
   for (const key of Object.keys(VIEWS)) {
     document.getElementById(`view-${key}`)!.hidden = key !== name;
