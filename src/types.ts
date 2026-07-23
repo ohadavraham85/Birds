@@ -90,6 +90,10 @@ export interface ObservationTrack {
   startedAt: string; // ISO
   endedAt: string; // ISO
   durationMs: number;
+  /** A small schematic PNG (data URL) of the route, rendered once when the
+   * track is saved, so the observation itself can show its route without
+   * initializing a full Leaflet map per card. */
+  previewImage?: string;
   updatedAt: string;
 }
 

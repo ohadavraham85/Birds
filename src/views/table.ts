@@ -2,22 +2,22 @@
  * מיון לפי עמודה, קיבוץ (פרויקט / מין), סימון מרובה, וייצוא Excel/PDF. */
 
 import {
-  listObservations, deleteObservation, saveObservation, getObservation, listSpecies, addSpecies,
-  listLocationRows, listProjectRows,
+  listObservations, deleteObservation, saveObservation, listSpecies, addSpecies,
 } from '../db/repository';
 import { toast, fmtDateTime, fmtCoords, confirmDialog } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
-import { parseCsv, toCsv, mapHeaders, parseCoordinates, parseDateTime, type HeaderMap, type CsvField } from '../lib/csv';
+import { parseCsv, mapHeaders, parseCoordinates, parseDateTime, type HeaderMap, type CsvField } from '../lib/csv';
 import { exportObservationsPdf } from '../lib/pdf';
+import { exportObservationsExcel } from '../lib/export-excel';
+import { openBulkEditModal, applyBulkEdit } from '../lib/bulk-edit';
 import { qs, input, select } from '../lib/dom';
 import { icon } from '../lib/icons';
 import { renderObservationTile } from '../lib/tile-card';
 import { viewModeToggleHtml, wireViewModeToggle, syncViewModeToggle, type ViewDisplayMode } from '../lib/view-mode';
-import { wireCombo } from '../lib/combo';
-import { speciesNames, totalQuantity, hasSpecies, primarySpecies, speciesLabel, entriesOf } from '../lib/observation';
+import { speciesNames, totalQuantity, hasSpecies, primarySpecies, speciesLabel } from '../lib/observation';
 import { navigate } from '../main';
 import type { ViewParams } from './view';
-import type { Observation, LocationRow } from '../types';
+import type { Observation } from '../types';
 
 let container: HTMLElement;
 let selected = new Set<string>();
@@ -340,87 +340,9 @@ async function onBulkDelete(): Promise<void> {
 
 /* ---------- bulk edit (project / location) ---------- */
 
-interface BulkEditResult {
-  project?: string;
-  location?: { name: string; lat: number | null; lng: number | null };
-}
-
-async function openBulkEditModal(count: number): Promise<BulkEditResult | null> {
-  const projectRows = await listProjectRows();
-  const projectSuggestions = [...new Set([...observations.map((o) => o.project), ...projectRows.map((p) => p.name)].filter(Boolean))]
-    .sort((a, b) => a.localeCompare(b, 'he'));
-  const locationRows = await listLocationRows();
-  const savedLocations = new Map<string, LocationRow>(locationRows.map((l) => [l.name, l]));
-  const locationSuggestions = [...new Set([...observations.map((o) => o.locationName), ...locationRows.map((l) => l.name)].filter(Boolean))]
-    .sort((a, b) => a.localeCompare(b, 'he'));
-
-  return new Promise((resolve) => {
-    const backdrop = document.createElement('div');
-    backdrop.className = 'modal-backdrop';
-    backdrop.innerHTML = `
-      <div class="modal bulk-edit-modal">
-        <h3>עריכה מרוכזת — ${count} תצפיות</h3>
-        <label class="notif-toggle-row"><span>עדכון פרויקט</span><input type="checkbox" id="be-project-toggle"></label>
-        <div class="field combo" id="be-project-field" hidden>
-          <input type="text" id="be-project" placeholder="שם פרויקט...">
-          <div class="combo-list" hidden></div>
-        </div>
-        <label class="notif-toggle-row"><span>עדכון מיקום</span><input type="checkbox" id="be-location-toggle"></label>
-        <div class="field combo" id="be-location-field" hidden>
-          <input type="text" id="be-location" placeholder="שם מיקום...">
-          <div class="combo-list" hidden></div>
-          <span class="hint" id="be-location-hint"></span>
-        </div>
-        <div class="modal-actions">
-          <button class="btn btn-primary" id="be-apply">עדכון</button>
-          <button class="btn" id="be-cancel">ביטול</button>
-        </div>
-      </div>`;
-    document.getElementById('modal-root')!.appendChild(backdrop);
-
-    const close = (result: BulkEditResult | null): void => { backdrop.remove(); resolve(result); };
-
-    const projectToggle = backdrop.querySelector<HTMLInputElement>('#be-project-toggle')!;
-    const projectField = backdrop.querySelector<HTMLElement>('#be-project-field')!;
-    const projectInput = backdrop.querySelector<HTMLInputElement>('#be-project')!;
-    projectToggle.addEventListener('change', () => { projectField.hidden = !projectToggle.checked; });
-    wireCombo(projectInput, backdrop.querySelector<HTMLElement>('#be-project-field .combo-list')!, () => projectSuggestions);
-
-    const locationToggle = backdrop.querySelector<HTMLInputElement>('#be-location-toggle')!;
-    const locationField = backdrop.querySelector<HTMLElement>('#be-location-field')!;
-    const locationInput = backdrop.querySelector<HTMLInputElement>('#be-location')!;
-    const locationHint = backdrop.querySelector<HTMLElement>('#be-location-hint')!;
-    locationToggle.addEventListener('change', () => { locationField.hidden = !locationToggle.checked; });
-    const updateLocationHint = (): void => {
-      const saved = savedLocations.get(locationInput.value.trim());
-      locationHint.textContent = saved && saved.lat != null && saved.lng != null
-        ? 'מיקום שמור — הקואורדינטות שלו ייקבעו אוטומטית לכל התצפיות שנבחרו'
-        : '';
-    };
-    locationInput.addEventListener('input', updateLocationHint);
-    wireCombo(locationInput, backdrop.querySelector<HTMLElement>('#be-location-field .combo-list')!, () => locationSuggestions, {
-      onSelect: () => updateLocationHint(),
-    });
-
-    backdrop.querySelector('#be-apply')!.addEventListener('click', () => {
-      const result: BulkEditResult = {};
-      if (projectToggle.checked) result.project = projectInput.value.trim();
-      if (locationToggle.checked) {
-        const name = locationInput.value.trim();
-        const saved = savedLocations.get(name);
-        result.location = { name, lat: saved?.lat ?? null, lng: saved?.lng ?? null };
-      }
-      if (!('project' in result) && !('location' in result)) { close(null); return; }
-      close(result);
-    });
-    backdrop.querySelector('#be-cancel')!.addEventListener('click', () => close(null));
-    backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(null); });
-  });
-}
-
 async function onBulkEdit(): Promise<void> {
   if (!selected.size) return;
-  const result = await openBulkEditModal(selected.size);
+  const result = await openBulkEditModal(selected.size, observations);
   if (!result) return;
 
   const changeParts: string[] = [];
@@ -428,20 +350,7 @@ async function onBulkEdit(): Promise<void> {
   if ('location' in result) changeParts.push(`מיקום → "${result.location!.name}"`);
   if (!(await confirmDialog(`לעדכן ${selected.size} תצפיות: ${changeParts.join(', ')}? הפעולה אינה הפיכה אוטומטית.`, 'עדכון'))) return;
 
-  const ids = [...selected];
-  let updated = 0;
-  for (const id of ids) {
-    const obs = await getObservation(id);
-    if (!obs) continue;
-    if ('project' in result) obs.project = result.project!;
-    if ('location' in result) {
-      obs.locationName = result.location!.name;
-      obs.lat = result.location!.lat;
-      obs.lng = result.location!.lng;
-    }
-    await saveObservation(obs);
-    updated++;
-  }
+  const updated = await applyBulkEdit([...selected], result);
   selected.clear();
   await activate();
   toast(`${updated} תצפיות עודכנו ✓`);
@@ -492,23 +401,7 @@ async function exportPdf(): Promise<void> {
 }
 
 function exportExcel(): void {
-  const source = exportSet();
-  if (!source.length) { toast('אין תצפיות לייצוא', true); return; }
-  // one row per species entry so multi-species observations expand cleanly
-  const rows: unknown[][] = [
-    ['תאריך ושעה', 'מיקום', 'קו רוחב', 'קו אורך', 'פרויקט', 'מין הציפור', 'מספר פרטים', 'הערות'],
-    ...source.flatMap((o) => {
-      const entries = entriesOf(o).length ? entriesOf(o) : [{ species: '', quantity: 1 }];
-      return entries.map((e) => [o.dateTime, o.locationName || '', o.lat ?? '', o.lng ?? '', o.project || '', e.species, e.quantity ?? 1, o.notes || '']);
-    }),
-  ];
-  const blob = new Blob([toCsv(rows)], { type: 'text/csv;charset=utf-8' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `תצפיות-${new Date().toISOString().slice(0, 10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(a.href);
-  toast(`יוצאו ${source.length} תצפיות ל-Excel/CSV ✓`);
+  exportObservationsExcel(exportSet());
 }
 
 /* ---------- CSV import ---------- */

@@ -16,6 +16,7 @@ import { icon } from '../lib/icons';
 import { qs } from '../lib/dom';
 import { navigate } from '../main';
 import { createMapLayers, loadMapLayerState, setMapLayerPref, applyMapLayerState, type MapLayerState, type MapLayers } from '../lib/map-layers';
+import { TRACK_SEGMENT_COLOR } from '../lib/track-preview';
 import type { Observation, ObservationTrack } from '../types';
 
 let container: HTMLElement;
@@ -35,9 +36,6 @@ let layerState: MapLayerState = { satellite: true, roads: false, labels: true };
 /** Whether the "מסלולי צפרות" (recorded GPS tracks) overlay is showing —
  * kept separate from MapLayerState since it's not shared with location-picker.ts. */
 let showTracks = false;
-
-/** walk vs. stop leg colors for the recorded-tracks overlay. */
-const TRACK_SEGMENT_COLOR: Record<'walk' | 'stop', string> = { walk: '#2f7dff', stop: '#ff8a00' };
 
 /** Round green badge with a bird glyph, replacing Leaflet's default pin.
  * tooltipAnchor keeps the small permanent name label snug against the badge. */
