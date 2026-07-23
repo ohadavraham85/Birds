@@ -37,6 +37,7 @@ let unsubStatus: (() => void) | null = null;
 let speciesDupeGroups: DuplicateGroup[] = [];
 let locationDupeGroups: DuplicateGroup[] = [];
 let projectDupeGroups: DuplicateGroup[] = [];
+let renamingSpecies: string | null = null;
 let renamingLocation: string | null = null;
 let renamingProject: string | null = null;
 let newLocationCoords: LatLng | null = null;
@@ -418,6 +419,7 @@ function wireLists(): void {
   void renderSpeciesManageList();
 
   speciesDupeGroups = [];
+  renamingSpecies = null;
   qs(container, '#s-sp-find-dupes').addEventListener('click', () => void onFindSpeciesDupes());
   qs(container, '#s-sp-merge-all').addEventListener('click', () => void onMergeAllSpeciesDupes());
   qs(container, '#s-species-dupes').addEventListener('click', (e) => void onSpeciesDupesClick(e));
@@ -497,12 +499,22 @@ async function renderSpeciesManageList(): Promise<void> {
   const el = container.querySelector<HTMLElement>('#s-species-list');
   if (!el) return;
   el.innerHTML = rows.length
-    ? rows.map((r) => `
-      <div class="sp-row">
-        <span>${escapeHtml(r.name)}</span>
+    ? rows.map((r) => {
+      const isRenaming = renamingSpecies === r.name;
+      return `
+      <div class="sp-row" data-name="${escapeHtml(r.name)}">
+        ${isRenaming
+          ? `<input type="text" class="rename-input" value="${escapeHtml(r.name)}">`
+          : `<span>${escapeHtml(r.name)}</span>`}
+        ${isRenaming
+          ? `<button type="button" class="rename-save" data-name="${escapeHtml(r.name)}" title="שמירת שם" aria-label="שמירת שם">${icon('check')}</button>
+             <button type="button" class="rename-cancel" title="ביטול" aria-label="ביטול">✕</button>`
+          : `<button type="button" class="rename" data-name="${escapeHtml(r.name)}" title="שינוי שם / מיזוג" aria-label="שינוי שם / מיזוג">${icon('edit')}</button>`}
         <button type="button" class="del" data-name="${escapeHtml(r.name)}" title="הסרה מהרשימה" aria-label="הסרה מהרשימה">${icon('trash')}</button>
-      </div>`).join('')
+      </div>`;
+    }).join('')
     : '<p class="hint" style="padding:10px 12px">אין מינים ברשימה.</p>';
+  if (renamingSpecies) el.querySelector<HTMLInputElement>('.rename-input')?.focus();
 }
 
 async function onAddSpeciesManaged(): Promise<void> {
@@ -516,7 +528,29 @@ async function onAddSpeciesManaged(): Promise<void> {
 }
 
 async function onSpeciesListClick(e: Event): Promise<void> {
-  const btn = (e.target as HTMLElement).closest<HTMLElement>('.del');
+  const target = e.target as HTMLElement;
+  if (target.closest('.rename')) {
+    renamingSpecies = target.closest<HTMLElement>('.rename')!.dataset.name!;
+    await renderSpeciesManageList();
+    return;
+  }
+  if (target.closest('.rename-cancel')) {
+    renamingSpecies = null;
+    await renderSpeciesManageList();
+    return;
+  }
+  if (target.closest('.rename-save')) {
+    const oldName = target.closest<HTMLElement>('.rename-save')!.dataset.name!;
+    const row = target.closest<HTMLElement>('.sp-row')!;
+    const newName = row.querySelector<HTMLInputElement>('.rename-input')!.value.trim();
+    renamingSpecies = null;
+    if (!newName || newName === oldName) { await renderSpeciesManageList(); return; }
+    const n = await mergeSpeciesNames([oldName], newName);
+    await renderSpeciesManageList();
+    toast(`"${oldName}" מוזג ל-"${newName}" (${n} תצפיות עודכנו)`);
+    return;
+  }
+  const btn = target.closest<HTMLElement>('.del');
   if (!btn) return;
   const name = btn.dataset.name!;
   if (!(await confirmDialog(`להסיר את "${name}" מרשימת המינים? תצפיות קיימות לא ייפגעו.`, 'הסרה'))) return;
