@@ -13,6 +13,7 @@ import { pickLocation } from '../lib/location-picker';
 import { wireCombo } from '../lib/combo';
 import { entriesOf, entryImages, speciesNames } from '../lib/observation';
 import { startTracking, stopTracking, isTracking, elapsedMs } from '../lib/gps-track';
+import { renderTrackPreview } from '../lib/track-preview';
 import { qs, input } from '../lib/dom';
 import { icon } from '../lib/icons';
 import { navigate, goBack } from '../main';
@@ -160,6 +161,7 @@ async function stopAndSaveTrack(id: string): Promise<void> {
     startedAt: new Date(startedAt).toISOString(),
     endedAt: new Date(endedAt).toISOString(),
     durationMs: endedAt - startedAt,
+    previewImage: renderTrackPreview(segments) ?? undefined,
     updatedAt: '',
   };
   await saveTrack(track);

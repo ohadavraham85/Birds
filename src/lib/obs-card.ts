@@ -10,6 +10,7 @@ import { renderMarkdown, escapeHtml } from './markdown';
 import { getImageObjectUrl } from './media';
 import { entriesOf, entryImages } from './observation';
 import { icon } from './icons';
+import { getTrack } from '../db/repository';
 import type { Observation } from '../types';
 
 function mapsUrl(o: Observation): string | null {
@@ -50,8 +51,21 @@ export function renderObservationCard(o: Observation): HTMLElement {
   card.innerHTML = `
     ${headMetaHtml(o)}
     <ol class="species-ol"></ol>
+    <div class="track-preview" data-track-preview hidden></div>
     ${o.notes ? `<div class="notes">${renderMarkdown(o.notes)}</div>` : ''}
   `;
+
+  void getTrack(o.id).then((track) => {
+    if (!track?.previewImage) return;
+    const wrap = card.querySelector<HTMLElement>('[data-track-preview]');
+    if (!wrap) return;
+    const mins = Math.round(track.durationMs / 60000);
+    wrap.innerHTML = `
+      <div class="track-preview-label">${icon('map')} מסלול תצפית${mins ? ` · ${mins} דק׳` : ''}</div>
+      <img src="${track.previewImage}" alt="מסלול התצפית">
+    `;
+    wrap.hidden = false;
+  });
 
   const ol = card.querySelector<HTMLElement>('.species-ol')!;
   for (const entry of entriesOf(o)) {

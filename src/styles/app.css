@@ -335,6 +335,11 @@ body {
   width: 9px; height: 9px; border-radius: 50%; background: var(--danger); flex-shrink: 0;
   animation: track-pulse 1.4s ease-in-out infinite;
 }
+
+.obs-card .track-preview { margin-top: 10px; }
+.obs-card .track-preview[hidden] { display: none; }
+.obs-card .track-preview-label { display: flex; align-items: center; gap: 6px; font-size: .8rem; color: var(--ink-soft); margin-bottom: 4px; }
+.obs-card .track-preview img { display: block; width: 100%; max-width: 320px; border-radius: var(--radius); border: 1px solid var(--line); }
 @keyframes track-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 
 /* ---------- observation detail (view mode) ---------- */
@@ -792,6 +797,29 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
 }
 .swipe-action-edit { left: 0; background: #2f7dff; }
 .swipe-action-delete { right: 0; background: var(--danger); }
+
+/* ---------- long-press multi-select (journal list mode) ---------- */
+
+.bulk-toolbar {
+  display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+  margin-bottom: 12px; padding: 8px 12px;
+  background: var(--accent-50); border: 1px solid var(--line); border-radius: var(--radius);
+}
+.bulk-toolbar[hidden] { display: none; }
+.bulk-toolbar .spacer { flex: 1; }
+#j-bulk-count { color: var(--ink-soft); font-size: .9rem; }
+
+.select-item { position: relative; cursor: pointer; }
+.select-item .obs-card { padding-inline-start: 44px; }
+.select-item .select-check {
+  position: absolute; top: 14px; inset-inline-start: 14px; z-index: 2;
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 2px solid var(--line); background: var(--card);
+  display: flex; align-items: center; justify-content: center; color: transparent;
+}
+.select-item .select-check svg { width: 14px; height: 14px; }
+.select-item.select-item-checked .select-check { background: var(--accent-700); border-color: var(--accent-700); color: #fff; }
+.select-item.select-item-checked .obs-card { outline: 2px solid var(--accent-700); }
 
 .obs-tile-grid { display: grid; gap: 10px; margin-bottom: 4px; }
 .obs-tile-grid-square { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }

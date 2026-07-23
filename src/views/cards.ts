@@ -8,8 +8,11 @@ import { renderObservationSummary } from '../lib/obs-card';
 import { renderObservationTile } from '../lib/tile-card';
 import { speciesNames } from '../lib/observation';
 import { escapeHtml } from '../lib/markdown';
-import { showModal, confirmDialog } from '../lib/ui';
+import { showModal, confirmDialog, toast } from '../lib/ui';
 import { wrapSwipeActions } from '../lib/swipe-actions';
+import { openBulkEditModal, applyBulkEdit } from '../lib/bulk-edit';
+import { exportObservationsExcel } from '../lib/export-excel';
+import { exportObservationsPdf } from '../lib/pdf';
 import { icon } from '../lib/icons';
 import { viewModeToggleHtml, wireViewModeToggle, syncViewModeToggle, type ViewDisplayMode } from '../lib/view-mode';
 import { qs, input, select } from '../lib/dom';
@@ -19,6 +22,9 @@ import type { ViewParams } from './view';
 
 type GroupMode = 'none' | 'day' | 'month' | 'location' | 'project';
 type SortDir = 'desc' | 'asc';
+
+const LONG_PRESS_MS = 500;
+const LONG_PRESS_MOVE_TOLERANCE = 10;
 
 let container: HTMLElement;
 let observations: Observation[] = [];
@@ -33,6 +39,11 @@ let selectedSpecies = new Set<string>();
 /** Date-range drill-down from the home screen's "תצפיות" stats tile (YYYY-MM-DD, inclusive; '' = unbounded). */
 let filterFrom = '';
 let filterTo = '';
+/** Long-press-activated multi-select mode (list display only) — lets the
+ * journal reach the same bulk-edit / bulk-export the table view used to
+ * offer, now that the table is no longer directly reachable from the menu. */
+let selectionMode = false;
+let selectedIds = new Set<string>();
 
 export function init(el: HTMLElement): void {
   container = el;
@@ -55,6 +66,19 @@ export function init(el: HTMLElement): void {
       <button type="button" class="btn btn-icon" id="j-collapse-all" title="סגירת כל הקבוצות" aria-label="סגירת כל הקבוצות">${icon('chevronsUp')}</button>
       ${viewModeToggleHtml('j-view-mode')}
     </div>
+    <div class="bulk-toolbar" id="j-bulk-toolbar" hidden>
+      <span id="j-bulk-count"></span>
+      <button type="button" class="btn btn-sm btn-primary" id="j-bulk-edit">${icon('edit')} עריכה מרוכזת</button>
+      <div class="export-wrap">
+        <button type="button" class="btn btn-sm" id="j-bulk-export-btn">${icon('download')} ייצוא ▾</button>
+        <div class="export-menu" id="j-bulk-export-menu" hidden>
+          <button type="button" data-fmt="excel">${icon('grid')} Excel (CSV)</button>
+          <button type="button" data-fmt="pdf">${icon('document')} PDF</button>
+        </div>
+      </div>
+      <span class="spacer"></span>
+      <button type="button" class="btn btn-sm" id="j-bulk-cancel">ביטול</button>
+    </div>
     <div id="cards-feed-wrap"></div>
   `;
   wireViewModeToggle(container, 'j-view-mode', (mode) => { displayMode = mode; render(); });
@@ -73,6 +97,42 @@ export function init(el: HTMLElement): void {
     collapsedGroups = new Set(groupsOf(observations.filter(matches)).keys());
     render();
   });
+
+  qs(container, '#j-bulk-cancel').addEventListener('click', () => { exitSelectionMode(); render(); });
+  qs(container, '#j-bulk-edit').addEventListener('click', () => void onBulkEditSelected());
+  const bulkExportBtn = qs(container, '#j-bulk-export-btn');
+  const bulkExportMenu = qs(container, '#j-bulk-export-menu');
+  bulkExportBtn.addEventListener('click', (e) => { e.stopPropagation(); bulkExportMenu.hidden = !bulkExportMenu.hidden; });
+  bulkExportMenu.addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-fmt]');
+    if (!b) return;
+    bulkExportMenu.hidden = true;
+    const selectedObs = observations.filter((o) => selectedIds.has(o.id));
+    if (b.dataset.fmt === 'excel') exportObservationsExcel(selectedObs);
+    else void exportObservationsPdf(selectedObs).catch((err: Error) => toast('הפקת ה-PDF נכשלה: ' + err.message, true, 5000));
+  });
+  document.addEventListener('click', (e) => {
+    if (!bulkExportMenu.hidden && !(e.target as HTMLElement).closest('.export-wrap')) bulkExportMenu.hidden = true;
+  });
+}
+
+function exitSelectionMode(): void {
+  selectionMode = false;
+  selectedIds = new Set();
+}
+
+async function onBulkEditSelected(): Promise<void> {
+  if (!selectedIds.size) return;
+  const result = await openBulkEditModal(selectedIds.size, observations);
+  if (!result) return;
+  const changeParts: string[] = [];
+  if ('project' in result) changeParts.push(`פרויקט → "${result.project}"`);
+  if ('location' in result) changeParts.push(`מיקום → "${result.location!.name}"`);
+  if (!(await confirmDialog(`לעדכן ${selectedIds.size} תצפיות: ${changeParts.join(', ')}? הפעולה אינה הפיכה אוטומטית.`, 'עדכון'))) return;
+  const updated = await applyBulkEdit([...selectedIds], result);
+  exitSelectionMode();
+  await activate();
+  toast(`${updated} תצפיות עודכנו ✓`);
 }
 
 /** Drill-down from the stats tab / home screen: pre-applies exactly one of a
@@ -250,6 +310,8 @@ function render(): void {
   sortBtn.innerHTML = icon('sortArrows', sortDir === 'asc' ? 'icon-flip' : '');
   sortBtn.title = sortDir === 'desc' ? 'מוצג: מהחדש לישן' : 'מוצג: מהישן לחדש';
   syncViewModeToggle(container, 'j-view-mode', displayMode);
+  qs(container, '#j-bulk-toolbar').hidden = !selectionMode;
+  qs(container, '#j-bulk-count').textContent = selectionMode ? `${selectedIds.size} נבחרו` : '';
 
   const wrap = qs(container, '#cards-feed-wrap');
   wrap.innerHTML = '';
@@ -314,8 +376,9 @@ function appendItems(feed: HTMLElement, items: Observation[]): void {
 }
 
 function cardWithClick(o: Observation): HTMLElement {
+  if (selectionMode) return selectableCard(o);
   const card = renderObservationSummary(o);
-  return wrapSwipeActions(card, {
+  const wrapped = wrapSwipeActions(card, {
     onTap: (e) => {
       const target = e.target as HTMLElement;
       if (target.closest('.place-link')) return;
@@ -324,6 +387,52 @@ function cardWithClick(o: Observation): HTMLElement {
     onEdit: () => navigate('form', { editId: o.id }),
     onDelete: () => void onSwipeDelete(o),
   });
+  attachLongPress(wrapped, () => {
+    selectionMode = true;
+    selectedIds.add(o.id);
+    render();
+  });
+  return wrapped;
+}
+
+/** A simplified, checkbox-style row shown once selection mode is active —
+ * tapping anywhere toggles the observation instead of opening its detail
+ * view or revealing swipe actions. */
+function selectableCard(o: Observation): HTMLElement {
+  const card = renderObservationSummary(o);
+  const checked = selectedIds.has(o.id);
+  const wrap = document.createElement('div');
+  wrap.className = `select-item${checked ? ' select-item-checked' : ''}`;
+  wrap.innerHTML = `<span class="select-check">${icon('check')}</span>`;
+  wrap.appendChild(card);
+  wrap.addEventListener('click', () => {
+    if (selectedIds.has(o.id)) selectedIds.delete(o.id); else selectedIds.add(o.id);
+    if (!selectedIds.size) selectionMode = false;
+    render();
+  });
+  return wrap;
+}
+
+/** Fires `onLongPress` after a ~500ms hold that doesn't move much and isn't
+ * released early — independent of swipe-actions.ts's own gesture handling,
+ * since both listen on the same element without interfering with each other. */
+function attachLongPress(el: HTMLElement, onLongPress: () => void): void {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let startX = 0;
+  let startY = 0;
+  const clear = (): void => { if (timer) { clearTimeout(timer); timer = null; } };
+  el.addEventListener('pointerdown', (e: PointerEvent) => {
+    startX = e.clientX;
+    startY = e.clientY;
+    clear();
+    timer = setTimeout(() => { timer = null; onLongPress(); }, LONG_PRESS_MS);
+  });
+  el.addEventListener('pointermove', (e: PointerEvent) => {
+    if (!timer) return;
+    if (Math.abs(e.clientX - startX) > LONG_PRESS_MOVE_TOLERANCE || Math.abs(e.clientY - startY) > LONG_PRESS_MOVE_TOLERANCE) clear();
+  });
+  el.addEventListener('pointerup', clear);
+  el.addEventListener('pointercancel', clear);
 }
 
 async function onSwipeDelete(o: Observation): Promise<void> {
