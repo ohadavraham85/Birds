@@ -698,8 +698,8 @@ textarea { min-height: 130px; resize: vertical; white-space: pre-wrap; line-heig
 
 .icon-flip { transform: rotate(180deg); }
 
-.j-filter-btn { position: relative; }
-.j-filter-btn.active { background: var(--accent-700); color: #fff; }
+.j-filter-btn, .sp-filter-btn { position: relative; }
+.j-filter-btn.active, .sp-filter-btn.active { background: var(--accent-700); color: #fff; }
 .filter-badge {
   position: absolute; top: -5px; left: -5px;
   min-width: 16px; height: 16px; padding: 0 3px;
@@ -707,7 +707,7 @@ textarea { min-height: 130px; resize: vertical; white-space: pre-wrap; line-heig
   font-size: .65rem; font-weight: 700; line-height: 16px; text-align: center;
 }
 
-/* ---------- advanced filter modal (journal) ---------- */
+/* ---------- advanced filter modal (journal, species) ---------- */
 
 .filter-modal h3 { margin-top: 0; color: var(--accent-900); }
 .filter-modal-section { margin-bottom: 14px; }
