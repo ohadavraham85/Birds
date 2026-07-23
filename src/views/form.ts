@@ -48,6 +48,10 @@ export function init(el: HTMLElement): void {
       <button type="button" class="btn btn-sm" id="back-btn">→ חזרה</button>
       <h2 id="form-title">תצפית חדשה</h2>
     </div>
+    <label class="notif-toggle-row track-toggle-row" id="track-toggle-row" hidden>
+      <span>הקלטת מסלול GPS לתצפית זו</span>
+      <input type="checkbox" id="track-toggle">
+    </label>
     <div class="track-status" id="track-status" hidden>
       <span class="track-dot"></span>
       <span>מקליט מסלול GPS · <span id="track-timer">00:00</span></span>
@@ -108,6 +112,10 @@ export function init(el: HTMLElement): void {
   qs(container, '#pick-map-btn').addEventListener('click', () => void openPicker());
   qs(container, '#add-species-row').addEventListener('click', () => addSpeciesRow({ species: '', quantity: 1 }, true));
   qs(container, '#back-btn').addEventListener('click', () => { stopAndDiscardTrack(); goBack(); });
+  qs<HTMLInputElement>(container, '#track-toggle').addEventListener('change', (e) => {
+    if ((e.target as HTMLInputElement).checked) beginTrack();
+    else stashTrack();
+  });
   qs<HTMLFormElement>(container, '#obs-form').addEventListener('submit', (e) => void onSave(e));
 }
 
@@ -119,9 +127,16 @@ export function deactivate(): void {
   stopAndDiscardTrack();
 }
 
-/* ---------- GPS track recording (new observations only) ---------- */
+/* ---------- GPS track recording (new observations only; opt-in via the toggle) ---------- */
+
+/** A recording the user toggled off mid-form, kept in memory (not yet saved
+ * to the DB) so it can still be attached once the observation itself is
+ * saved — turning the toggle off is "pause and keep what I have", not
+ * "discard". Toggling back on starts a fresh recording, replacing this. */
+let pendingTrack: Omit<ObservationTrack, 'id' | 'updatedAt'> | null = null;
 
 function beginTrack(): void {
+  pendingTrack = null;
   startTracking();
   qs(container, '#track-status').hidden = false;
   updateTrackTimer();
@@ -143,28 +158,45 @@ function stopTrackTimer(): void {
   if (status) status.hidden = true;
 }
 
-/** Abandons whatever's been recorded so far — used when leaving without saving. */
+/** Turning the toggle off: stop watching GPS but keep whatever was captured
+ * so far in memory, ready to be attached when the observation is saved. */
+function stashTrack(): void {
+  stopTrackTimer();
+  if (!isTracking()) return;
+  const built = buildTrack(stopTracking());
+  pendingTrack = built;
+}
+
+/** Abandons whatever's been recorded or stashed — used when leaving without saving. */
 function stopAndDiscardTrack(): void {
   stopTrackTimer();
   if (isTracking()) stopTracking();
+  pendingTrack = null;
+  const toggle = container.querySelector<HTMLInputElement>('#track-toggle');
+  if (toggle) toggle.checked = false;
 }
 
-/** Stops recording and persists the track (keyed by the just-saved observation's id),
- * unless fewer than 2 points were captured (e.g. GPS denied, or saved instantly). */
+function buildTrack(result: { points: ObservationTrack['points']; segments: ObservationTrack['segments']; startedAt: number; endedAt: number }): Omit<ObservationTrack, 'id' | 'updatedAt'> | null {
+  if (result.points.length < 2) return null;
+  return {
+    points: result.points,
+    segments: result.segments,
+    startedAt: new Date(result.startedAt).toISOString(),
+    endedAt: new Date(result.endedAt).toISOString(),
+    durationMs: result.endedAt - result.startedAt,
+    previewImage: renderTrackPreview(result.segments) ?? undefined,
+  };
+}
+
+/** Finalizes whichever track exists (still actively recording, or already
+ * stashed by toggling off earlier) and persists it keyed by the just-saved
+ * observation's id. No-ops if the toggle was never turned on. */
 async function stopAndSaveTrack(id: string): Promise<void> {
   stopTrackTimer();
-  if (!isTracking()) return;
-  const { points, segments, startedAt, endedAt } = stopTracking();
-  if (points.length < 2) return;
-  const track: ObservationTrack = {
-    id, points, segments,
-    startedAt: new Date(startedAt).toISOString(),
-    endedAt: new Date(endedAt).toISOString(),
-    durationMs: endedAt - startedAt,
-    previewImage: renderTrackPreview(segments) ?? undefined,
-    updatedAt: '',
-  };
-  await saveTrack(track);
+  const finalTrack = isTracking() ? buildTrack(stopTracking()) : pendingTrack;
+  pendingTrack = null;
+  if (!finalTrack) return;
+  await saveTrack({ ...finalTrack, id, updatedAt: '' });
 }
 
 export function setParams(params: ViewParams): void {
@@ -224,13 +256,17 @@ function resetForm(locate = true): void {
   coordsLocked = false;
   updateLocationPinUI();
   if (locate) autoFillGps();
-  beginTrack();
+  pendingTrack = null;
+  stopTrackTimer();
+  qs<HTMLInputElement>(container, '#track-toggle').checked = false;
+  qs(container, '#track-toggle-row').hidden = false;
 }
 
 async function loadForEdit(id: string): Promise<void> {
   const obs = await getObservation(id);
   if (!obs) { resetForm(); return; }
   obsId = id;
+  qs(container, '#track-toggle-row').hidden = true;
   qs(container, '#form-title').textContent = 'עריכת תצפית';
   qs(container, '#save-btn').innerHTML = `${icon('save')} עדכון התצפית`;
   input(container, '#f-datetime').value = toLocalInputValue(new Date(obs.dateTime));
