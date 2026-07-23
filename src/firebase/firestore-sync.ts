@@ -121,6 +121,29 @@ export async function initFirebaseSyncFromSettings(): Promise<void> {
   if (code) await startFirebaseSync(code);
 }
 
+/** One-time manual recovery: unconditionally overwrites this device's local
+ * species/locations/projects with whatever is currently in the cloud,
+ * bypassing the usual last-write-wins timestamp check. Normal sync should
+ * never need this, but a device whose local copy of one of these master
+ * lists got a stale-but-fresher-looking timestamp (e.g. from a species-seed
+ * reset) can otherwise keep silently rejecting real edits/deletions made on
+ * another device forever — this lets the user force this device back in
+ * line with the shared cloud state on demand. */
+export async function forceResyncListsFromCloud(): Promise<{ species: number; locations: number; projects: number }> {
+  if (!activeCode) throw new Error('סנכרון Firebase אינו מופעל');
+  const db = firebaseDb();
+  const counts = { species: 0, locations: 0, projects: 0 };
+  await withSuppressedPush(async () => {
+    const speciesSnap = await getDocs(collection(db, 'households', activeCode!, 'species'));
+    for (const d of speciesSnap.docs) { await putSpeciesRaw(d.data() as SpeciesRow); counts.species++; }
+    const locationsSnap = await getDocs(collection(db, 'households', activeCode!, 'locations'));
+    for (const d of locationsSnap.docs) { await putLocationRaw(d.data() as LocationRow); counts.locations++; }
+    const projectsSnap = await getDocs(collection(db, 'households', activeCode!, 'projects'));
+    for (const d of projectsSnap.docs) { await putProjectRaw(d.data() as ProjectRow); counts.projects++; }
+  });
+  return counts;
+}
+
 export function stopFirebaseSync(): void {
   unsubs.forEach((u) => u());
   unsubs = [];

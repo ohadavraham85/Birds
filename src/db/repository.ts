@@ -167,7 +167,15 @@ export async function seedSpeciesIfEmpty(names: string[], version = 1): Promise<
   const stored = Number(await getSetting('speciesSeedVersion', 0));
   if (count > 0 && stored >= version) return false;
   await db.species.clear();
-  const ts = now();
+  // Deliberately an old/epoch timestamp, not now() — this bundled seed isn't
+  // a real edit, and stamping it "now" would let it out-rank (last-write-wins)
+  // a genuine deletion/rename made earlier on another device: if THIS device
+  // reseeds (e.g. after a bundled-list version bump) after that edit already
+  // happened, a fresh timestamp would make the incoming sync merge think the
+  // local (reseeded) row is newer and silently refuse to apply the remote
+  // change, forever. Real edits (addSpecies/deleteSpecies/mergeSpeciesNames)
+  // always stamp a genuine now(), so they still correctly win against this.
+  const ts = new Date(0).toISOString();
   await db.species.bulkPut(names.map((name) => ({ name, updatedAt: ts, deleted: false })));
   await setSetting('speciesSeedVersion', version);
   emitChange();

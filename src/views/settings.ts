@@ -11,7 +11,7 @@ import {
   putObservationRaw, saveMedia, mediaForObservation,
 } from '../db/repository';
 import type { DuplicateGroup } from '../db/repository';
-import { getFirebaseSyncCode, configureFirebaseSync, onFirebaseSyncStatus, type FirebaseSyncStatus } from '../firebase/firestore-sync';
+import { getFirebaseSyncCode, configureFirebaseSync, onFirebaseSyncStatus, isFirebaseSyncActive, forceResyncListsFromCloud, type FirebaseSyncStatus } from '../firebase/firestore-sync';
 import {
   notificationsSupported, permissionState, requestPermission,
   isEnabled, setEnabled, isMigrationEnabled, setMigrationEnabled, isOnThisDayEnabled, setOnThisDayEnabled,
@@ -241,6 +241,15 @@ function syncHtml(fbCode: string): string {
       </div>
       <button class="btn btn-primary" id="s-fb-save">${icon('save')} שמירה והפעלה</button>
       <div class="settings-status" id="s-fb-status"></div>
+      ${isFirebaseSyncActive() ? `
+        <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)">
+          <p style="font-size:.85rem;color:var(--ink-soft);margin-top:0">
+            אם מכשיר אחר עשה שינויים (למשל מיזוג כפילויות ברשימת המינים) שלא
+            מופיעים כאן, אפשר לאלץ סנכרון מחדש של רשימות המינים/מיקומים/פרויקטים
+            מהענן — זה דורס את המצב המקומי שלהן במכשיר הזה בלי תנאי.
+          </p>
+          <button class="btn btn-sm" id="s-fb-resync">${icon('refresh')} סנכרון מחדש של הרשימות מהענן</button>
+        </div>` : ''}
     </div>
 
     <div class="settings-card">
@@ -262,6 +271,7 @@ function wireSync(): void {
   qs(container, '#s-fb-save').addEventListener('click', () => void onSaveFirebaseSync());
   qs(container, '#s-backup').addEventListener('click', () => void onBackup());
   input(container, '#s-restore').addEventListener('change', (e) => void onRestore(e));
+  container.querySelector('#s-fb-resync')?.addEventListener('click', () => void onForceResync());
 
   unsubStatus = onFirebaseSyncStatus((s) => {
     const el = container.querySelector<HTMLElement>('#s-fb-status');
@@ -916,6 +926,23 @@ async function onSaveFirebaseSync(): Promise<void> {
     toast(code ? 'קוד המשפחה נשמר — מסתנכרן עם Firebase...' : 'סנכרון Firebase כובה');
   } catch (err) {
     toast('שגיאה בהתחברות ל-Firebase: ' + (err as Error).message, true, 6000);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function onForceResync(): Promise<void> {
+  if (!(await confirmDialog(
+    'לדרוס את רשימות המינים/מיקומים/פרויקטים במכשיר הזה בערכים מהענן? שינויים מקומיים שטרם עלו לענן עלולים ללכת לאיבוד.',
+    'סנכרון מחדש',
+  ))) return;
+  const btn = qs<HTMLButtonElement>(container, '#s-fb-resync');
+  btn.disabled = true;
+  try {
+    const n = await forceResyncListsFromCloud();
+    toast(`הרשימות סונכרנו מחדש (${n.species} מינים, ${n.locations} מיקומים, ${n.projects} פרויקטים)`);
+  } catch (err) {
+    toast('סנכרון מחדש נכשל: ' + (err as Error).message, true, 6000);
   } finally {
     btn.disabled = false;
   }
