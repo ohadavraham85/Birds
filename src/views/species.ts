@@ -4,7 +4,7 @@
 
 import { listSpeciesRows, addSpecies, setSpeciesDescription, listObservations } from '../db/repository';
 import { SPECIES_DETAILS } from '../data/species-data';
-import { toast, showImageModal, fmtDateTime } from '../lib/ui';
+import { toast, showImageModal, fmtDateTime, showModal } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
 import { speciesNames, entriesOf, entryImages } from '../lib/observation';
 import { getImageObjectUrl } from '../lib/media';
@@ -15,7 +15,8 @@ import { navigate } from '../main';
 import type { ViewParams } from './view';
 import type { SpeciesDetail, ObservationImage } from '../types';
 
-type SortMode = 'family' | 'alpha' | 'recent' | 'seen';
+type SortMode = 'family' | 'alpha' | 'recent' | 'seen' | 'project';
+type SortDir = 'asc' | 'desc';
 
 let container: HTMLElement;
 let names: string[] = [];
@@ -23,8 +24,13 @@ let counts: Record<string, number> = {};
 let descriptions: Record<string, string> = {};
 let imagesByName: Record<string, { img: ObservationImage; obsId: string }[]> = {};
 let lastObserved: Record<string, string> = {};
+/** Every project name a species has been logged under, across all its observations — a species can span several projects, unlike location/family which are single-valued. */
+let projectsByName: Record<string, Set<string>> = {};
 let query = '';
 let sortMode: SortMode = 'family';
+/** 'asc' reproduces each mode's original default ordering; 'desc' reverses it — see the toggle button's dynamic tooltip for what's actually shown. */
+let sortDir: SortDir = 'asc';
+let selectedProjects = new Set<string>();
 let displayMode: ViewDisplayMode = 'list';
 let openKey: string | null = null;
 let collapsedGroups = new Set<string>();
@@ -43,9 +49,14 @@ export function init(el: HTMLElement): void {
       <select id="sp-group" class="filter-sel">
         <option value="family">קיבוץ לפי משפחה</option>
         <option value="seen">נצפה / לא נצפה</option>
+        <option value="project">קיבוץ לפי פרויקט</option>
         <option value="alpha">לפי א״ב</option>
         <option value="recent">לפי תצפית אחרונה</option>
       </select>
+      <button type="button" class="btn btn-icon sp-filter-btn" id="sp-filter-btn" title="סינון לפי פרויקט" aria-label="סינון לפי פרויקט">
+        ${icon('filter')}<span class="filter-badge" id="sp-filter-badge" hidden></span>
+      </button>
+      <button type="button" class="btn btn-icon" id="sp-sort-btn" title="היפוך סדר" aria-label="היפוך סדר">${icon('sortArrows')}</button>
       ${viewModeToggleHtml('sp-view-mode')}
     </div>
     <div class="add-species-row">
@@ -58,6 +69,11 @@ export function init(el: HTMLElement): void {
   wireViewModeToggle(container, 'sp-view-mode', (mode) => { displayMode = mode; render(); });
   input(container, '#sp-q').addEventListener('input', (e) => { query = (e.target as HTMLInputElement).value; render(); });
   select(container, '#sp-group').addEventListener('change', (e) => { sortMode = (e.target as HTMLSelectElement).value as SortMode; render(); });
+  qs(container, '#sp-filter-btn').addEventListener('click', openFilterModal);
+  qs(container, '#sp-sort-btn').addEventListener('click', () => {
+    sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+    render();
+  });
   qs(container, '#sp-add').addEventListener('click', () => void onAdd());
   input(container, '#sp-new').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); void onAdd(); } });
   qs(container, '#sp-list').addEventListener('click', onListClick);
@@ -88,10 +104,13 @@ export async function activate(): Promise<void> {
   counts = {};
   imagesByName = {};
   lastObserved = {};
+  projectsByName = {};
   for (const o of obs) {
+    const project = o.project || '(ללא פרויקט)';
     for (const name of speciesNames(o)) {
       counts[name] = (counts[name] || 0) + 1;
       if (!lastObserved[name] || o.dateTime > lastObserved[name]!) lastObserved[name] = o.dateTime;
+      (projectsByName[name] ??= new Set()).add(project);
     }
     for (const entry of entriesOf(o)) {
       const imgs = entryImages(entry);
@@ -118,9 +137,20 @@ function detailsFor(name: string): SpeciesDetail {
 
 function matches(name: string): boolean {
   const q = query.trim().toLowerCase();
-  if (!q) return true;
-  const d = detailsFor(name);
-  return `${d.he} ${d.en} ${d.sci} ${d.family}`.toLowerCase().includes(q);
+  if (q) {
+    const d = detailsFor(name);
+    if (!`${d.he} ${d.en} ${d.sci} ${d.family}`.toLowerCase().includes(q)) return false;
+  }
+  if (selectedProjects.size) {
+    const projects = projectsByName[name] ?? new Set(['(ללא פרויקט)']);
+    if (![...projects].some((p) => selectedProjects.has(p))) return false;
+  }
+  return true;
+}
+
+/** Ascending reproduces localeCompare's natural order; descending just flips it — used for both group keys and in-group item order. */
+function sortAlpha(list: string[]): string[] {
+  return [...list].sort((a, b) => (sortDir === 'asc' ? a.localeCompare(b, 'he') : b.localeCompare(a, 'he')));
 }
 
 function itemsHtml(list: string[]): string {
@@ -128,27 +158,81 @@ function itemsHtml(list: string[]): string {
   return `<div class="obs-tile-grid obs-tile-grid-${displayMode}">${list.map((n) => tileHtml(n, displayMode)).join('')}</div>`;
 }
 
+/* ---------- advanced filter modal (by project) ---------- */
+
+function openFilterModal(): void {
+  const projects = [...new Set(Object.values(projectsByName).flatMap((s) => [...s]))].sort((a, b) => a.localeCompare(b, 'he'));
+  const localSet = new Set(selectedProjects);
+
+  const wrap = document.createElement('div');
+  wrap.className = 'filter-modal';
+  wrap.innerHTML = `
+    <h3>סינון לפי פרויקט</h3>
+    <div class="filter-modal-section">
+      <div class="filter-modal-checks">
+        ${projects.map((p) => `
+          <label class="filter-modal-check">
+            <input type="checkbox" value="${escapeHtml(p)}" ${localSet.has(p) ? 'checked' : ''}>
+            <span>${escapeHtml(p)}</span>
+          </label>`).join('') || '<p class="hint">אין פרויקטים עדיין</p>'}
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-primary" id="filter-apply">החלת סינון</button>
+      <button type="button" class="btn" id="filter-clear">נקה סינון</button>
+    </div>
+  `;
+  const close = showModal(wrap);
+
+  wrap.querySelectorAll<HTMLInputElement>('input[type=checkbox]').forEach((cb) => {
+    cb.addEventListener('change', () => {
+      if (cb.checked) localSet.add(cb.value); else localSet.delete(cb.value);
+    });
+  });
+  wrap.querySelector('#filter-apply')!.addEventListener('click', () => {
+    selectedProjects = localSet;
+    close();
+    render();
+  });
+  wrap.querySelector('#filter-clear')!.addEventListener('click', () => {
+    selectedProjects = new Set();
+    close();
+    render();
+  });
+}
+
 function render(): void {
   syncViewModeToggle(container, 'sp-view-mode', displayMode);
+  const filterCount = selectedProjects.size;
+  const badge = qs(container, '#sp-filter-badge');
+  badge.hidden = !filterCount;
+  badge.textContent = String(filterCount);
+  qs(container, '#sp-filter-btn').classList.toggle('active', !!filterCount);
+  const sortBtn = qs(container, '#sp-sort-btn');
+  sortBtn.innerHTML = icon('sortArrows', sortDir === 'desc' ? 'icon-flip' : '');
+  sortBtn.title = sortDir === 'asc' ? 'מוצג: סדר רגיל' : 'מוצג: סדר הפוך';
+
   const list = names.filter(matches);
   const withDetails = names.filter((n) => detailsFor(n).en).length;
   qs(container, '#sp-summary').textContent =
-    `${names.length} מינים ברשימה · ${withDetails} עם פרטים מלאים` + (query ? ` · ${list.length} תואמים לחיפוש` : '');
+    `${names.length} מינים ברשימה · ${withDetails} עם פרטים מלאים` + (query || filterCount ? ` · ${list.length} תואמים לסינון` : '');
 
   const el = qs(container, '#sp-list');
   if (!list.length) { el.innerHTML = '<p style="color:var(--ink-soft)">אין מין תואם.</p>'; return; }
 
-  if (sortMode === 'family' || sortMode === 'seen') {
+  if (sortMode === 'family' || sortMode === 'seen' || sortMode === 'project') {
     const groups = new Map<string, string[]>();
     for (const n of list) {
-      const key = sortMode === 'family' ? (detailsFor(n).family || '(ללא משפחה)') : (counts[n] ? 'נצפה' : 'לא נצפה');
-      (groups.get(key) ?? groups.set(key, []).get(key)!).push(n);
+      const keys = sortMode === 'family' ? [detailsFor(n).family || '(ללא משפחה)']
+        : sortMode === 'seen' ? [counts[n] ? 'נצפה' : 'לא נצפה']
+        : [...(projectsByName[n] ?? new Set(['(ללא פרויקט)']))];
+      for (const key of keys) (groups.get(key) ?? groups.set(key, []).get(key)!).push(n);
     }
     const keys = sortMode === 'seen'
-      ? ['נצפה', 'לא נצפה'].filter((k) => groups.has(k))
-      : [...groups.keys()].sort((a, b) => a.localeCompare(b, 'he'));
+      ? (sortDir === 'asc' ? ['נצפה', 'לא נצפה'] : ['לא נצפה', 'נצפה']).filter((k) => groups.has(k))
+      : sortAlpha([...groups.keys()]);
     el.innerHTML = keys.map((key) => {
-      const items = groups.get(key)!.sort((a, b) => a.localeCompare(b, 'he'));
+      const items = sortAlpha(groups.get(key)!);
       const collapsed = collapsedGroups.has(key);
       return `
       <div class="sp-group">
@@ -163,14 +247,14 @@ function render(): void {
     const sorted = [...list].sort((a, b) => {
       const la = lastObserved[a] || '';
       const lb = lastObserved[b] || '';
-      if (la && lb) return la < lb ? 1 : la > lb ? -1 : 0;
+      if (la && lb) return sortDir === 'asc' ? (la < lb ? 1 : la > lb ? -1 : 0) : (la < lb ? -1 : la > lb ? 1 : 0);
       if (la) return -1;
       if (lb) return 1;
       return a.localeCompare(b, 'he');
     });
     el.innerHTML = itemsHtml(sorted);
   } else {
-    el.innerHTML = itemsHtml([...list].sort((a, b) => a.localeCompare(b, 'he')));
+    el.innerHTML = itemsHtml(sortAlpha(list));
   }
   renderOpenPhotos();
   renderTileThumbnails();
