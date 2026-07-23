@@ -1,4 +1,5 @@
-/* views/settings.ts — הגדרות: סנכרון לענן (Firebase), עיצוב, גיבוי/שחזור, ניהול נתונים. */
+/* views/settings.ts — הגדרות: מסך קטגוריות (עיצוב / סנכרון וגיבוי / רשימות /
+ * ייבוא תמונות / התראות / נתונים מקומיים), כל קטגוריה נפתחת כמסך משלה. */
 
 import {
   listSpecies, addSpecies, deleteSpecies, listSpeciesRows,
@@ -14,13 +15,13 @@ import { getFirebaseSyncCode, configureFirebaseSync, onFirebaseSyncStatus, type 
 import {
   notificationsSupported, permissionState, requestPermission,
   isEnabled, setEnabled, isMigrationEnabled, setMigrationEnabled, isOnThisDayEnabled, setOnThisDayEnabled,
-  checkAndNotify,
+  checkAndNotify, type NotifPermission,
 } from '../lib/notifications';
-import { pickLocation } from '../lib/location-picker';
+import { pickLocation, type LatLng } from '../lib/location-picker';
 import { toast, confirmDialog, fmtDateTime } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
 import { qs, input } from '../lib/dom';
-import { icon } from '../lib/icons';
+import { icon, type IconName } from '../lib/icons';
 import { readExifDate } from '../lib/exif';
 import { primarySpecies } from '../lib/observation';
 import {
@@ -38,6 +39,7 @@ let locationDupeGroups: DuplicateGroup[] = [];
 let projectDupeGroups: DuplicateGroup[] = [];
 let renamingLocation: string | null = null;
 let renamingProject: string | null = null;
+let newLocationCoords: LatLng | null = null;
 
 interface PhotoImportRow {
   file: File;
@@ -49,8 +51,44 @@ interface PhotoImportRow {
 let photoImportRows: PhotoImportRow[] = [];
 let photoImportObsCache: Observation[] = [];
 
+/* ---------- category menu ---------- */
+
+type SettingsCategory = 'appearance' | 'sync' | 'lists' | 'photos' | 'notifications' | 'data';
+let activeCategory: SettingsCategory | null = null;
+
+const CATEGORY_META: Record<SettingsCategory, { icon: IconName; title: string; subtitle: string }> = {
+  appearance: { icon: 'palette', title: 'עיצוב', subtitle: 'ערכת נושא, צבעים, גודל ומשקל טקסט' },
+  sync: { icon: 'cloud', title: 'סנכרון וגיבוי', subtitle: 'סנכרון לענן (Firebase), גיבוי ושחזור' },
+  lists: { icon: 'list', title: 'ניהול רשימות', subtitle: 'מינים, מיקומים ופרויקטים' },
+  photos: { icon: 'camera', title: 'ייבוא תמונות', subtitle: 'שיוך תמונות לתצפיות לפי תאריך' },
+  notifications: { icon: 'bell', title: 'התראות', subtitle: 'תזכורות נדידה ו"בתאריך הזה"' },
+  data: { icon: 'database', title: 'נתונים מקומיים', subtitle: 'מידע על המכשיר, מחיקת הכל' },
+};
+
 export function init(el: HTMLElement): void {
   container = el;
+}
+
+function renderCategoryMenu(): void {
+  container.innerHTML = `
+    <h2>הגדרות</h2>
+    <div class="settings-menu">
+      ${(Object.keys(CATEGORY_META) as SettingsCategory[]).map((id) => {
+        const c = CATEGORY_META[id];
+        return `
+        <button type="button" class="settings-menu-row" data-cat="${id}">
+          <span class="settings-menu-icon">${icon(c.icon)}</span>
+          <span class="settings-menu-text"><strong>${c.title}</strong><span class="hint">${c.subtitle}</span></span>
+        </button>`;
+      }).join('')}
+    </div>
+  `;
+  qs(container, '.settings-menu').addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLElement>('.settings-menu-row');
+    if (!btn) return;
+    activeCategory = btn.dataset.cat as SettingsCategory;
+    void activate();
+  });
 }
 
 function fbStatusText(s: FirebaseSyncStatus): string {
@@ -82,11 +120,41 @@ export async function activate(): Promise<void> {
   const activeFontColor = currentFontColor();
   const activeFontSize = currentFontSize();
   const activeFontWeight = currentFontWeight();
-  container.innerHTML = `
-    <h2>הגדרות</h2>
 
+  unsubStatus?.();
+  unsubStatus = null;
+
+  if (!activeCategory) { renderCategoryMenu(); return; }
+
+  const meta = CATEGORY_META[activeCategory];
+  container.innerHTML = `
+    <div class="settings-subhead">
+      <button type="button" class="btn btn-sm" id="settings-back">→ הגדרות</button>
+      <h2>${icon(meta.icon)} ${meta.title}</h2>
+    </div>
+    ${activeCategory === 'appearance' ? appearanceHtml(activeTheme, activeAccent, activeFontColor, activeFontSize, activeFontWeight) : ''}
+    ${activeCategory === 'sync' ? syncHtml(fbCode) : ''}
+    ${activeCategory === 'notifications' ? notificationsHtml(notifSupported, notifPermission, notifEnabled, notifMigration, notifOnThisDay) : ''}
+    ${activeCategory === 'lists' ? listsHtml() : ''}
+    ${activeCategory === 'photos' ? photosHtml() : ''}
+    ${activeCategory === 'data' ? dataHtml(obsCount, version) : ''}
+  `;
+
+  qs(container, '#settings-back').addEventListener('click', () => { activeCategory = null; void activate(); });
+
+  if (activeCategory === 'appearance') wireAppearance();
+  if (activeCategory === 'sync') wireSync();
+  if (activeCategory === 'notifications' && notifSupported) wireNotifications();
+  if (activeCategory === 'lists') wireLists();
+  if (activeCategory === 'photos') wirePhotos();
+  if (activeCategory === 'data') wireData();
+}
+
+/* ---------- עיצוב ---------- */
+
+function appearanceHtml(activeTheme: ThemeId, activeAccent: AccentId, activeFontColor: FontColorId, activeFontSize: FontSizeId, activeFontWeight: FontWeightId): string {
+  return `
     <div class="settings-card">
-      <h3>${icon('palette')} עיצוב</h3>
       <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
         התאימו את מראה האפליקציה — כל שינוי חל מיד ונשמר במכשיר זה.
       </p>
@@ -143,14 +211,28 @@ export async function activate(): Promise<void> {
         </div>
       </div>
     </div>
+  `;
+}
 
+function wireAppearance(): void {
+  qs(container, '#s-theme-picker').addEventListener('click', onThemePick);
+  qs(container, '#s-accent-picker').addEventListener('click', onAccentPick);
+  qs(container, '#s-font-color-picker').addEventListener('click', onFontColorPick);
+  qs(container, '#s-font-size-picker').addEventListener('click', onFontSizePick);
+  qs(container, '#s-font-weight-picker').addEventListener('click', onFontWeightPick);
+}
+
+/* ---------- סנכרון וגיבוי ---------- */
+
+function syncHtml(fbCode: string): string {
+  return `
     <div class="settings-card">
       <h3>${icon('cloud')} סנכרון לענן (Firebase)</h3>
       <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
         סנכרון דו-כיווני בזמן-אמת דרך Firebase. מזינים אותו "קוד משפחה" בכל
-        המכשירים (טלפון, מחשב וכו') ותצפיות/מינים/מיקומים/תמונות שנשמרים באחד
-        מופיעים אוטומטית בשאר. עובד גם ללא רשת — השינויים נשמרים מיידית
-        במכשיר ומסתנכרנים אוטומטית כשחוזר החיבור.
+        המכשירים (טלפון, מחשב וכו') ותצפיות/מינים/מיקומים/פרויקטים/תמונות
+        שנשמרים באחד מופיעים אוטומטית בשאר. עובד גם ללא רשת — השינויים נשמרים
+        מיידית במכשיר ומסתנכרנים אוטומטית כשחוזר החיבור.
       </p>
       <div class="field">
         <label for="s-fb-code">קוד משפחה <span class="hint">(בחרו מחרוזת ייחודית וסודית; אותו הקוד בכל המכשירים)</span></label>
@@ -161,7 +243,39 @@ export async function activate(): Promise<void> {
     </div>
 
     <div class="settings-card">
-      <h3>${icon('bell')} התראות</h3>
+      <h3>${icon('save')} גיבוי ושחזור</h3>
+      <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
+        קובץ גיבוי יחיד (כולל תמונות באיכות מקור). ניתן לשחזור בכל מכשיר.
+      </p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary" id="s-backup">${icon('download')} הורדת קובץ גיבוי מלא</button>
+        <label class="btn" style="cursor:pointer">${icon('upload')} שחזור מקובץ גיבוי
+          <input type="file" id="s-restore" accept=".json,application/json" hidden>
+        </label>
+      </div>
+    </div>
+  `;
+}
+
+function wireSync(): void {
+  qs(container, '#s-fb-save').addEventListener('click', () => void onSaveFirebaseSync());
+  qs(container, '#s-backup').addEventListener('click', () => void onBackup());
+  input(container, '#s-restore').addEventListener('change', (e) => void onRestore(e));
+
+  unsubStatus = onFirebaseSyncStatus((s) => {
+    const el = container.querySelector<HTMLElement>('#s-fb-status');
+    if (!el) return;
+    el.textContent = fbStatusText(s);
+    const isErr = s.state === 'error' || (s.state === 'offline' && !s.pending);
+    el.className = 'settings-status ' + (s.state === 'idle' ? 'ok' : isErr ? 'err' : '');
+  });
+}
+
+/* ---------- התראות ---------- */
+
+function notificationsHtml(notifSupported: boolean, notifPermission: NotifPermission, notifEnabled: boolean, notifMigration: boolean, notifOnThisDay: boolean): string {
+  return `
+    <div class="settings-card">
       ${!notifSupported ? `
         <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
           הדפדפן או המכשיר הזה אינו תומך בהתראות.
@@ -187,22 +301,24 @@ export async function activate(): Promise<void> {
           </label>
         </div>`}
     </div>
+  `;
+}
 
-    <div class="settings-card">
-      <h3>${icon('save')} גיבוי ושחזור</h3>
-      <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
-        קובץ גיבוי יחיד (כולל תמונות באיכות מקור). ניתן לשחזור בכל מכשיר.
-      </p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-primary" id="s-backup">${icon('download')} הורדת קובץ גיבוי מלא</button>
-        <label class="btn" style="cursor:pointer">${icon('upload')} שחזור מקובץ גיבוי
-          <input type="file" id="s-restore" accept=".json,application/json" hidden>
-        </label>
-      </div>
-    </div>
+function wireNotifications(): void {
+  container.querySelector('#s-notif-enabled')?.addEventListener('change', (e) => void onNotifEnabledChange(e));
+  container.querySelector('#s-notif-migration')?.addEventListener('change', (e) => {
+    void setMigrationEnabled((e.target as HTMLInputElement).checked);
+  });
+  container.querySelector('#s-notif-on-this-day')?.addEventListener('change', (e) => {
+    void setOnThisDayEnabled((e.target as HTMLInputElement).checked);
+  });
+}
 
+/* ---------- ייבוא תמונות ---------- */
+
+function photosHtml(): string {
+  return `
     <div class="settings-card">
-      <h3>${icon('camera')} ייבוא תמונות לפי תאריך</h3>
       <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
         בוחרים כמה תמונות בבת אחת — האפליקציה מזהה את תאריך הצילום (מתוך נתוני
         התמונה, ואם אין — מתאריך הקובץ) ומשייכת אוטומטית כל תמונה לתצפית הקרובה
@@ -215,7 +331,22 @@ export async function activate(): Promise<void> {
       <div class="photo-import-list" id="s-photo-import-list"></div>
       <button type="button" class="btn btn-primary" id="s-photo-import-confirm" style="margin-top:10px" hidden>${icon('save')} ייבוא תמונות</button>
     </div>
+  `;
+}
 
+function wirePhotos(): void {
+  input(container, '#s-photo-import-input').addEventListener('change', (e) => void onPhotoImportFilesChosen(e));
+  qs(container, '#s-photo-import-list').addEventListener('change', (e) => onPhotoImportSelectChange(e));
+  qs(container, '#s-photo-import-list').addEventListener('click', (e) => onPhotoImportRemoveClick(e));
+  qs(container, '#s-photo-import-confirm').addEventListener('click', () => void onPhotoImportConfirm());
+  photoImportRows = [];
+  photoImportObsCache = [];
+}
+
+/* ---------- ניהול רשימות (מינים / מיקומים / פרויקטים) ---------- */
+
+function listsHtml(): string {
+  return `
     <div class="settings-card">
       <h3>${icon('bird')} ניהול רשימת המינים</h3>
       <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
@@ -237,14 +368,16 @@ export async function activate(): Promise<void> {
     <div class="settings-card">
       <h3>${icon('pin')} ניהול רשימת המיקומים</h3>
       <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
-        מיקומים שמורים עם קואורדינטות קבועות — בחירת מיקום שמור בטופס תצפית חדשה
-        תמלא את הקואורדינטות אוטומטית.
+        מיקומים שמורים עם קואורדינטות קבועות, נבחרות על המפה — בחירת מיקום שמור
+        בטופס תצפית חדשה תמלא את הקואורדינטות אוטומטית ותנעל אותן מפני שינוי.
+        מחיקת מיקום מהרשימה אינה פוגעת בתצפיות קיימות — הן שומרות את השם
+        והקואורדינטות שכבר נרשמו בהן, רק שהמיקום לא יינעל יותר אוטומטית בעריכה עתידית.
       </p>
       <div class="loc-add-row">
         <input type="text" id="s-loc-name" placeholder="שם מיקום חדש...">
-        <input type="number" step="any" id="s-loc-lat" placeholder="קו רוחב" inputmode="decimal">
-        <input type="number" step="any" id="s-loc-lng" placeholder="קו אורך" inputmode="decimal">
-        <button type="button" class="btn btn-icon" id="s-loc-pick" title="בחירה על המפה" aria-label="בחירה על המפה">${icon('pin')}</button>
+        <button type="button" class="btn location-pin-btn" id="s-loc-pick">
+          ${icon('pin')} <span id="s-loc-pick-label">בחירת מיקום על המפה</span>
+        </button>
         <button class="btn" id="s-loc-add">${icon('plus')} הוספה</button>
       </div>
       <div class="dupe-toolbar">
@@ -274,41 +407,10 @@ export async function activate(): Promise<void> {
       <div class="dupe-list" id="s-project-dupes"></div>
       <div class="species-list" id="s-project-list"></div>
     </div>
-
-    <div class="settings-card">
-      <h3>${icon('database')} נתונים מקומיים</h3>
-      <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
-        במכשיר זה שמורות כרגע ${obsCount} תצפיות. ${version ? `· גרסת אפליקציה: v${escapeHtml(version)}` : ''}
-      </p>
-      <button class="btn btn-danger" id="s-clear">${icon('trash')} מחיקת כל הנתונים</button>
-    </div>
   `;
+}
 
-  qs(container, '#s-theme-picker').addEventListener('click', onThemePick);
-  qs(container, '#s-accent-picker').addEventListener('click', onAccentPick);
-  qs(container, '#s-font-color-picker').addEventListener('click', onFontColorPick);
-  qs(container, '#s-font-size-picker').addEventListener('click', onFontSizePick);
-  qs(container, '#s-font-weight-picker').addEventListener('click', onFontWeightPick);
-  qs(container, '#s-fb-save').addEventListener('click', () => void onSaveFirebaseSync());
-  if (notifSupported) {
-    container.querySelector('#s-notif-enabled')?.addEventListener('change', (e) => void onNotifEnabledChange(e));
-    container.querySelector('#s-notif-migration')?.addEventListener('change', (e) => {
-      void setMigrationEnabled((e.target as HTMLInputElement).checked);
-    });
-    container.querySelector('#s-notif-on-this-day')?.addEventListener('change', (e) => {
-      void setOnThisDayEnabled((e.target as HTMLInputElement).checked);
-    });
-  }
-  qs(container, '#s-backup').addEventListener('click', () => void onBackup());
-  input(container, '#s-restore').addEventListener('change', (e) => void onRestore(e));
-  input(container, '#s-photo-import-input').addEventListener('change', (e) => void onPhotoImportFilesChosen(e));
-  qs(container, '#s-photo-import-list').addEventListener('change', (e) => onPhotoImportSelectChange(e));
-  qs(container, '#s-photo-import-list').addEventListener('click', (e) => onPhotoImportRemoveClick(e));
-  qs(container, '#s-photo-import-confirm').addEventListener('click', () => void onPhotoImportConfirm());
-  photoImportRows = [];
-  photoImportObsCache = [];
-  qs(container, '#s-clear').addEventListener('click', () => void onClearData());
-
+function wireLists(): void {
   qs(container, '#s-sp-add').addEventListener('click', () => void onAddSpeciesManaged());
   input(container, '#s-sp-new').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); void onAddSpeciesManaged(); } });
   qs(container, '#s-species-list').addEventListener('click', (e) => void onSpeciesListClick(e));
@@ -319,19 +421,19 @@ export async function activate(): Promise<void> {
   qs(container, '#s-sp-merge-all').addEventListener('click', () => void onMergeAllSpeciesDupes());
   qs(container, '#s-species-dupes').addEventListener('click', (e) => void onSpeciesDupesClick(e));
 
+  newLocationCoords = null;
   qs(container, '#s-loc-add').addEventListener('click', () => void onAddLocationManaged());
   qs(container, '#s-loc-pick').addEventListener('click', () => void onPickLocationForAdd());
   qs(container, '#s-loc-seed').addEventListener('click', () => void onSeedLocations());
   qs(container, '#s-location-list').addEventListener('click', (e) => void onLocationListClick(e));
-  qs(container, '#s-location-list').addEventListener('change', (e) => void onLocationCoordsChange(e));
   void renderLocationManageList();
 
   locationDupeGroups = [];
+  renamingLocation = null;
   qs(container, '#s-loc-find-dupes').addEventListener('click', () => void onFindLocationDupes());
   qs(container, '#s-loc-merge-all').addEventListener('click', () => void onMergeAllLocationDupes());
   qs(container, '#s-location-dupes').addEventListener('click', (e) => void onLocationDupesClick(e));
 
-  renamingLocation = null;
   qs(container, '#s-proj-add').addEventListener('click', () => void onAddProjectManaged());
   input(container, '#s-proj-new').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); void onAddProjectManaged(); } });
   qs(container, '#s-project-list').addEventListener('click', (e) => void onProjectListClick(e));
@@ -342,15 +444,23 @@ export async function activate(): Promise<void> {
   qs(container, '#s-proj-find-dupes').addEventListener('click', () => void onFindProjectDupes());
   qs(container, '#s-proj-merge-all').addEventListener('click', () => void onMergeAllProjectDupes());
   qs(container, '#s-project-dupes').addEventListener('click', (e) => void onProjectDupesClick(e));
+}
 
-  unsubStatus?.();
-  unsubStatus = onFirebaseSyncStatus((s) => {
-    const el = container.querySelector<HTMLElement>('#s-fb-status');
-    if (!el) return;
-    el.textContent = fbStatusText(s);
-    const isErr = s.state === 'error' || (s.state === 'offline' && !s.pending);
-    el.className = 'settings-status ' + (s.state === 'idle' ? 'ok' : isErr ? 'err' : '');
-  });
+/* ---------- נתונים מקומיים ---------- */
+
+function dataHtml(obsCount: number, version: string): string {
+  return `
+    <div class="settings-card">
+      <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
+        במכשיר זה שמורות כרגע ${obsCount} תצפיות. ${version ? `· גרסת אפליקציה: v${escapeHtml(version)}` : ''}
+      </p>
+      <button class="btn btn-danger" id="s-clear">${icon('trash')} מחיקת כל הנתונים</button>
+    </div>
+  `;
+}
+
+function wireData(): void {
+  qs(container, '#s-clear').addEventListener('click', () => void onClearData());
 }
 
 /* ---------- shared duplicate-group rendering ---------- */
@@ -469,13 +579,15 @@ async function renderLocationManageList(): Promise<void> {
   el.innerHTML = rows.length
     ? rows.map((r) => {
       const isRenaming = renamingLocation === r.name;
+      const hasCoords = r.lat != null && r.lng != null;
       return `
       <div class="sp-row loc-row" data-name="${escapeHtml(r.name)}">
         ${isRenaming
           ? `<input type="text" class="rename-input" value="${escapeHtml(r.name)}">`
           : `<span class="loc-row-name" title="${escapeHtml(r.name)}">${escapeHtml(r.name)}</span>`}
-        <input type="number" step="any" class="loc-lat" placeholder="קו רוחב" value="${r.lat ?? ''}" inputmode="decimal">
-        <input type="number" step="any" class="loc-lng" placeholder="קו אורך" value="${r.lng ?? ''}" inputmode="decimal">
+        <button type="button" class="btn btn-sm loc-pick-coords${hasCoords ? ' locked' : ''}" data-name="${escapeHtml(r.name)}" title="בחירת מיקום על המפה">
+          ${icon('pin')} ${hasCoords ? 'מיקום נקבע' : 'לא נקבע'}
+        </button>
         ${isRenaming
           ? `<button type="button" class="rename-save" data-name="${escapeHtml(r.name)}" title="שמירת שם" aria-label="שמירת שם">${icon('check')}</button>
              <button type="button" class="rename-cancel" title="ביטול" aria-label="ביטול">✕</button>`
@@ -489,30 +601,23 @@ async function renderLocationManageList(): Promise<void> {
 
 async function onAddLocationManaged(): Promise<void> {
   const nameInp = input(container, '#s-loc-name');
-  const latInp = input(container, '#s-loc-lat');
-  const lngInp = input(container, '#s-loc-lng');
   const name = nameInp.value.trim();
   if (!name) { toast('יש להזין שם מיקום', true); return; }
-  const lat = latInp.value === '' ? null : parseFloat(latInp.value);
-  const lng = lngInp.value === '' ? null : parseFloat(lngInp.value);
-  await addLocation(name, lat != null && Number.isFinite(lat) ? lat : null, lng != null && Number.isFinite(lng) ? lng : null);
+  await addLocation(name, newLocationCoords?.lat ?? null, newLocationCoords?.lng ?? null);
   nameInp.value = '';
-  latInp.value = '';
-  lngInp.value = '';
+  newLocationCoords = null;
+  const label = container.querySelector<HTMLElement>('#s-loc-pick-label');
+  if (label) label.textContent = 'בחירת מיקום על המפה';
   await renderLocationManageList();
   toast(`"${name}" נוסף לרשימת המיקומים`);
 }
 
 async function onPickLocationForAdd(): Promise<void> {
-  const latInp = input(container, '#s-loc-lat');
-  const lngInp = input(container, '#s-loc-lng');
-  const lat = parseFloat(latInp.value);
-  const lng = parseFloat(lngInp.value);
-  const initial = Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
-  const result = await pickLocation(initial);
+  const result = await pickLocation(newLocationCoords);
   if (result) {
-    latInp.value = String(result.lat);
-    lngInp.value = String(result.lng);
+    newLocationCoords = result;
+    const label = container.querySelector<HTMLElement>('#s-loc-pick-label');
+    if (label) label.textContent = 'מיקום נבחר על המפה';
   }
 }
 
@@ -524,6 +629,19 @@ async function onSeedLocations(): Promise<void> {
 
 async function onLocationListClick(e: Event): Promise<void> {
   const target = e.target as HTMLElement;
+  if (target.closest('.loc-pick-coords')) {
+    const name = target.closest<HTMLElement>('.loc-pick-coords')!.dataset.name!;
+    const rows = await listLocationRows();
+    const row = rows.find((r) => r.name === name);
+    const initial = row?.lat != null && row?.lng != null ? { lat: row.lat, lng: row.lng } : null;
+    const result = await pickLocation(initial);
+    if (result) {
+      await updateLocationCoords(name, result.lat, result.lng);
+      await renderLocationManageList();
+      toast('הקואורדינטות עודכנו');
+    }
+    return;
+  }
   if (target.closest('.rename')) {
     renamingLocation = target.closest<HTMLElement>('.rename')!.dataset.name!;
     await renderLocationManageList();
@@ -548,23 +666,10 @@ async function onLocationListClick(e: Event): Promise<void> {
   const btn = target.closest<HTMLElement>('.del');
   if (!btn) return;
   const name = btn.dataset.name!;
-  if (!(await confirmDialog(`למחוק את "${name}" מרשימת המיקומים?`, 'מחיקה'))) return;
+  if (!(await confirmDialog(`למחוק את "${name}" מרשימת המיקומים? תצפיות קיימות ישמרו את השם והקואורדינטות שכבר נרשמו בהן.`, 'מחיקה'))) return;
   await deleteLocation(name);
   await renderLocationManageList();
   toast(`"${name}" נמחק מרשימת המיקומים`);
-}
-
-async function onLocationCoordsChange(e: Event): Promise<void> {
-  const target = e.target as HTMLInputElement;
-  if (!target.classList.contains('loc-lat') && !target.classList.contains('loc-lng')) return;
-  const row = target.closest<HTMLElement>('.loc-row')!;
-  const name = row.dataset.name!;
-  const latVal = row.querySelector<HTMLInputElement>('.loc-lat')!.value;
-  const lngVal = row.querySelector<HTMLInputElement>('.loc-lng')!.value;
-  const lat = latVal === '' ? null : parseFloat(latVal);
-  const lng = lngVal === '' ? null : parseFloat(lngVal);
-  await updateLocationCoords(name, lat != null && Number.isFinite(lat) ? lat : null, lng != null && Number.isFinite(lng) ? lng : null);
-  toast('הקואורדינטות נשמרו');
 }
 
 /* ---------- location duplicate finder / merge ---------- */
