@@ -2,7 +2,8 @@
  * מיון לפי עמודה, קיבוץ (פרויקט / מין), סימון מרובה, וייצוא Excel/PDF. */
 
 import {
-  listObservations, deleteObservation, saveObservation, listSpecies, addSpecies,
+  listObservations, deleteObservation, saveObservation, getObservation, listSpecies, addSpecies,
+  listLocationRows, listProjectRows,
 } from '../db/repository';
 import { toast, fmtDateTime, fmtCoords, confirmDialog } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
@@ -12,10 +13,11 @@ import { qs, input, select } from '../lib/dom';
 import { icon } from '../lib/icons';
 import { renderObservationTile } from '../lib/tile-card';
 import { viewModeToggleHtml, wireViewModeToggle, syncViewModeToggle, type ViewDisplayMode } from '../lib/view-mode';
+import { wireCombo } from '../lib/combo';
 import { speciesNames, totalQuantity, hasSpecies, primarySpecies, speciesLabel, entriesOf } from '../lib/observation';
 import { navigate } from '../main';
 import type { ViewParams } from './view';
-import type { Observation } from '../types';
+import type { Observation, LocationRow } from '../types';
 
 let container: HTMLElement;
 let selected = new Set<string>();
@@ -57,6 +59,7 @@ export function init(el: HTMLElement): void {
           <button data-fmt="pdf">${icon('document')} PDF</button>
         </div>
       </div>
+      <button class="btn btn-sm" id="bulk-edit-btn" disabled>${icon('edit')} עריכה מרוכזת</button>
       <button class="btn btn-sm btn-danger" id="del-btn" disabled>${icon('trash')} מחיקה</button>
       <span class="spacer"></span>
       <span class="sel-count" id="sel-count"></span>
@@ -98,6 +101,7 @@ export function init(el: HTMLElement): void {
     filtered.forEach((o) => (checked ? selected.add(o.id) : selected.delete(o.id)));
     renderRows();
   });
+  qs(container, '#bulk-edit-btn').addEventListener('click', () => void onBulkEdit());
   qs(container, '#del-btn').addEventListener('click', () => void onBulkDelete());
   input(container, '#csv-input').addEventListener('change', (e) => void onImportCsv(e));
   qs(container, '#obs-tbody').addEventListener('click', (e) => void onRowClick(e));
@@ -283,6 +287,7 @@ function updateToolbar(): void {
   qs(container, '#sel-count').textContent =
     n ? `${n} מסומנות` : (filtered.length !== observations.length ? `${filtered.length} מוצגות` : '');
   qs<HTMLButtonElement>(container, '#del-btn').disabled = n === 0;
+  qs<HTMLButtonElement>(container, '#bulk-edit-btn').disabled = n === 0;
   const all = input(container, '#sel-all');
   const selInView = filtered.filter((o) => selected.has(o.id)).length;
   all.checked = filtered.length > 0 && selInView === filtered.length;
@@ -331,6 +336,115 @@ async function onBulkDelete(): Promise<void> {
   selected.clear();
   await activate();
   toast('התצפיות נמחקו');
+}
+
+/* ---------- bulk edit (project / location) ---------- */
+
+interface BulkEditResult {
+  project?: string;
+  location?: { name: string; lat: number | null; lng: number | null };
+}
+
+async function openBulkEditModal(count: number): Promise<BulkEditResult | null> {
+  const projectRows = await listProjectRows();
+  const projectSuggestions = [...new Set([...observations.map((o) => o.project), ...projectRows.map((p) => p.name)].filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'he'));
+  const locationRows = await listLocationRows();
+  const savedLocations = new Map<string, LocationRow>(locationRows.map((l) => [l.name, l]));
+  const locationSuggestions = [...new Set([...observations.map((o) => o.locationName), ...locationRows.map((l) => l.name)].filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'he'));
+
+  return new Promise((resolve) => {
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    backdrop.innerHTML = `
+      <div class="modal bulk-edit-modal">
+        <h3>עריכה מרוכזת — ${count} תצפיות</h3>
+        <label class="notif-toggle-row"><span>עדכון פרויקט</span><input type="checkbox" id="be-project-toggle"></label>
+        <div class="field combo" id="be-project-field" hidden>
+          <input type="text" id="be-project" placeholder="שם פרויקט...">
+          <div class="combo-list" hidden></div>
+        </div>
+        <label class="notif-toggle-row"><span>עדכון מיקום</span><input type="checkbox" id="be-location-toggle"></label>
+        <div class="field combo" id="be-location-field" hidden>
+          <input type="text" id="be-location" placeholder="שם מיקום...">
+          <div class="combo-list" hidden></div>
+          <span class="hint" id="be-location-hint"></span>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-primary" id="be-apply">עדכון</button>
+          <button class="btn" id="be-cancel">ביטול</button>
+        </div>
+      </div>`;
+    document.getElementById('modal-root')!.appendChild(backdrop);
+
+    const close = (result: BulkEditResult | null): void => { backdrop.remove(); resolve(result); };
+
+    const projectToggle = backdrop.querySelector<HTMLInputElement>('#be-project-toggle')!;
+    const projectField = backdrop.querySelector<HTMLElement>('#be-project-field')!;
+    const projectInput = backdrop.querySelector<HTMLInputElement>('#be-project')!;
+    projectToggle.addEventListener('change', () => { projectField.hidden = !projectToggle.checked; });
+    wireCombo(projectInput, backdrop.querySelector<HTMLElement>('#be-project-field .combo-list')!, () => projectSuggestions);
+
+    const locationToggle = backdrop.querySelector<HTMLInputElement>('#be-location-toggle')!;
+    const locationField = backdrop.querySelector<HTMLElement>('#be-location-field')!;
+    const locationInput = backdrop.querySelector<HTMLInputElement>('#be-location')!;
+    const locationHint = backdrop.querySelector<HTMLElement>('#be-location-hint')!;
+    locationToggle.addEventListener('change', () => { locationField.hidden = !locationToggle.checked; });
+    const updateLocationHint = (): void => {
+      const saved = savedLocations.get(locationInput.value.trim());
+      locationHint.textContent = saved && saved.lat != null && saved.lng != null
+        ? 'מיקום שמור — הקואורדינטות שלו ייקבעו אוטומטית לכל התצפיות שנבחרו'
+        : '';
+    };
+    locationInput.addEventListener('input', updateLocationHint);
+    wireCombo(locationInput, backdrop.querySelector<HTMLElement>('#be-location-field .combo-list')!, () => locationSuggestions, {
+      onSelect: () => updateLocationHint(),
+    });
+
+    backdrop.querySelector('#be-apply')!.addEventListener('click', () => {
+      const result: BulkEditResult = {};
+      if (projectToggle.checked) result.project = projectInput.value.trim();
+      if (locationToggle.checked) {
+        const name = locationInput.value.trim();
+        const saved = savedLocations.get(name);
+        result.location = { name, lat: saved?.lat ?? null, lng: saved?.lng ?? null };
+      }
+      if (!('project' in result) && !('location' in result)) { close(null); return; }
+      close(result);
+    });
+    backdrop.querySelector('#be-cancel')!.addEventListener('click', () => close(null));
+    backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(null); });
+  });
+}
+
+async function onBulkEdit(): Promise<void> {
+  if (!selected.size) return;
+  const result = await openBulkEditModal(selected.size);
+  if (!result) return;
+
+  const changeParts: string[] = [];
+  if ('project' in result) changeParts.push(`פרויקט → "${result.project}"`);
+  if ('location' in result) changeParts.push(`מיקום → "${result.location!.name}"`);
+  if (!(await confirmDialog(`לעדכן ${selected.size} תצפיות: ${changeParts.join(', ')}? הפעולה אינה הפיכה אוטומטית.`, 'עדכון'))) return;
+
+  const ids = [...selected];
+  let updated = 0;
+  for (const id of ids) {
+    const obs = await getObservation(id);
+    if (!obs) continue;
+    if ('project' in result) obs.project = result.project!;
+    if ('location' in result) {
+      obs.locationName = result.location!.name;
+      obs.lat = result.location!.lat;
+      obs.lng = result.location!.lng;
+    }
+    await saveObservation(obs);
+    updated++;
+  }
+  selected.clear();
+  await activate();
+  toast(`${updated} תצפיות עודכנו ✓`);
 }
 
 /* ---------- export ---------- */

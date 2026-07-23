@@ -12,6 +12,7 @@ import type {
   Observation,
   SpeciesRow,
   LocationRow,
+  ProjectRow,
   MediaRecord,
 } from '../types';
 
@@ -32,7 +33,7 @@ function emitChange(): void {
  * "something changed, re-render"). Sync backends that need to know exactly
  * which record changed (e.g. the Firebase sync engine) subscribe here
  * instead of re-scanning the whole database on every change. */
-export type MutationEntity = 'observation' | 'species' | 'location';
+export type MutationEntity = 'observation' | 'species' | 'location' | 'project';
 export type MutationOp = 'upsert' | 'delete';
 type MutationListener = (entity: MutationEntity, id: string, op: MutationOp, payload: unknown) => void;
 const mutationListeners = new Set<MutationListener>();
@@ -249,7 +250,49 @@ export async function seedLocationsFromObservations(): Promise<number> {
   return toAdd.size;
 }
 
-/* ---------- duplicate detection & merge (species / locations) ----------
+/* ---------- projects (local master list, synced like species/locations) ---------- */
+
+/** All non-deleted saved projects, name-sorted. */
+export async function listProjectRows(): Promise<ProjectRow[]> {
+  const all = await db.projects.toArray();
+  return all.filter((p) => !p.deleted).sort((a, b) => a.name.localeCompare(b.name, 'he'));
+}
+
+export async function getProject(name: string): Promise<ProjectRow | undefined> {
+  const row = await db.projects.get(name);
+  return row && !row.deleted ? row : undefined;
+}
+
+/** Raw fetch including tombstones — for last-write-wins comparisons. */
+export function getProjectRaw(name: string): Promise<ProjectRow | undefined> {
+  return db.projects.get(name);
+}
+
+export async function addProject(name: string): Promise<boolean> {
+  name = String(name || '').trim();
+  if (!name) return false;
+  const row: ProjectRow = { name, updatedAt: now(), deleted: false };
+  await db.projects.put(row);
+  emitMutation('project', name, 'upsert', row);
+  return true;
+}
+
+export async function deleteProject(name: string): Promise<void> {
+  const row = await db.projects.get(name);
+  if (!row) return;
+  row.deleted = true;
+  row.updatedAt = now();
+  await db.projects.put(row);
+  emitMutation('project', name, 'delete', row);
+}
+
+export async function putProjectRaw(row: ProjectRow): Promise<void> {
+  await db.projects.put(row);
+  emitChange();
+  emitMutation('project', row.name, row.deleted ? 'delete' : 'upsert', row);
+}
+
+/* ---------- duplicate detection & merge (species / locations / projects) ----------
  * Names that differ only by whitespace, punctuation, or Hebrew niqqud are
  * treated as the "same" for detection purposes, even though Dexie's
  * exact-string keys make them distinct rows. Merging rewrites every
@@ -308,6 +351,15 @@ export async function findDuplicateLocationGroups(): Promise<DuplicateGroup[]> {
   const obs = await listObservations();
   const counts = new Map<string, number>();
   for (const o of obs) if (o.locationName) counts.set(o.locationName, (counts.get(o.locationName) || 0) + 1);
+  const allNames = new Set<string>([...rows.map((r) => r.name), ...counts.keys()]);
+  return groupDuplicates(allNames, counts);
+}
+
+export async function findDuplicateProjectGroups(): Promise<DuplicateGroup[]> {
+  const rows = await listProjectRows();
+  const obs = await listObservations();
+  const counts = new Map<string, number>();
+  for (const o of obs) if (o.project) counts.set(o.project, (counts.get(o.project) || 0) + 1);
   const allNames = new Set<string>([...rows.map((r) => r.name), ...counts.keys()]);
   return groupDuplicates(allNames, counts);
 }
@@ -397,6 +449,45 @@ export async function mergeLocationNames(variants: string[], canonical: string):
   for (const v of toMerge) {
     const row = await db.locations.get(v);
     if (row && !row.deleted) await deleteLocation(v);
+  }
+  return changed;
+}
+
+/** Rewrite every observation using one of `variants` as its project name to
+ * `canonical` (also used for a plain rename, passing a single-item variants
+ * array), then drop the variant rows from the projects master list.
+ * Returns how many observations were updated. */
+export async function mergeProjectNames(variants: string[], canonical: string): Promise<number> {
+  canonical = canonical.trim();
+  const toMerge = new Set(variants.filter((v) => v !== canonical));
+  if (!toMerge.size) return 0;
+  let changed = 0;
+  const all = await db.observations.toArray();
+  for (const o of all) {
+    if (o.deleted) continue;
+    if (toMerge.has(o.project)) {
+      o.project = canonical;
+      o.updatedAt = now();
+      await db.observations.put(o);
+      emitMutation('observation', o.id, 'upsert', o);
+      changed++;
+    }
+  }
+  const ts = now();
+  const canonicalRow = await db.projects.get(canonical);
+  if (!canonicalRow || canonicalRow.deleted) {
+    const row: ProjectRow = { name: canonical, updatedAt: ts, deleted: false };
+    await db.projects.put(row);
+    emitMutation('project', canonical, 'upsert', row);
+  }
+  for (const v of toMerge) {
+    const row = await db.projects.get(v);
+    if (row && !row.deleted) {
+      row.deleted = true;
+      row.updatedAt = ts;
+      await db.projects.put(row);
+      emitMutation('project', v, 'delete', row);
+    }
   }
   return changed;
 }

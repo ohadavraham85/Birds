@@ -3,7 +3,9 @@
 import {
   listSpecies, addSpecies, deleteSpecies, listSpeciesRows,
   listLocationRows, addLocation, updateLocationCoords, deleteLocation, seedLocationsFromObservations,
-  findDuplicateSpeciesGroups, findDuplicateLocationGroups, mergeSpeciesNames, mergeLocationNames,
+  listProjectRows, addProject, deleteProject,
+  findDuplicateSpeciesGroups, findDuplicateLocationGroups, findDuplicateProjectGroups,
+  mergeSpeciesNames, mergeLocationNames, mergeProjectNames,
   clearAllData, listObservations, listObservationsRaw, getObservation, saveObservation,
   putObservationRaw, saveMedia, mediaForObservation,
 } from '../db/repository';
@@ -27,12 +29,15 @@ import {
   setTheme, setAccent, setFontColor, setFontSize, setFontWeight,
   type ThemeId, type AccentId, type FontColorId, type FontSizeId, type FontWeightId,
 } from '../lib/theme';
-import type { Observation, LocationRow } from '../types';
+import type { Observation, LocationRow, ProjectRow } from '../types';
 
 let container: HTMLElement;
 let unsubStatus: (() => void) | null = null;
 let speciesDupeGroups: DuplicateGroup[] = [];
 let locationDupeGroups: DuplicateGroup[] = [];
+let projectDupeGroups: DuplicateGroup[] = [];
+let renamingLocation: string | null = null;
+let renamingProject: string | null = null;
 
 interface PhotoImportRow {
   file: File;
@@ -252,6 +257,25 @@ export async function activate(): Promise<void> {
     </div>
 
     <div class="settings-card">
+      <h3>${icon('list')} ניהול רשימת הפרויקטים</h3>
+      <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
+        הרשימה המוצעת בשדה "פרויקט" בטופס התצפית. שינוי שם פרויקט (עריכה) מעדכן
+        אותו בכל התצפיות שכבר משתמשות בו; מחיקה מסירה אותו מהרשימה בלבד —
+        תצפיות קיימות אינן נפגעות.
+      </p>
+      <div class="add-species-row">
+        <input type="text" id="s-proj-new" placeholder="הוספת פרויקט חדש לרשימה...">
+        <button class="btn" id="s-proj-add">${icon('plus')} הוספה</button>
+      </div>
+      <div class="dupe-toolbar">
+        <button type="button" class="btn btn-sm" id="s-proj-find-dupes">${icon('search')} איתור כפילויות</button>
+        <button type="button" class="btn btn-sm btn-primary" id="s-proj-merge-all" hidden>${icon('layers')} מיזוג הכל</button>
+      </div>
+      <div class="dupe-list" id="s-project-dupes"></div>
+      <div class="species-list" id="s-project-list"></div>
+    </div>
+
+    <div class="settings-card">
       <h3>${icon('database')} נתונים מקומיים</h3>
       <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
         במכשיר זה שמורות כרגע ${obsCount} תצפיות. ${version ? `· גרסת אפליקציה: v${escapeHtml(version)}` : ''}
@@ -306,6 +330,18 @@ export async function activate(): Promise<void> {
   qs(container, '#s-loc-find-dupes').addEventListener('click', () => void onFindLocationDupes());
   qs(container, '#s-loc-merge-all').addEventListener('click', () => void onMergeAllLocationDupes());
   qs(container, '#s-location-dupes').addEventListener('click', (e) => void onLocationDupesClick(e));
+
+  renamingLocation = null;
+  qs(container, '#s-proj-add').addEventListener('click', () => void onAddProjectManaged());
+  input(container, '#s-proj-new').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); void onAddProjectManaged(); } });
+  qs(container, '#s-project-list').addEventListener('click', (e) => void onProjectListClick(e));
+  void renderProjectManageList();
+
+  projectDupeGroups = [];
+  renamingProject = null;
+  qs(container, '#s-proj-find-dupes').addEventListener('click', () => void onFindProjectDupes());
+  qs(container, '#s-proj-merge-all').addEventListener('click', () => void onMergeAllProjectDupes());
+  qs(container, '#s-project-dupes').addEventListener('click', (e) => void onProjectDupesClick(e));
 
   unsubStatus?.();
   unsubStatus = onFirebaseSyncStatus((s) => {
@@ -431,14 +467,24 @@ async function renderLocationManageList(): Promise<void> {
   const el = container.querySelector<HTMLElement>('#s-location-list');
   if (!el) return;
   el.innerHTML = rows.length
-    ? rows.map((r) => `
+    ? rows.map((r) => {
+      const isRenaming = renamingLocation === r.name;
+      return `
       <div class="sp-row loc-row" data-name="${escapeHtml(r.name)}">
-        <span class="loc-row-name" title="${escapeHtml(r.name)}">${escapeHtml(r.name)}</span>
+        ${isRenaming
+          ? `<input type="text" class="rename-input" value="${escapeHtml(r.name)}">`
+          : `<span class="loc-row-name" title="${escapeHtml(r.name)}">${escapeHtml(r.name)}</span>`}
         <input type="number" step="any" class="loc-lat" placeholder="קו רוחב" value="${r.lat ?? ''}" inputmode="decimal">
         <input type="number" step="any" class="loc-lng" placeholder="קו אורך" value="${r.lng ?? ''}" inputmode="decimal">
+        ${isRenaming
+          ? `<button type="button" class="rename-save" data-name="${escapeHtml(r.name)}" title="שמירת שם" aria-label="שמירת שם">${icon('check')}</button>
+             <button type="button" class="rename-cancel" title="ביטול" aria-label="ביטול">✕</button>`
+          : `<button type="button" class="rename" data-name="${escapeHtml(r.name)}" title="שינוי שם" aria-label="שינוי שם">${icon('edit')}</button>`}
         <button type="button" class="del" data-name="${escapeHtml(r.name)}" title="מחיקה" aria-label="מחיקה">${icon('trash')}</button>
-      </div>`).join('')
+      </div>`;
+    }).join('')
     : '<p class="hint" style="padding:10px 12px">אין מיקומים שמורים.</p>';
+  if (renamingLocation) el.querySelector<HTMLInputElement>('.rename-input')?.focus();
 }
 
 async function onAddLocationManaged(): Promise<void> {
@@ -477,7 +523,29 @@ async function onSeedLocations(): Promise<void> {
 }
 
 async function onLocationListClick(e: Event): Promise<void> {
-  const btn = (e.target as HTMLElement).closest<HTMLElement>('.del');
+  const target = e.target as HTMLElement;
+  if (target.closest('.rename')) {
+    renamingLocation = target.closest<HTMLElement>('.rename')!.dataset.name!;
+    await renderLocationManageList();
+    return;
+  }
+  if (target.closest('.rename-cancel')) {
+    renamingLocation = null;
+    await renderLocationManageList();
+    return;
+  }
+  if (target.closest('.rename-save')) {
+    const oldName = target.closest<HTMLElement>('.rename-save')!.dataset.name!;
+    const row = target.closest<HTMLElement>('.loc-row')!;
+    const newName = row.querySelector<HTMLInputElement>('.rename-input')!.value.trim();
+    renamingLocation = null;
+    if (!newName || newName === oldName) { await renderLocationManageList(); return; }
+    const n = await mergeLocationNames([oldName], newName);
+    await renderLocationManageList();
+    toast(`"${oldName}" שונה ל-"${newName}" (${n} תצפיות עודכנו)`);
+    return;
+  }
+  const btn = target.closest<HTMLElement>('.del');
   if (!btn) return;
   const name = btn.dataset.name!;
   if (!(await confirmDialog(`למחוק את "${name}" מרשימת המיקומים?`, 'מחיקה'))) return;
@@ -544,6 +612,118 @@ async function onMergeAllLocationDupes(): Promise<void> {
   locationDupeGroups = [];
   renderLocationDupes();
   await renderLocationManageList();
+}
+
+/* ---------- projects list management ---------- */
+
+async function renderProjectManageList(): Promise<void> {
+  const rows = await listProjectRows();
+  const el = container.querySelector<HTMLElement>('#s-project-list');
+  if (!el) return;
+  el.innerHTML = rows.length
+    ? rows.map((r) => {
+      const isRenaming = renamingProject === r.name;
+      return `
+      <div class="sp-row proj-row" data-name="${escapeHtml(r.name)}">
+        ${isRenaming
+          ? `<input type="text" class="rename-input" value="${escapeHtml(r.name)}">`
+          : `<span>${escapeHtml(r.name)}</span>`}
+        ${isRenaming
+          ? `<button type="button" class="rename-save" data-name="${escapeHtml(r.name)}" title="שמירת שם" aria-label="שמירת שם">${icon('check')}</button>
+             <button type="button" class="rename-cancel" title="ביטול" aria-label="ביטול">✕</button>`
+          : `<button type="button" class="rename" data-name="${escapeHtml(r.name)}" title="שינוי שם" aria-label="שינוי שם">${icon('edit')}</button>`}
+        <button type="button" class="del" data-name="${escapeHtml(r.name)}" title="הסרה מהרשימה" aria-label="הסרה מהרשימה">${icon('trash')}</button>
+      </div>`;
+    }).join('')
+    : '<p class="hint" style="padding:10px 12px">אין פרויקטים ברשימה.</p>';
+  if (renamingProject) el.querySelector<HTMLInputElement>('.rename-input')?.focus();
+}
+
+async function onAddProjectManaged(): Promise<void> {
+  const inp = input(container, '#s-proj-new');
+  const name = inp.value.trim();
+  if (!name) return;
+  await addProject(name);
+  inp.value = '';
+  await renderProjectManageList();
+  toast(`"${name}" נוסף לרשימת הפרויקטים`);
+}
+
+async function onProjectListClick(e: Event): Promise<void> {
+  const target = e.target as HTMLElement;
+  if (target.closest('.rename')) {
+    renamingProject = target.closest<HTMLElement>('.rename')!.dataset.name!;
+    await renderProjectManageList();
+    return;
+  }
+  if (target.closest('.rename-cancel')) {
+    renamingProject = null;
+    await renderProjectManageList();
+    return;
+  }
+  if (target.closest('.rename-save')) {
+    const oldName = target.closest<HTMLElement>('.rename-save')!.dataset.name!;
+    const row = target.closest<HTMLElement>('.proj-row')!;
+    const newName = row.querySelector<HTMLInputElement>('.rename-input')!.value.trim();
+    renamingProject = null;
+    if (!newName || newName === oldName) { await renderProjectManageList(); return; }
+    const n = await mergeProjectNames([oldName], newName);
+    await renderProjectManageList();
+    toast(`"${oldName}" שונה ל-"${newName}" (${n} תצפיות עודכנו)`);
+    return;
+  }
+  const btn = target.closest<HTMLElement>('.del');
+  if (!btn) return;
+  const name = btn.dataset.name!;
+  if (!(await confirmDialog(`להסיר את "${name}" מרשימת הפרויקטים? תצפיות קיימות לא ייפגעו.`, 'הסרה'))) return;
+  await deleteProject(name);
+  await renderProjectManageList();
+  toast(`"${name}" הוסר מהרשימה`);
+}
+
+async function onFindProjectDupes(): Promise<void> {
+  projectDupeGroups = await findDuplicateProjectGroups();
+  renderProjectDupes();
+  if (!projectDupeGroups.length) toast('לא נמצאו כפילויות ברשימת הפרויקטים');
+}
+
+function renderProjectDupes(): void {
+  renderDupeGroups(container.querySelector<HTMLElement>('#s-project-dupes'), projectDupeGroups, 'proj');
+  const mergeAllBtn = container.querySelector<HTMLButtonElement>('#s-proj-merge-all');
+  if (mergeAllBtn) mergeAllBtn.hidden = projectDupeGroups.length < 2;
+}
+
+async function onProjectDupesClick(e: Event): Promise<void> {
+  const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('.merge-btn');
+  if (!btn) return;
+  const idx = Number(btn.dataset.idx);
+  const group = projectDupeGroups[idx];
+  if (!group) return;
+  const canonical = pickedCanonical('#s-project-dupes', idx, group);
+  if (!(await confirmDialog(
+    `למזג ${group.names.length} וריאציות של אותו פרויקט ל-"${canonical}"? כל התצפיות הרלוונטיות יעודכנו.`,
+    'מיזוג',
+  ))) return;
+  const n = await mergeProjectNames(group.names, canonical);
+  toast(`מוזגו ${group.names.length} שמות ל-"${canonical}" (${n} תצפיות עודכנו)`);
+  projectDupeGroups.splice(idx, 1);
+  renderProjectDupes();
+  await renderProjectManageList();
+}
+
+async function onMergeAllProjectDupes(): Promise<void> {
+  if (!projectDupeGroups.length) return;
+  if (!(await confirmDialog(
+    `למזג את כל ${projectDupeGroups.length} קבוצות הכפילויות, כל אחת לפי השם שנבחר לה? התצפיות יעודכנו.`,
+    'מיזוג הכל',
+  ))) return;
+  let totalObs = 0;
+  const groups = projectDupeGroups.map((g, i) => ({ group: g, canonical: pickedCanonical('#s-project-dupes', i, g) }));
+  for (const { group, canonical } of groups) totalObs += await mergeProjectNames(group.names, canonical);
+  toast(`מוזגו ${groups.length} קבוצות כפילויות (${totalObs} תצפיות עודכנו)`);
+  projectDupeGroups = [];
+  renderProjectDupes();
+  await renderProjectManageList();
 }
 
 function pickSwatch(groupSelector: string, e: Event, apply: (btn: HTMLElement) => void): void {
@@ -633,13 +813,14 @@ async function onBackup(): Promise<void> {
   const observations = await listObservationsRaw();
   const species = await listSpecies();
   const locations = await listLocationRows();
+  const projects = await listProjectRows();
   const media: Array<{ id: string; obsId: string; name: string; mime: string; data: string }> = [];
   for (const o of observations) {
     for (const m of await mediaForObservation(o.id)) {
       media.push({ id: m.id, obsId: m.obsId, name: m.name, mime: m.mime, data: await blobToDataUrl(m.blob) });
     }
   }
-  const backup = { app: 'birds-journal', format: 2, exportedAt: new Date().toISOString(), species, locations, observations, media };
+  const backup = { app: 'birds-journal', format: 2, exportedAt: new Date().toISOString(), species, locations, projects, observations, media };
   const blob = new Blob([JSON.stringify(backup)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -654,7 +835,7 @@ async function onRestore(e: Event): Promise<void> {
   const file = fileInput.files?.[0];
   fileInput.value = '';
   if (!file) return;
-  let backup: { app?: string; observations?: Observation[]; species?: string[]; locations?: LocationRow[]; media?: Array<{ id: string; obsId: string; name: string; mime: string; data: string }> };
+  let backup: { app?: string; observations?: Observation[]; species?: string[]; locations?: LocationRow[]; projects?: ProjectRow[]; media?: Array<{ id: string; obsId: string; name: string; mime: string; data: string }> };
   try {
     backup = JSON.parse(await file.text());
     if (backup.app !== 'birds-journal' || !Array.isArray(backup.observations)) throw new Error();
@@ -662,6 +843,7 @@ async function onRestore(e: Event): Promise<void> {
   if (!(await confirmDialog(`לשחזר ${backup.observations!.length} תצפיות מהגיבוי?`, 'שחזור'))) return;
   for (const name of backup.species || []) await addSpecies(name);
   for (const l of backup.locations || []) await addLocation(l.name, l.lat, l.lng);
+  for (const p of backup.projects || []) await addProject(p.name);
   for (const o of backup.observations!) {
     // migrate older backups that used a single species/quantity per row
     const legacy = o as unknown as { species?: string; quantity?: number };
