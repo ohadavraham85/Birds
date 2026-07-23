@@ -912,6 +912,22 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
 }
 .settings-card h3 { margin-top: 0; }
 
+.settings-menu { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.settings-menu-row {
+  display: flex; align-items: center; gap: 14px; width: 100%; text-align: start;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 14px 16px; cursor: pointer; font: inherit; color: var(--ink);
+}
+.settings-menu-row:hover { background: var(--accent-50); }
+.settings-menu-icon { flex-shrink: 0; color: var(--accent-700); display: flex; }
+.settings-menu-icon .icon { width: 22px; height: 22px; }
+.settings-menu-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.settings-menu-text strong { font-size: .98rem; }
+.settings-menu-text .hint { font-size: .82rem; }
+
+.settings-subhead { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.settings-subhead h2 { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 1.15rem; }
+
 .theme-picker { display: flex; gap: 10px; flex-wrap: wrap; }
 .theme-swatch {
   display: flex; flex-direction: column; align-items: center; gap: 6px;
@@ -967,16 +983,11 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
 .add-species-row { display: flex; gap: 8px; margin-top: 10px; }
 .add-species-row input { flex: 1; }
 
-.loc-add-row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.loc-add-row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; align-items: center; }
 .loc-add-row input[type="text"] { flex: 1 1 160px; min-width: 120px; }
-.loc-add-row input[type="number"] { width: 100px; flex: 0 0 auto; }
 .species-list .loc-row, .species-list .proj-row { gap: 8px; }
 .loc-row-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .proj-row span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.loc-row input[type="number"] {
-  width: 92px; flex-shrink: 0; padding: 5px 6px; font-size: .82rem;
-  border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--ink);
-}
 .rename-input {
   flex: 1; min-width: 0; padding: 5px 8px; font-size: .85rem;
   border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--ink);
@@ -984,6 +995,14 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
 .species-list .sp-row .rename,
 .species-list .sp-row .rename-cancel { color: var(--ink-soft); }
 .species-list .sp-row .rename-save { color: var(--accent-700); }
+.species-list .sp-row.loc-row .loc-pick-coords {
+  flex-shrink: 0; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px;
+  border: 1px solid var(--line); background: var(--card); color: var(--ink);
+  border-radius: 999px; padding: 4px 10px; font-size: .8rem; cursor: pointer;
+}
+.species-list .sp-row.loc-row .loc-pick-coords.locked {
+  color: var(--accent-700); border-color: var(--accent-300); background: var(--accent-50);
+}
 
 .dupe-toolbar { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
 .dupe-list:not(:empty) { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }
