@@ -55,6 +55,15 @@ export interface LocationRow {
   deleted?: boolean;
 }
 
+/** Master project-list entry (name only), editable in Settings — the same
+ * pattern as SpeciesRow, giving projects their own manageable list instead
+ * of existing only as free text scattered across observations. */
+export interface ProjectRow {
+  name: string;
+  updatedAt: string;
+  deleted?: boolean;
+}
+
 /** Original-quality image blob, linked to an observation. */
 export interface MediaRecord {
   id: string;

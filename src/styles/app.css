@@ -626,6 +626,12 @@ textarea { min-height: 130px; resize: vertical; white-space: pre-wrap; line-heig
 .location-pin-btn { display: inline-flex; align-items: center; gap: 8px; }
 .location-pin-btn.locked { color: var(--accent-700); border-color: var(--accent-300); }
 
+/* ---------- bulk-edit modal (table view) ---------- */
+
+.bulk-edit-modal { width: min(92vw, 440px); }
+.bulk-edit-modal .field { margin: 10px 0 14px; }
+.bulk-edit-modal .field.combo { margin-top: 6px; }
+
 /* ---------- image previews ---------- */
 
 .img-inputs { display: flex; gap: 10px; flex-wrap: wrap; }
@@ -964,12 +970,20 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
 .loc-add-row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
 .loc-add-row input[type="text"] { flex: 1 1 160px; min-width: 120px; }
 .loc-add-row input[type="number"] { width: 100px; flex: 0 0 auto; }
-.species-list .loc-row { gap: 8px; }
+.species-list .loc-row, .species-list .proj-row { gap: 8px; }
 .loc-row-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.proj-row span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .loc-row input[type="number"] {
   width: 92px; flex-shrink: 0; padding: 5px 6px; font-size: .82rem;
   border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--ink);
 }
+.rename-input {
+  flex: 1; min-width: 0; padding: 5px 8px; font-size: .85rem;
+  border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--ink);
+}
+.species-list .sp-row .rename,
+.species-list .sp-row .rename-cancel { color: var(--ink-soft); }
+.species-list .sp-row .rename-save { color: var(--accent-700); }
 
 .dupe-toolbar { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
 .dupe-list:not(:empty) { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }

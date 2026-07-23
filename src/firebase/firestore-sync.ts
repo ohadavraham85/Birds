@@ -16,15 +16,17 @@ import {
   listObservationsRaw, putObservationRaw, getObservation,
   listSpeciesRows, putSpeciesRaw, getSpeciesRaw,
   listLocationRows, putLocationRaw, getLocationRaw,
+  listProjectRows, putProjectRaw, getProjectRaw,
   getMedia,
   type MutationEntity, type MutationOp,
 } from '../db/repository';
-import type { Observation, SpeciesRow, LocationRow } from '../types';
+import type { Observation, SpeciesRow, LocationRow, ProjectRow } from '../types';
 
 const COLLECTION_BY_ENTITY: Record<MutationEntity, string> = {
   observation: 'observations',
   species: 'species',
   location: 'locations',
+  project: 'projects',
 };
 
 let activeCode: string | null = null;
@@ -66,12 +68,13 @@ export function getFirebaseSyncStatus(): FirebaseSyncStatus {
 let pendingObs = false;
 let pendingSpecies = false;
 let pendingLocations = false;
+let pendingProjects = false;
 
 /** Recomputes the derived state from the last-known pending-writes flags and
  * live connectivity — called whenever either changes. */
 function recomputeStatus(): void {
   if (!activeCode) { setStatus({ state: 'disabled', pending: false }); return; }
-  const pending = pendingObs || pendingSpecies || pendingLocations;
+  const pending = pendingObs || pendingSpecies || pendingLocations || pendingProjects;
   if (!navigator.onLine) { setStatus({ state: 'offline', pending }); return; }
   setStatus({ state: pending ? 'syncing' : 'idle', pending, lastSync: pending ? status.lastSync : new Date().toISOString() });
 }
@@ -124,7 +127,7 @@ export function stopFirebaseSync(): void {
   stopMutationListener?.();
   stopMutationListener = null;
   activeCode = null;
-  pendingObs = pendingSpecies = pendingLocations = false;
+  pendingObs = pendingSpecies = pendingLocations = pendingProjects = false;
   setStatus({ state: 'disabled', pending: false, message: undefined });
 }
 
@@ -148,6 +151,7 @@ async function startFirebaseSync(code: string): Promise<void> {
         for (const o of await listObservationsRaw()) await pushDoc('observations', o.id, o);
         for (const s of await listSpeciesRows()) await pushDoc('species', s.name, s);
         for (const l of await listLocationRows()) await pushDoc('locations', l.name, l);
+        for (const p of await listProjectRows()) await pushDoc('projects', p.name, p);
         // Photo upload (Storage) is best-effort and optional — a project that
         // hasn't enabled Storage yet (e.g. still on the free Spark plan) must
         // not lose text-data sync (Firestore) just because photos can't upload.
@@ -185,6 +189,14 @@ async function startFirebaseSync(code: string): Promise<void> {
     snap.docChanges().forEach((change) => {
       if (change.type === 'removed') return;
       void mergeRemoteLocation(change.doc.data() as LocationRow);
+    });
+    recomputeStatus();
+  }, onSnapError));
+  unsubs.push(onSnapshot(collection(db, 'households', code, 'projects'), { includeMetadataChanges: true }, (snap: QuerySnapshot<DocumentData>) => {
+    pendingProjects = snap.metadata.hasPendingWrites;
+    snap.docChanges().forEach((change) => {
+      if (change.type === 'removed') return;
+      void mergeRemoteProject(change.doc.data() as ProjectRow);
     });
     recomputeStatus();
   }, onSnapError));
@@ -268,4 +280,10 @@ async function mergeRemoteLocation(remote: LocationRow): Promise<void> {
   const local = await getLocationRaw(remote.name);
   if (local && new Date(local.updatedAt) >= new Date(remote.updatedAt)) return;
   await withSuppressedPush(() => putLocationRaw(remote));
+}
+
+async function mergeRemoteProject(remote: ProjectRow): Promise<void> {
+  const local = await getProjectRaw(remote.name);
+  if (local && new Date(local.updatedAt) >= new Date(remote.updatedAt)) return;
+  await withSuppressedPush(() => putProjectRaw(remote));
 }
