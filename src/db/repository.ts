@@ -14,6 +14,7 @@ import type {
   LocationRow,
   ProjectRow,
   MediaRecord,
+  ObservationTrack,
 } from '../types';
 
 /* ---------- change notifications ---------- */
@@ -89,10 +90,33 @@ export async function deleteObservation(id: string): Promise<void> {
   if (!obs) return;
   const media = await mediaForObservation(id);
   for (const m of media) await db.media.delete(m.id);
+  await db.tracks.delete(id);
   obs.deleted = true;
   obs.updatedAt = now();
   await db.observations.put(obs);
   emitMutation('observation', id, 'delete', obs);
+  emitChange();
+}
+
+/* ---------- GPS tracks (recorded while a new observation's form was open) ---------- */
+
+/** Local-only for now — not part of the mutation feed / Firebase sync. */
+export async function saveTrack(track: ObservationTrack): Promise<void> {
+  track.updatedAt = now();
+  await db.tracks.put(track);
+  emitChange();
+}
+
+export function getTrack(id: string): Promise<ObservationTrack | undefined> {
+  return db.tracks.get(id);
+}
+
+export function listTracks(): Promise<ObservationTrack[]> {
+  return db.tracks.toArray();
+}
+
+export async function deleteTrack(id: string): Promise<void> {
+  await db.tracks.delete(id);
   emitChange();
 }
 

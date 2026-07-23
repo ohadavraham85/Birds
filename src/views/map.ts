@@ -8,7 +8,7 @@
  * אמת, עם כפתור להתמרכזות עליו. */
 
 import L from '../lib/leaflet-setup';
-import { listObservations } from '../db/repository';
+import { listObservations, listTracks, getSetting, setSetting } from '../db/repository';
 import { toast } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
 import { speciesLabel } from '../lib/observation';
@@ -16,11 +16,12 @@ import { icon } from '../lib/icons';
 import { qs } from '../lib/dom';
 import { navigate } from '../main';
 import { createMapLayers, loadMapLayerState, setMapLayerPref, applyMapLayerState, type MapLayerState, type MapLayers } from '../lib/map-layers';
-import type { Observation } from '../types';
+import type { Observation, ObservationTrack } from '../types';
 
 let container: HTMLElement;
 let map: L.Map | undefined;
 let markersLayer: L.LayerGroup | undefined;
+let tracksLayer: L.LayerGroup | undefined;
 let dropMarker: L.Marker | undefined;
 let myLocationMarker: L.CircleMarker | undefined;
 let geoWatchId: number | null = null;
@@ -31,6 +32,12 @@ let closeSheet: (() => void) | null = null;
 /** Which base/overlay tiles are showing — persisted per device (like the color
  * theme) so the map reopens the way the user last left it. */
 let layerState: MapLayerState = { satellite: true, roads: false, labels: true };
+/** Whether the "מסלולי צפרות" (recorded GPS tracks) overlay is showing —
+ * kept separate from MapLayerState since it's not shared with location-picker.ts. */
+let showTracks = false;
+
+/** walk vs. stop leg colors for the recorded-tracks overlay. */
+const TRACK_SEGMENT_COLOR: Record<'walk' | 'stop', string> = { walk: '#2f7dff', stop: '#ff8a00' };
 
 /** Round green badge with a bird glyph, replacing Leaflet's default pin.
  * tooltipAnchor keeps the small permanent name label snug against the badge. */
@@ -54,6 +61,7 @@ export function init(el: HTMLElement): void {
       <label><input type="checkbox" id="ml-satellite"> שכבת לוויין</label>
       <label><input type="checkbox" id="ml-roads"> שכבת כבישים</label>
       <label><input type="checkbox" id="ml-labels"> תוויות גיאוגרפיות</label>
+      <label><input type="checkbox" id="ml-tracks"> שכבת מסלולי צפרות</label>
     </div>
     <div class="map-empty" id="map-empty" hidden>אין עדיין תצפיות עם קואורדינטות.<br>הוסיפו תצפית עם מיקום GPS והיא תופיע כאן.</div>
   `;
@@ -74,6 +82,7 @@ function syncLayerCheckboxes(): void {
   qs<HTMLInputElement>(container, '#ml-satellite').checked = layerState.satellite;
   qs<HTMLInputElement>(container, '#ml-roads').checked = layerState.roads;
   qs<HTMLInputElement>(container, '#ml-labels').checked = layerState.labels;
+  qs<HTMLInputElement>(container, '#ml-tracks').checked = showTracks;
 }
 
 /** Applies the current layerState to the live map — satellite/street are a
@@ -84,13 +93,36 @@ function applyLayerState(): void {
   applyMapLayerState(map, layers, layerState);
 }
 
+/** The tracks layer's polylines are (re)drawn every activate() regardless of
+ * visibility; this only toggles whether that layer group sits on the map —
+ * mirrors how roads/labels tile layers are shown/hidden without recreating them. */
+function applyTracksVisibility(): void {
+  if (!map || !tracksLayer) return;
+  if (showTracks) tracksLayer.addTo(map); else map.removeLayer(tracksLayer);
+}
+
 async function onLayerCheckboxChange(e: Event): Promise<void> {
   const target = e.target as HTMLInputElement;
+  if (target.id === 'ml-tracks') {
+    showTracks = target.checked;
+    await setSetting('mapLayerTracks', showTracks);
+    applyTracksVisibility();
+    return;
+  }
   const key = target.id === 'ml-satellite' ? 'satellite' : target.id === 'ml-roads' ? 'roads' : target.id === 'ml-labels' ? 'labels' : null;
   if (!key) return;
   layerState = { ...layerState, [key]: target.checked };
   await setMapLayerPref(key, target.checked);
   applyLayerState();
+}
+
+function drawTrack(t: ObservationTrack): void {
+  for (const seg of t.segments) {
+    if (seg.points.length < 2) continue;
+    L.polyline(seg.points.map((p) => [p.lat, p.lng]), {
+      color: TRACK_SEGMENT_COLOR[seg.kind], weight: 4, opacity: 0.85,
+    }).addTo(tracksLayer!);
+  }
 }
 
 /** Fixed default extent covering all of Israel's territory — the map always
@@ -105,6 +137,7 @@ function ensureMap(): void {
   map.fitBounds(ISRAEL_BOUNDS);
   layers = createMapLayers();
   markersLayer = L.layerGroup().addTo(map);
+  tracksLayer = L.layerGroup();
 
   // long-press (contextmenu on touch) drops a pin at a new location
   map.on('contextmenu', (e: L.LeafletMouseEvent) => dropPin(e.latlng));
@@ -204,8 +237,10 @@ export async function activate(): Promise<void> {
   if (!layersInitialized) {
     layersInitialized = true;
     await loadLayerState();
+    showTracks = await getSetting('mapLayerTracks', false);
     syncLayerCheckboxes();
     applyLayerState();
+    applyTracksVisibility();
   }
 
   markersLayer!.clearLayers();
@@ -220,6 +255,9 @@ export async function activate(): Promise<void> {
     marker.on('click', () => openLocationSheet(label, historyFor(key), { lat: first.lat!, lng: first.lng!, locationName: first.locationName }));
     marker.addTo(markersLayer!);
   }
+
+  tracksLayer!.clearLayers();
+  for (const t of await listTracks()) drawTrack(t);
 }
 
 /* ---------- GPS "my location" ---------- */

@@ -9,6 +9,7 @@ import type {
   MediaRecord,
   SettingRow,
   OutboxEntry,
+  ObservationTrack,
 } from '../types';
 
 export class BirdsDatabase extends Dexie {
@@ -19,6 +20,7 @@ export class BirdsDatabase extends Dexie {
   media!: EntityTable<MediaRecord, 'id'>;
   settings!: EntityTable<SettingRow, 'key'>;
   outbox!: EntityTable<OutboxEntry, 'id'>;
+  tracks!: EntityTable<ObservationTrack, 'id'>;
 
   constructor() {
     super('birds-db');
@@ -56,6 +58,10 @@ export class BirdsDatabase extends Dexie {
     this.version(4).stores({ ...stores, locations: 'name, updatedAt' });
     // v5: projects master list (name only), managed in Settings
     this.version(5).stores({ ...stores, locations: 'name, updatedAt', projects: 'name, updatedAt' });
+    // v6: recorded GPS tracks (one per observation, captured while its form was open)
+    this.version(6).stores({
+      ...stores, locations: 'name, updatedAt', projects: 'name, updatedAt', tracks: 'id, updatedAt',
+    });
   }
 }
 

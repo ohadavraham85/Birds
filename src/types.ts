@@ -64,6 +64,35 @@ export interface ProjectRow {
   deleted?: boolean;
 }
 
+/** One fix along a recorded GPS track. */
+export interface TrackPoint {
+  lat: number;
+  lng: number;
+  t: number; // ms epoch
+}
+
+/** A contiguous leg of a track classified by pace — used to color-code the
+ * route on the map ("מסלולי צפרות"): walking legs vs. stopped-in-place legs
+ * (e.g. standing still to watch a bird). Adjacent segments share their
+ * boundary point so the drawn polylines connect with no visual gap. */
+export interface TrackSegment {
+  kind: 'walk' | 'stop';
+  points: TrackPoint[];
+}
+
+/** A GPS track recorded automatically while a NEW observation's form was
+ * open, from the moment it was opened until it was saved. Keyed 1:1 by the
+ * observation's id. Local-only for now — not yet part of Firebase sync. */
+export interface ObservationTrack {
+  id: string; // == Observation.id
+  points: TrackPoint[];
+  segments: TrackSegment[];
+  startedAt: string; // ISO
+  endedAt: string; // ISO
+  durationMs: number;
+  updatedAt: string;
+}
+
 /** Original-quality image blob, linked to an observation. */
 export interface MediaRecord {
   id: string;

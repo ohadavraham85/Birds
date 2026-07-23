@@ -324,6 +324,19 @@ body {
 .form-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .form-head h2 { margin: 0; }
 
+.track-status {
+  display: flex; align-items: center; gap: 8px;
+  margin: 0 0 14px; padding: 8px 12px;
+  background: var(--accent-50); border: 1px solid var(--line); border-radius: var(--radius);
+  font-size: .85rem; color: var(--accent-900);
+}
+.track-status[hidden] { display: none; }
+.track-dot {
+  width: 9px; height: 9px; border-radius: 50%; background: var(--danger); flex-shrink: 0;
+  animation: track-pulse 1.4s ease-in-out infinite;
+}
+@keyframes track-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
 /* ---------- observation detail (view mode) ---------- */
 
 .detail-actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
