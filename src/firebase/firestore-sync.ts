@@ -7,7 +7,7 @@
  * rest of the app. */
 
 import {
-  collection, doc, setDoc, onSnapshot, type Unsubscribe, type QuerySnapshot, type DocumentData,
+  collection, doc, setDoc, onSnapshot, getDocs, query, limit, type Unsubscribe, type QuerySnapshot, type DocumentData,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { firebaseDb, firebaseStorage } from './app';
@@ -149,7 +149,19 @@ async function startFirebaseSync(code: string): Promise<void> {
     try {
       await withSuppressedPush(async () => {
         for (const o of await listObservationsRaw()) await pushDoc('observations', o.id, o);
-        for (const s of await listSpeciesRows()) await pushDoc('species', s.name, s);
+        // Species (unlike observations/locations/projects) come from a
+        // bundled app seed list that can get silently reset on this device
+        // (seedSpeciesIfEmpty, e.g. after a reinstall or a bundled-list
+        // version bump) — freshly re-seeded rows carry a "just now"
+        // updatedAt that would always win a last-write-wins merge, silently
+        // clobbering or reviving species another device deliberately edited
+        // or removed. If this household already has a species list in the
+        // cloud, it's the authoritative one — let the pull-side listener
+        // bring it down instead of pushing this device's local copy over it.
+        const remoteSpeciesSnap = await getDocs(query(collection(db, 'households', code, 'species'), limit(1)));
+        if (remoteSpeciesSnap.empty) {
+          for (const s of await listSpeciesRows()) await pushDoc('species', s.name, s);
+        }
         for (const l of await listLocationRows()) await pushDoc('locations', l.name, l);
         for (const p of await listProjectRows()) await pushDoc('projects', p.name, p);
         // Photo upload (Storage) is best-effort and optional — a project that
