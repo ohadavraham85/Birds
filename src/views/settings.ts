@@ -40,6 +40,8 @@ let projectDupeGroups: DuplicateGroup[] = [];
 let renamingSpecies: string | null = null;
 let renamingLocation: string | null = null;
 let renamingProject: string | null = null;
+let selectedSpeciesNames = new Set<string>();
+let selectedLocationNames = new Set<string>();
 let newLocationCoords: LatLng | null = null;
 
 interface PhotoImportRow {
@@ -371,6 +373,7 @@ function listsHtml(): string {
       <div class="dupe-toolbar">
         <button type="button" class="btn btn-sm" id="s-sp-find-dupes">${icon('search')} איתור כפילויות</button>
         <button type="button" class="btn btn-sm btn-primary" id="s-sp-merge-all" hidden>${icon('layers')} מיזוג הכל</button>
+        <button type="button" class="btn btn-sm btn-primary" id="s-sp-merge-selected" hidden>${icon('layers')} מיזוג הנבחרים (<span id="s-sp-sel-count">0</span>)</button>
       </div>
       <div class="dupe-list" id="s-species-dupes"></div>
       <div class="species-list" id="s-species-list"></div>
@@ -394,6 +397,7 @@ function listsHtml(): string {
       <div class="dupe-toolbar">
         <button type="button" class="btn btn-sm" id="s-loc-find-dupes">${icon('search')} איתור כפילויות</button>
         <button type="button" class="btn btn-sm btn-primary" id="s-loc-merge-all" hidden>${icon('layers')} מיזוג הכל</button>
+        <button type="button" class="btn btn-sm btn-primary" id="s-loc-merge-selected" hidden>${icon('layers')} מיזוג הנבחרים (<span id="s-loc-sel-count">0</span>)</button>
       </div>
       <div class="dupe-list" id="s-location-dupes"></div>
       <div class="species-list" id="s-location-list"></div>
@@ -426,12 +430,15 @@ function wireLists(): void {
   qs(container, '#s-sp-add').addEventListener('click', () => void onAddSpeciesManaged());
   input(container, '#s-sp-new').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); void onAddSpeciesManaged(); } });
   qs(container, '#s-species-list').addEventListener('click', (e) => void onSpeciesListClick(e));
+  qs(container, '#s-species-list').addEventListener('change', (e) => onSpeciesListSelChange(e));
   void renderSpeciesManageList();
 
   speciesDupeGroups = [];
   renamingSpecies = null;
+  selectedSpeciesNames = new Set();
   qs(container, '#s-sp-find-dupes').addEventListener('click', () => void onFindSpeciesDupes());
   qs(container, '#s-sp-merge-all').addEventListener('click', () => void onMergeAllSpeciesDupes());
+  qs(container, '#s-sp-merge-selected').addEventListener('click', () => void onMergeSelectedSpecies());
   qs(container, '#s-species-dupes').addEventListener('click', (e) => void onSpeciesDupesClick(e));
 
   newLocationCoords = null;
@@ -439,12 +446,15 @@ function wireLists(): void {
   qs(container, '#s-loc-pick').addEventListener('click', () => void onPickLocationForAdd());
   qs(container, '#s-loc-seed').addEventListener('click', () => void onSeedLocations());
   qs(container, '#s-location-list').addEventListener('click', (e) => void onLocationListClick(e));
+  qs(container, '#s-location-list').addEventListener('change', (e) => onLocationListSelChange(e));
   void renderLocationManageList();
 
   locationDupeGroups = [];
   renamingLocation = null;
+  selectedLocationNames = new Set();
   qs(container, '#s-loc-find-dupes').addEventListener('click', () => void onFindLocationDupes());
   qs(container, '#s-loc-merge-all').addEventListener('click', () => void onMergeAllLocationDupes());
+  qs(container, '#s-loc-merge-selected').addEventListener('click', () => void onMergeSelectedLocations());
   qs(container, '#s-location-dupes').addEventListener('click', (e) => void onLocationDupesClick(e));
 
   qs(container, '#s-proj-add').addEventListener('click', () => void onAddProjectManaged());
@@ -513,6 +523,7 @@ async function renderSpeciesManageList(): Promise<void> {
       const isRenaming = renamingSpecies === r.name;
       return `
       <div class="sp-row" data-name="${escapeHtml(r.name)}">
+        <input type="checkbox" class="sel" data-name="${escapeHtml(r.name)}" title="בחירה למיזוג" ${selectedSpeciesNames.has(r.name) ? 'checked' : ''}>
         ${isRenaming
           ? `<input type="text" class="rename-input" value="${escapeHtml(r.name)}">`
           : `<span>${escapeHtml(r.name)}</span>`}
@@ -525,6 +536,15 @@ async function renderSpeciesManageList(): Promise<void> {
     }).join('')
     : '<p class="hint" style="padding:10px 12px">אין מינים ברשימה.</p>';
   if (renamingSpecies) el.querySelector<HTMLInputElement>('.rename-input')?.focus();
+  updateSpeciesSelToolbar();
+}
+
+function updateSpeciesSelToolbar(): void {
+  const btn = container.querySelector<HTMLButtonElement>('#s-sp-merge-selected');
+  const countEl = container.querySelector<HTMLElement>('#s-sp-sel-count');
+  if (!btn) return;
+  btn.hidden = selectedSpeciesNames.size < 2;
+  if (countEl) countEl.textContent = String(selectedSpeciesNames.size);
 }
 
 async function onAddSpeciesManaged(): Promise<void> {
@@ -616,6 +636,26 @@ async function onMergeAllSpeciesDupes(): Promise<void> {
   await renderSpeciesManageList();
 }
 
+function onSpeciesListSelChange(e: Event): void {
+  const target = e.target as HTMLInputElement;
+  if (!target.classList.contains('sel')) return;
+  const name = target.dataset.name!;
+  if (target.checked) selectedSpeciesNames.add(name); else selectedSpeciesNames.delete(name);
+  updateSpeciesSelToolbar();
+}
+
+/** Merges a group the user assembled by hand (checkboxes), not one the
+ * automatic duplicate-finder detected — handed to the same group-picker UI
+ * so choosing the canonical name and merging works identically either way. */
+async function onMergeSelectedSpecies(): Promise<void> {
+  if (selectedSpeciesNames.size < 2) return;
+  speciesDupeGroups = [{ key: 'manual', names: [...selectedSpeciesNames] }, ...speciesDupeGroups];
+  selectedSpeciesNames = new Set();
+  renderSpeciesDupes();
+  await renderSpeciesManageList();
+  toast('בחרו את השם הנכון בקבוצה למטה ולחצו "מיזוג"');
+}
+
 /* ---------- locations list management ---------- */
 
 async function renderLocationManageList(): Promise<void> {
@@ -628,6 +668,7 @@ async function renderLocationManageList(): Promise<void> {
       const hasCoords = r.lat != null && r.lng != null;
       return `
       <div class="sp-row loc-row" data-name="${escapeHtml(r.name)}">
+        <input type="checkbox" class="sel" data-name="${escapeHtml(r.name)}" title="בחירה למיזוג" ${selectedLocationNames.has(r.name) ? 'checked' : ''}>
         ${isRenaming
           ? `<input type="text" class="rename-input" value="${escapeHtml(r.name)}">`
           : `<span class="loc-row-name" title="${escapeHtml(r.name)}">${escapeHtml(r.name)}</span>`}
@@ -643,6 +684,15 @@ async function renderLocationManageList(): Promise<void> {
     }).join('')
     : '<p class="hint" style="padding:10px 12px">אין מיקומים שמורים.</p>';
   if (renamingLocation) el.querySelector<HTMLInputElement>('.rename-input')?.focus();
+  updateLocationSelToolbar();
+}
+
+function updateLocationSelToolbar(): void {
+  const btn = container.querySelector<HTMLButtonElement>('#s-loc-merge-selected');
+  const countEl = container.querySelector<HTMLElement>('#s-loc-sel-count');
+  if (!btn) return;
+  btn.hidden = selectedLocationNames.size < 2;
+  if (countEl) countEl.textContent = String(selectedLocationNames.size);
 }
 
 async function onAddLocationManaged(): Promise<void> {
@@ -763,6 +813,26 @@ async function onMergeAllLocationDupes(): Promise<void> {
   locationDupeGroups = [];
   renderLocationDupes();
   await renderLocationManageList();
+}
+
+function onLocationListSelChange(e: Event): void {
+  const target = e.target as HTMLInputElement;
+  if (!target.classList.contains('sel')) return;
+  const name = target.dataset.name!;
+  if (target.checked) selectedLocationNames.add(name); else selectedLocationNames.delete(name);
+  updateLocationSelToolbar();
+}
+
+/** Merges a group the user assembled by hand (checkboxes), not one the
+ * automatic duplicate-finder detected — handed to the same group-picker UI
+ * so choosing the canonical name and merging works identically either way. */
+async function onMergeSelectedLocations(): Promise<void> {
+  if (selectedLocationNames.size < 2) return;
+  locationDupeGroups = [{ key: 'manual', names: [...selectedLocationNames] }, ...locationDupeGroups];
+  selectedLocationNames = new Set();
+  renderLocationDupes();
+  await renderLocationManageList();
+  toast('בחרו את השם הנכון בקבוצה למטה ולחצו "מיזוג"');
 }
 
 /* ---------- projects list management ---------- */

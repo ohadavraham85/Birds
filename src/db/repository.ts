@@ -420,8 +420,19 @@ export async function mergeSpeciesNames(variants: string[], canonical: string): 
   // the (possibly still in-progress) duplicate scan the user is working through.
   const ts = now();
   const canonicalRow = await db.species.get(canonical);
-  if (!canonicalRow || canonicalRow.deleted) {
-    const row: SpeciesRow = { name: canonical, updatedAt: ts, deleted: false };
+  // If the surviving (canonical) row has no description yet, adopt one from
+  // whichever merged variant has it — a merge shouldn't silently discard a
+  // detail the user wrote just because it happened to live under the name
+  // that's being retired.
+  let description = canonicalRow?.description;
+  if (!description) {
+    for (const v of toMerge) {
+      const row = await db.species.get(v);
+      if (row?.description) { description = row.description; break; }
+    }
+  }
+  if (!canonicalRow || canonicalRow.deleted || description !== canonicalRow.description) {
+    const row: SpeciesRow = { name: canonical, updatedAt: ts, deleted: false, ...(description ? { description } : {}) };
     await db.species.put(row);
     emitMutation('species', canonical, 'upsert', row);
   }
