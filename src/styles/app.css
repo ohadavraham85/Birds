@@ -336,9 +336,13 @@ body {
   animation: track-pulse 1.4s ease-in-out infinite;
 }
 
+.track-toggle-row { margin-bottom: 14px; }
+.track-toggle-row[hidden] { display: none; }
+
 .obs-card .track-preview { margin-top: 10px; }
 .obs-card .track-preview[hidden] { display: none; }
-.obs-card .track-preview-label { display: flex; align-items: center; gap: 6px; font-size: .8rem; color: var(--ink-soft); margin-bottom: 4px; }
+.obs-card .track-preview-label { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: .8rem; color: var(--ink-soft); margin-bottom: 4px; }
+.obs-card .track-preview-label .track-preview-del { padding: 2px 6px; }
 .obs-card .track-preview img { display: block; width: 100%; max-width: 320px; border-radius: var(--radius); border: 1px solid var(--line); }
 @keyframes track-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 

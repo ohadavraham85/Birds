@@ -5,12 +5,12 @@
  * compact summary (place/time/project/coordinates only, no species or
  * notes) for the journal's "list" display mode. */
 
-import { fmtDateTime, fmtCoords, showImageModal } from './ui';
+import { fmtDateTime, fmtCoords, showImageModal, confirmDialog, toast } from './ui';
 import { renderMarkdown, escapeHtml } from './markdown';
 import { getImageObjectUrl } from './media';
 import { entriesOf, entryImages } from './observation';
 import { icon } from './icons';
-import { getTrack } from '../db/repository';
+import { getTrack, deleteTrack } from '../db/repository';
 import type { Observation } from '../types';
 
 function mapsUrl(o: Observation): string | null {
@@ -61,10 +61,22 @@ export function renderObservationCard(o: Observation): HTMLElement {
     if (!wrap) return;
     const mins = Math.round(track.durationMs / 60000);
     wrap.innerHTML = `
-      <div class="track-preview-label">${icon('map')} מסלול תצפית${mins ? ` · ${mins} דק׳` : ''}</div>
+      <div class="track-preview-label">
+        <span>${icon('map')} מסלול תצפית${mins ? ` · ${mins} דק׳` : ''}</span>
+        <button type="button" class="btn btn-icon track-preview-del" title="מחיקת ההקלטה" aria-label="מחיקת ההקלטה">${icon('trash')}</button>
+      </div>
       <img src="${track.previewImage}" alt="מסלול התצפית">
     `;
     wrap.hidden = false;
+    wrap.querySelector('.track-preview-del')!.addEventListener('click', (e) => {
+      e.stopPropagation();
+      void (async () => {
+        if (!(await confirmDialog('למחוק את הקלטת המסלול של תצפית זו?', 'מחיקה'))) return;
+        await deleteTrack(o.id);
+        wrap.hidden = true;
+        toast('הקלטת המסלול נמחקה');
+      })();
+    });
   });
 
   const ol = card.querySelector<HTMLElement>('.species-ol')!;
