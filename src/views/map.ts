@@ -17,6 +17,7 @@ import { qs } from '../lib/dom';
 import { navigate } from '../main';
 import { createMapLayers, loadMapLayerState, setMapLayerPref, applyMapLayerState, type MapLayerState, type MapLayers } from '../lib/map-layers';
 import { TRACK_SEGMENT_COLOR } from '../lib/track-preview';
+import { addDirectionArrows } from '../lib/track-map';
 import type { Observation, ObservationTrack } from '../types';
 
 let container: HTMLElement;
@@ -120,6 +121,7 @@ function drawTrack(t: ObservationTrack): void {
     L.polyline(seg.points.map((p) => [p.lat, p.lng]), {
       color: TRACK_SEGMENT_COLOR[seg.kind], weight: 4, opacity: 0.85,
     }).addTo(tracksLayer!);
+    if (seg.kind === 'walk') addDirectionArrows(tracksLayer!, seg);
   }
 }
 

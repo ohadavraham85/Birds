@@ -11,6 +11,7 @@ import { getImageObjectUrl } from './media';
 import { entriesOf, entryImages } from './observation';
 import { icon } from './icons';
 import { renderTrackMap } from './track-map';
+import { fmtDistance } from './gps-track';
 import { getTrack, deleteTrack } from '../db/repository';
 import type { Observation } from '../types';
 
@@ -61,9 +62,10 @@ export function renderObservationCard(o: Observation): HTMLElement {
     const wrap = card.querySelector<HTMLElement>('[data-track-preview]');
     if (!wrap) return;
     const mins = Math.round(track.durationMs / 60000);
+    const dist = track.distanceMeters;
     wrap.innerHTML = `
       <div class="track-preview-label">
-        <span>${icon('map')} מסלול תצפית${mins ? ` · ${mins} דק׳` : ''}</span>
+        <span>${icon('map')} מסלול תצפית${mins ? ` · ${mins} דק׳` : ''}${dist ? ` · ${fmtDistance(dist)}` : ''}</span>
         <button type="button" class="btn btn-icon track-preview-del" title="מחיקת ההקלטה" aria-label="מחיקת ההקלטה">${icon('trash')}</button>
       </div>
       <div class="track-map" data-track-map></div>

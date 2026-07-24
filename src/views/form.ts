@@ -12,7 +12,7 @@ import { getImageObjectUrl } from '../lib/media';
 import { pickLocation } from '../lib/location-picker';
 import { wireCombo } from '../lib/combo';
 import { entriesOf, entryImages, speciesNames } from '../lib/observation';
-import { startTracking, stopTracking, isTracking, elapsedMs, snapshot, seedFromDraft } from '../lib/gps-track';
+import { startTracking, stopTracking, isTracking, elapsedMs, snapshot, seedFromDraft, distanceMetersSoFar, fmtDistance } from '../lib/gps-track';
 import { renderTrackPreview } from '../lib/track-preview';
 import { saveDraft, loadDraft, clearDraft, type ObservationDraft } from '../lib/draft';
 import { qs, input } from '../lib/dom';
@@ -62,7 +62,7 @@ export function init(el: HTMLElement): void {
     </label>
     <div class="track-status" id="track-status" hidden>
       <span class="track-dot"></span>
-      <span>מקליט מסלול GPS · <span id="track-timer">00:00</span></span>
+      <span>מקליט מסלול GPS · <span id="track-timer">00:00</span> · <span id="track-distance">0 מ'</span></span>
     </div>
     <form id="obs-form" autocomplete="off">
       <div class="row-2">
@@ -160,8 +160,10 @@ function updateTrackTimer(): void {
   const totalSec = Math.floor(elapsedMs() / 1000);
   const mm = String(Math.floor(totalSec / 60)).padStart(2, '0');
   const ss = String(totalSec % 60).padStart(2, '0');
-  const el = container.querySelector<HTMLElement>('#track-timer');
-  if (el) el.textContent = `${mm}:${ss}`;
+  const timerEl = container.querySelector<HTMLElement>('#track-timer');
+  if (timerEl) timerEl.textContent = `${mm}:${ss}`;
+  const distEl = container.querySelector<HTMLElement>('#track-distance');
+  if (distEl) distEl.textContent = fmtDistance(distanceMetersSoFar());
 }
 
 function stopTrackTimer(): void {
@@ -263,7 +265,7 @@ function resumeFromDraft(): void {
   toast('התצפית שלא נשמרה שוחזרה ✓');
 }
 
-function buildTrack(result: { points: ObservationTrack['points']; segments: ObservationTrack['segments']; startedAt: number; endedAt: number }): Omit<ObservationTrack, 'id' | 'updatedAt'> | null {
+function buildTrack(result: { points: ObservationTrack['points']; segments: ObservationTrack['segments']; startedAt: number; endedAt: number; distanceMeters: number }): Omit<ObservationTrack, 'id' | 'updatedAt'> | null {
   if (result.points.length < 2) return null;
   return {
     points: result.points,
@@ -271,6 +273,7 @@ function buildTrack(result: { points: ObservationTrack['points']; segments: Obse
     startedAt: new Date(result.startedAt).toISOString(),
     endedAt: new Date(result.endedAt).toISOString(),
     durationMs: result.endedAt - result.startedAt,
+    distanceMeters: result.distanceMeters,
     previewImage: renderTrackPreview(result.segments) ?? undefined,
   };
 }
