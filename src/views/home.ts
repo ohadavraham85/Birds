@@ -697,14 +697,15 @@ function draftBannerHtml(): string {
   const time = new Date(draft.savedAt).toLocaleString('he-IL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
   const speciesCount = draft.fields.entries.filter((e) => e.species).length;
   const trackNote = draft.track && draft.track.points.length >= 2 ? ` · מסלול GPS (${draft.track.points.length} נקודות)` : '';
+  const title = draft.editId ? 'עריכת תצפית פתוחה שלא נשמרה' : 'תצפית פתוחה שלא נשמרה';
   return `
     <div class="draft-banner">
       <div class="draft-banner-text">
-        <b>${icon('alert')} תצפית פתוחה שלא נשמרה</b>
+        <b>${icon('alert')} ${title}</b>
         <span>מ-${escapeHtml(time)}${speciesCount ? ` · ${speciesCount} מינים` : ''}${trackNote}</span>
       </div>
       <div class="draft-banner-actions">
-        <button type="button" class="btn btn-sm btn-primary" data-draft-action="resume">המשך</button>
+        <button type="button" class="btn btn-sm btn-primary" data-draft-action="resume" data-draft-edit-id="${draft.editId ? escapeHtml(draft.editId) : ''}">המשך</button>
         <button type="button" class="btn btn-sm" data-draft-action="discard">מחק</button>
       </div>
     </div>`;
@@ -721,8 +722,10 @@ function onClick(e: Event): void {
 
   const draftAction = target.closest<HTMLElement>('[data-draft-action]');
   if (draftAction) {
-    if (draftAction.dataset.draftAction === 'resume') navigate('form', { resumeDraft: true });
-    else { clearDraft(); render(); }
+    if (draftAction.dataset.draftAction === 'resume') {
+      const editId = draftAction.dataset.draftEditId;
+      navigate('form', editId ? { editId, resumeDraft: true } : { resumeDraft: true });
+    } else { clearDraft(); render(); }
     return;
   }
 

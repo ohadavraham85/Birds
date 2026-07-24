@@ -10,6 +10,7 @@ import { renderMarkdown, escapeHtml } from './markdown';
 import { getImageObjectUrl } from './media';
 import { entriesOf, entryImages } from './observation';
 import { icon } from './icons';
+import { renderTrackMap } from './track-map';
 import { getTrack, deleteTrack } from '../db/repository';
 import type { Observation } from '../types';
 
@@ -56,7 +57,7 @@ export function renderObservationCard(o: Observation): HTMLElement {
   `;
 
   void getTrack(o.id).then((track) => {
-    if (!track?.previewImage) return;
+    if (!track || track.points.length < 2) return;
     const wrap = card.querySelector<HTMLElement>('[data-track-preview]');
     if (!wrap) return;
     const mins = Math.round(track.durationMs / 60000);
@@ -65,9 +66,10 @@ export function renderObservationCard(o: Observation): HTMLElement {
         <span>${icon('map')} מסלול תצפית${mins ? ` · ${mins} דק׳` : ''}</span>
         <button type="button" class="btn btn-icon track-preview-del" title="מחיקת ההקלטה" aria-label="מחיקת ההקלטה">${icon('trash')}</button>
       </div>
-      <img src="${track.previewImage}" alt="מסלול התצפית">
+      <div class="track-map" data-track-map></div>
     `;
     wrap.hidden = false;
+    renderTrackMap(wrap.querySelector<HTMLElement>('[data-track-map]')!, track);
     wrap.querySelector('.track-preview-del')!.addEventListener('click', (e) => {
       e.stopPropagation();
       void (async () => {

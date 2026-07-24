@@ -96,7 +96,11 @@ async function showView(name: string, params?: ViewParams, mode: 'push' | 'repla
     history.replaceState(enteringState, '', `#${name}`);
   }
 
-  if (params && mode !== 'pop' && VIEWS[name]!.setParams) VIEWS[name]!.setParams!(params);
+  // Always call setParams on push/replace (with {} when no params were given) so a
+  // view's stale params from a previous visit (e.g. form.ts's editId) get reset to
+  // their defaults instead of silently carrying over into a bare navigation —
+  // every view's setParams already treats a missing field as "use the default".
+  if (mode !== 'pop' && VIEWS[name]!.setParams) VIEWS[name]!.setParams!(params ?? {});
   await VIEWS[name]!.activate();
 
   if (mode === 'pop') {

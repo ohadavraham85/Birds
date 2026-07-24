@@ -13,6 +13,9 @@ const KEY = 'birds-observation-draft';
 
 export interface ObservationDraft {
   savedAt: string; // ISO
+  /** Present when this draft belongs to an edit session (an existing
+   * observation being extended/continued), absent for a brand-new one. */
+  editId?: string;
   fields: {
     dateTime: string;
     project: string;
