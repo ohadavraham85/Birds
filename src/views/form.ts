@@ -4,7 +4,7 @@
 
 import {
   saveObservation, getObservation, listObservations, listSpecies,
-  saveMedia, mediaForObservation, deleteMedia, listLocationRows, listProjectRows, saveTrack,
+  saveMedia, mediaForObservation, deleteMedia, listLocationRows, listProjectRows, saveTrack, getTrack,
 } from '../db/repository';
 import { toast, toLocalInputValue, fromLocalInputValue } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
@@ -42,6 +42,11 @@ let currentLat: number | null = null;
 let currentLng: number | null = null;
 let coordsLocked = false;
 let trackTimerHandle: ReturnType<typeof setInterval> | null = null;
+/** The observation's already-saved track when editing (if any) — the first
+ * toggle-on of this edit session seeds the recorder from it so continuing
+ * appends onto the existing route instead of starting over. */
+let existingTrackForEdit: ObservationTrack | null = null;
+let seededFromExistingTrack = false;
 const rowImages = new WeakMap<HTMLElement, RowImages>();
 
 export function init(el: HTMLElement): void {
@@ -140,6 +145,10 @@ let pendingTrack: Omit<ObservationTrack, 'id' | 'updatedAt'> | null = null;
 
 function beginTrack(): void {
   pendingTrack = null;
+  if (existingTrackForEdit && !seededFromExistingTrack) {
+    seedFromDraft(existingTrackForEdit.points, new Date(existingTrackForEdit.startedAt).getTime());
+    seededFromExistingTrack = true;
+  }
   startTracking();
   qs(container, '#track-status').hidden = false;
   updateTrackTimer();
@@ -196,7 +205,6 @@ function collectDraftEntries(): { species: string; quantity: number; note?: stri
 }
 
 function persistDraft(): void {
-  if (editId) return;
   const snap = snapshot();
   const track = snap
     ? { points: snap.points, startedAt: snap.startedAt }
@@ -205,6 +213,7 @@ function persistDraft(): void {
       : null;
   const draft: ObservationDraft = {
     savedAt: new Date().toISOString(),
+    ...(editId ? { editId } : {}),
     fields: {
       dateTime: input(container, '#f-datetime').value,
       project: input(container, '#f-project').value,
@@ -247,6 +256,7 @@ function resumeFromDraft(): void {
   setEntries(draft.fields.entries.length ? draft.fields.entries : [{ species: '', quantity: 1 }]);
   if (draft.track && draft.track.points.length) {
     seedFromDraft(draft.track.points, draft.track.startedAt);
+    seededFromExistingTrack = true; // the draft already carries any pre-existing track's history — don't let beginTrack() re-seed and clobber it
     qs<HTMLInputElement>(container, '#track-toggle').checked = true;
     beginTrack();
   }
@@ -299,7 +309,12 @@ export async function activate(): Promise<void> {
   locationSuggestions = [...new Set([...all.map((o) => o.locationName), ...savedLocationRows.map((l) => l.name)].filter(Boolean))]
     .sort((a, b) => a.localeCompare(b, 'he'));
 
-  if (editId) { await loadForEdit(editId); return; }
+  if (editId) {
+    await loadForEdit(editId);
+    if (resumeDraftRequested) resumeFromDraft();
+    resumeDraftRequested = false;
+    return;
+  }
 
   resetForm(!prefillCoords);
   if (prefillSpecies) setEntries([{ species: prefillSpecies, quantity: 1 }]);
@@ -338,6 +353,8 @@ function resetForm(locate = true): void {
   updateLocationPinUI();
   if (locate) autoFillGps();
   pendingTrack = null;
+  existingTrackForEdit = null;
+  seededFromExistingTrack = false;
   stopTrackTimer();
   qs<HTMLInputElement>(container, '#track-toggle').checked = false;
   qs(container, '#track-toggle-row').hidden = false;
@@ -348,7 +365,13 @@ async function loadForEdit(id: string): Promise<void> {
   const obs = await getObservation(id);
   if (!obs) { resetForm(); return; }
   obsId = id;
-  qs(container, '#track-toggle-row').hidden = true;
+  pendingTrack = null;
+  seededFromExistingTrack = false;
+  existingTrackForEdit = (await getTrack(id)) ?? null;
+  stopTrackTimer();
+  qs<HTMLInputElement>(container, '#track-toggle').checked = false;
+  qs(container, '#track-toggle-row').hidden = false;
+  startDraftAutosave();
   qs(container, '#form-title').textContent = 'עריכת תצפית';
   qs(container, '#save-btn').innerHTML = `${icon('save')} עדכון התצפית`;
   input(container, '#f-datetime').value = toLocalInputValue(new Date(obs.dateTime));
