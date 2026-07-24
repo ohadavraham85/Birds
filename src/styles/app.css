@@ -1004,6 +1004,18 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
 .settings-card h4 { margin: 16px 0 8px; font-size: .88rem; color: var(--ink-soft); font-weight: 600; }
 .settings-card h4:first-of-type { margin-top: 4px; }
 
+.files-list { display: flex; flex-direction: column; }
+.file-row {
+  display: flex; align-items: center; gap: 10px; padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.file-row:last-child { border-bottom: 0; }
+.file-row-name {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  display: flex; align-items: center; gap: 6px;
+}
+.file-row-meta { flex-shrink: 0; font-size: .78rem; color: var(--ink-soft); }
+
 .seg-toggle { display: inline-flex; width: 100%; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
 .seg-btn {
   flex: 1; border: 0; background: var(--card); color: var(--ink); font: inherit; font-size: .85rem;

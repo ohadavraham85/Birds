@@ -107,6 +107,18 @@ export interface MediaRecord {
   remoteId?: string | null;
 }
 
+/** A file kept in Settings ← קבצים: either a PDF report archived automatically
+ * every time a "ייצוא PDF" runs ('report'), or one the user uploaded
+ * themselves ('external'). Local-only, not part of Firebase sync. */
+export interface StoredFile {
+  id: string;
+  name: string;
+  kind: 'report' | 'external';
+  mime: string;
+  blob: Blob;
+  createdAt: string; // ISO
+}
+
 /** Reference details for a species (from the field guide / PDF). */
 export interface SpeciesDetail {
   he: string;

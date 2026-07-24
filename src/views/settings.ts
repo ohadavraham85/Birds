@@ -9,6 +9,7 @@ import {
   mergeSpeciesNames, mergeLocationNames, mergeProjectNames,
   clearAllData, listObservations, listObservationsRaw, getObservation, saveObservation,
   putObservationRaw, saveMedia, mediaForObservation,
+  listFiles, saveFile, getFile, deleteFile,
 } from '../db/repository';
 import type { DuplicateGroup } from '../db/repository';
 import { getFirebaseSyncCode, configureFirebaseSync, onFirebaseSyncStatus, isFirebaseSyncActive, forceResyncListsFromCloud, type FirebaseSyncStatus } from '../firebase/firestore-sync';
@@ -56,7 +57,7 @@ let photoImportObsCache: Observation[] = [];
 
 /* ---------- category menu ---------- */
 
-type SettingsCategory = 'appearance' | 'sync' | 'lists' | 'photos' | 'notifications' | 'data';
+type SettingsCategory = 'appearance' | 'sync' | 'lists' | 'photos' | 'notifications' | 'files' | 'data';
 let activeCategory: SettingsCategory | null = null;
 
 const CATEGORY_META: Record<SettingsCategory, { icon: IconName; title: string; subtitle: string }> = {
@@ -65,6 +66,7 @@ const CATEGORY_META: Record<SettingsCategory, { icon: IconName; title: string; s
   lists: { icon: 'list', title: 'ניהול רשימות', subtitle: 'מינים, מיקומים ופרויקטים' },
   photos: { icon: 'camera', title: 'ייבוא תמונות', subtitle: 'שיוך תמונות לתצפיות לפי תאריך' },
   notifications: { icon: 'bell', title: 'התראות', subtitle: 'תזכורות נדידה ו"בתאריך הזה"' },
+  files: { icon: 'folder', title: 'קבצים', subtitle: 'דוחות תצפית וקבצים חיצוניים' },
   data: { icon: 'database', title: 'נתונים מקומיים', subtitle: 'מידע על המכשיר, מחיקת הכל' },
 };
 
@@ -140,6 +142,7 @@ export async function activate(): Promise<void> {
     ${activeCategory === 'notifications' ? notificationsHtml(notifSupported, notifPermission, notifEnabled, notifMigration, notifOnThisDay) : ''}
     ${activeCategory === 'lists' ? listsHtml() : ''}
     ${activeCategory === 'photos' ? photosHtml() : ''}
+    ${activeCategory === 'files' ? filesHtml() : ''}
     ${activeCategory === 'data' ? dataHtml(obsCount, version) : ''}
   `;
 
@@ -150,6 +153,7 @@ export async function activate(): Promise<void> {
   if (activeCategory === 'notifications' && notifSupported) wireNotifications();
   if (activeCategory === 'lists') wireLists();
   if (activeCategory === 'photos') wirePhotos();
+  if (activeCategory === 'files') wireFiles();
   if (activeCategory === 'data') wireData();
 }
 
@@ -354,6 +358,99 @@ function wirePhotos(): void {
   qs(container, '#s-photo-import-confirm').addEventListener('click', () => void onPhotoImportConfirm());
   photoImportRows = [];
   photoImportObsCache = [];
+}
+
+/* ---------- קבצים (דוחות תצפית + קבצים חיצוניים) ---------- */
+
+function filesHtml(): string {
+  return `
+    <div class="settings-card">
+      <h3>${icon('folder')} תיקיית דוחות תצפית</h3>
+      <p class="hint" style="margin-top:0">
+        כל ייצוא PDF של תצפיות (בודדת או מרובות, מכל מסך באפליקציה) נשמר כאן
+        אוטומטית — כדי שתוכל להוריד אותו שוב בכל זמן, בלי להפיק אותו מחדש.
+      </p>
+      <div class="files-list" id="s-report-files"></div>
+    </div>
+    <div class="settings-card">
+      <h3>${icon('folder')} קבצים חיצוניים</h3>
+      <p class="hint" style="margin-top:0">קבצי PDF שהעליתם בעצמכם, לשמירה נוחה במקום אחד בתוך האפליקציה.</p>
+      <label class="btn btn-sm" style="cursor:pointer">
+        ${icon('upload')} העלאת קובץ PDF
+        <input type="file" id="s-external-upload" accept="application/pdf" multiple hidden>
+      </label>
+      <div class="files-list" id="s-external-files" style="margin-top:10px"></div>
+    </div>
+  `;
+}
+
+function wireFiles(): void {
+  void renderFilesList('#s-report-files', 'report');
+  void renderFilesList('#s-external-files', 'external');
+  qs(container, '#s-external-upload').addEventListener('change', (e) => void onExternalFilesChosen(e));
+  qs(container, '#s-report-files').addEventListener('click', (e) => void onFileRowClick(e, 'report'));
+  qs(container, '#s-external-files').addEventListener('click', (e) => void onFileRowClick(e, 'external'));
+}
+
+function fmtBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+async function renderFilesList(selector: string, kind: 'report' | 'external'): Promise<void> {
+  const el = container.querySelector<HTMLElement>(selector);
+  if (!el) return;
+  const files = await listFiles(kind);
+  el.innerHTML = files.length
+    ? files.map((f) => `
+      <div class="file-row" data-id="${escapeHtml(f.id)}">
+        <span class="file-row-name" title="${escapeHtml(f.name)}">${icon('document')} ${escapeHtml(f.name)}</span>
+        <span class="file-row-meta">${fmtDateTime(f.createdAt)} · <span dir="ltr">${fmtBytes(f.blob.size)}</span></span>
+        <button type="button" class="btn btn-icon file-download" title="הורדה" aria-label="הורדה">${icon('download')}</button>
+        <button type="button" class="btn btn-icon file-del" title="מחיקה" aria-label="מחיקה">${icon('trash')}</button>
+      </div>`).join('')
+    : `<p class="hint" style="padding:10px 0">${kind === 'report' ? 'עדיין לא הופק אף דו"ח תצפית.' : 'אין קבצים חיצוניים עדיין.'}</p>`;
+}
+
+async function onExternalFilesChosen(e: Event): Promise<void> {
+  const fileInput = e.target as HTMLInputElement;
+  const files = fileInput.files;
+  if (files) {
+    for (const file of Array.from(files)) {
+      await saveFile({
+        id: crypto.randomUUID(), name: file.name, kind: 'external',
+        mime: file.type || 'application/pdf', blob: file, createdAt: new Date().toISOString(),
+      });
+    }
+  }
+  fileInput.value = '';
+  await renderFilesList('#s-external-files', 'external');
+  toast('הקובץ הועלה ✓');
+}
+
+async function onFileRowClick(e: Event, kind: 'report' | 'external'): Promise<void> {
+  const target = e.target as HTMLElement;
+  const row = target.closest<HTMLElement>('.file-row');
+  if (!row) return;
+  const id = row.dataset.id!;
+  if (target.closest('.file-download')) {
+    const file = await getFile(id);
+    if (!file) return;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(file.blob);
+    a.download = file.name;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    return;
+  }
+  if (target.closest('.file-del')) {
+    const name = row.querySelector('.file-row-name')?.textContent?.trim() || '';
+    if (!(await confirmDialog(`למחוק את "${name}"?`, 'מחיקה'))) return;
+    await deleteFile(id);
+    await renderFilesList(kind === 'report' ? '#s-report-files' : '#s-external-files', kind);
+    toast('הקובץ נמחק');
+  }
 }
 
 /* ---------- ניהול רשימות (מינים / מיקומים / פרויקטים) ---------- */
