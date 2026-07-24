@@ -45,6 +45,7 @@ const PATHS = {
   bell: '<path d="M6 17v-5.5a6 6 0 0 1 12 0V17l2 2.5H4L6 17Z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
   lock: '<rect x="5" y="11" width="14" height="9" rx="1.6"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/>',
   folder: '<path d="M4 6.5a2 2 0 0 1 2-2h4.2l2 2H18a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-11Z"/>',
+  eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/>',
 } as const;
 
 export type IconName = keyof typeof PATHS;

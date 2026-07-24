@@ -112,14 +112,15 @@ export async function exportObservationsPdf(observations: Observation[]): Promis
       .from(el)
       .output('blob');
 
-    await saveFile({ id: crypto.randomUUID(), name: fileName, kind: 'report', mime: 'application/pdf', blob, createdAt: new Date().toISOString() });
+    const createdAt = new Date().toISOString();
+    await saveFile({ id: crypto.randomUUID(), name: fileName, kind: 'report', mime: 'application/pdf', blob, createdAt, updatedAt: createdAt });
 
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = fileName;
     a.click();
     URL.revokeObjectURL(a.href);
-    toast('הדו"ח הופק והורד למכשיר ✓ (נשמר גם בתיקיית דוחות תצפית בהגדרות)');
+    toast('הדו"ח הופק והורד למכשיר ✓ (נשמר גם בתיקיית דוחות תצפית בהגדרות)', false, 5000);
   } finally {
     host.remove();
   }

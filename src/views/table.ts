@@ -4,7 +4,7 @@
 import {
   listObservations, deleteObservation, saveObservation, listSpecies, addSpecies,
 } from '../db/repository';
-import { toast, fmtDateTime, fmtCoords, confirmDialog } from '../lib/ui';
+import { toast, fmtDateTime, fmtCoords, confirmDialog, withBusyButton } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
 import { parseCsv, mapHeaders, parseCoordinates, parseDateTime, type HeaderMap, type CsvField } from '../lib/csv';
 import { exportObservationsPdf } from '../lib/pdf';
@@ -387,16 +387,10 @@ async function exportPdf(): Promise<void> {
   const source = exportSet();
   if (!source.length) { toast('אין תצפיות לייצוא', true); return; }
   const btn = qs<HTMLButtonElement>(container, '#export-btn');
-  const label = btn.innerHTML;
-  btn.disabled = true;
-  btn.textContent = 'מפיק דו"ח...';
   try {
-    await exportObservationsPdf(source);
+    await withBusyButton(btn, 'מפיק דו"ח...', () => exportObservationsPdf(source));
   } catch (err) {
     toast('הפקת ה-PDF נכשלה: ' + (err as Error).message, true, 5000);
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = label;
   }
 }
 

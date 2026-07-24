@@ -8,7 +8,7 @@ import { renderObservationSummary } from '../lib/obs-card';
 import { renderObservationTile } from '../lib/tile-card';
 import { speciesNames } from '../lib/observation';
 import { escapeHtml } from '../lib/markdown';
-import { showModal, confirmDialog, toast } from '../lib/ui';
+import { showModal, confirmDialog, toast, withBusyButton } from '../lib/ui';
 import { wrapSwipeActions } from '../lib/swipe-actions';
 import { openBulkEditModal, applyBulkEdit } from '../lib/bulk-edit';
 import { exportObservationsExcel } from '../lib/export-excel';
@@ -100,7 +100,7 @@ export function init(el: HTMLElement): void {
 
   qs(container, '#j-bulk-cancel').addEventListener('click', () => { exitSelectionMode(); render(); });
   qs(container, '#j-bulk-edit').addEventListener('click', () => void onBulkEditSelected());
-  const bulkExportBtn = qs(container, '#j-bulk-export-btn');
+  const bulkExportBtn = qs<HTMLButtonElement>(container, '#j-bulk-export-btn');
   const bulkExportMenu = qs(container, '#j-bulk-export-menu');
   bulkExportBtn.addEventListener('click', (e) => { e.stopPropagation(); bulkExportMenu.hidden = !bulkExportMenu.hidden; });
   bulkExportMenu.addEventListener('click', (e) => {
@@ -109,7 +109,8 @@ export function init(el: HTMLElement): void {
     bulkExportMenu.hidden = true;
     const selectedObs = observations.filter((o) => selectedIds.has(o.id));
     if (b.dataset.fmt === 'excel') exportObservationsExcel(selectedObs);
-    else void exportObservationsPdf(selectedObs).catch((err: Error) => toast('הפקת ה-PDF נכשלה: ' + err.message, true, 5000));
+    else void withBusyButton(bulkExportBtn, 'מייצא...', () => exportObservationsPdf(selectedObs))
+      .catch((err: Error) => toast('הפקת ה-PDF נכשלה: ' + err.message, true, 5000));
   });
   document.addEventListener('click', (e) => {
     if (!bulkExportMenu.hidden && !(e.target as HTMLElement).closest('.export-wrap')) bulkExportMenu.hidden = true;

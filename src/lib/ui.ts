@@ -1,5 +1,7 @@
 /* lib/ui.ts — shared UI helpers: toast, modal, formatting. */
 
+import { icon } from './icons';
+
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
 
 export function toast(msg: string, isError = false, ms = 3000): void {
@@ -9,6 +11,22 @@ export function toast(msg: string, isError = false, ms = 3000): void {
   t.hidden = false;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { t.hidden = true; }, ms);
+}
+
+/** Disables `btn` and swaps its label for a spinner + `busyLabel` while `fn`
+ * runs (e.g. PDF generation, which can take a few seconds with nothing else
+ * on screen to show it's working), restoring the original content and
+ * enabled state afterward — even if `fn` throws. */
+export async function withBusyButton<T>(btn: HTMLButtonElement, busyLabel: string, fn: () => Promise<T>): Promise<T> {
+  const original = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = `${icon('refresh', 'spin')} ${busyLabel}`;
+  try {
+    return await fn();
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = original;
+  }
 }
 
 export function fmtDateTime(iso: string): string {
