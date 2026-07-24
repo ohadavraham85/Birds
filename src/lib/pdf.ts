@@ -8,7 +8,7 @@ import html2pdf from 'html2pdf.js';
 
 import { fmtDateTime, fmtCoords, toast } from './ui';
 import { renderMarkdown, escapeHtml } from './markdown';
-import { getMedia } from '../db/repository';
+import { getMedia, saveFile } from '../db/repository';
 import { entriesOf, entryImages, totalQuantity } from './observation';
 import type { Observation } from '../types';
 
@@ -112,12 +112,14 @@ export async function exportObservationsPdf(observations: Observation[]): Promis
       .from(el)
       .output('blob');
 
+    await saveFile({ id: crypto.randomUUID(), name: fileName, kind: 'report', mime: 'application/pdf', blob, createdAt: new Date().toISOString() });
+
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = fileName;
     a.click();
     URL.revokeObjectURL(a.href);
-    toast('הדו"ח הופק והורד למכשיר ✓');
+    toast('הדו"ח הופק והורד למכשיר ✓ (נשמר גם בתיקיית דוחות תצפית בהגדרות)');
   } finally {
     host.remove();
   }

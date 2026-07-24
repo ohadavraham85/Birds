@@ -10,6 +10,7 @@ import type {
   SettingRow,
   OutboxEntry,
   ObservationTrack,
+  StoredFile,
 } from '../types';
 
 export class BirdsDatabase extends Dexie {
@@ -21,6 +22,7 @@ export class BirdsDatabase extends Dexie {
   settings!: EntityTable<SettingRow, 'key'>;
   outbox!: EntityTable<OutboxEntry, 'id'>;
   tracks!: EntityTable<ObservationTrack, 'id'>;
+  files!: EntityTable<StoredFile, 'id'>;
 
   constructor() {
     super('birds-db');
@@ -61,6 +63,11 @@ export class BirdsDatabase extends Dexie {
     // v6: recorded GPS tracks (one per observation, captured while its form was open)
     this.version(6).stores({
       ...stores, locations: 'name, updatedAt', projects: 'name, updatedAt', tracks: 'id, updatedAt',
+    });
+    // v7: stored files (Settings ← קבצים) — auto-archived PDF reports + user-uploaded external files
+    this.version(7).stores({
+      ...stores, locations: 'name, updatedAt', projects: 'name, updatedAt', tracks: 'id, updatedAt',
+      files: 'id, kind, createdAt',
     });
   }
 }

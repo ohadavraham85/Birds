@@ -15,6 +15,7 @@ import type {
   ProjectRow,
   MediaRecord,
   ObservationTrack,
+  StoredFile,
 } from '../types';
 
 /* ---------- change notifications ---------- */
@@ -117,6 +118,29 @@ export function listTracks(): Promise<ObservationTrack[]> {
 
 export async function deleteTrack(id: string): Promise<void> {
   await db.tracks.delete(id);
+  emitChange();
+}
+
+/* ---------- stored files (Settings ← קבצים: PDF reports + external uploads) ---------- */
+
+/** Local-only — not part of the mutation feed / Firebase sync. */
+export async function saveFile(file: StoredFile): Promise<void> {
+  await db.files.put(file);
+  emitChange();
+}
+
+export function getFile(id: string): Promise<StoredFile | undefined> {
+  return db.files.get(id);
+}
+
+/** Newest first. */
+export async function listFiles(kind: StoredFile['kind']): Promise<StoredFile[]> {
+  const all = await db.files.where('kind').equals(kind).toArray();
+  return all.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+}
+
+export async function deleteFile(id: string): Promise<void> {
+  await db.files.delete(id);
   emitChange();
 }
 
