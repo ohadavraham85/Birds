@@ -1227,6 +1227,16 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
 
 /* ---------- home screen ---------- */
 
+.draft-banner {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  background: var(--accent-50); border: 1px solid var(--accent-700); border-radius: var(--radius);
+  padding: 10px 14px; margin-bottom: 14px;
+}
+.draft-banner-text { display: flex; flex-direction: column; gap: 2px; font-size: .85rem; }
+.draft-banner-text b { display: flex; align-items: center; gap: 6px; color: var(--accent-900); }
+.draft-banner-text span { color: var(--ink-soft); }
+.draft-banner-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
 .bod-card {
   display: flex; flex-direction: column; width: 100%; position: relative;
   background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-lg, var(--radius));

@@ -22,6 +22,9 @@ export interface ViewParams {
   filterTo?: string;
   /** Drill-down from the home screen's "פרויקטים" tile: opens the journal grouped by project. */
   groupBy?: 'day' | 'month' | 'location' | 'project';
+  /** From the home screen's draft-recovery banner: restore an auto-saved
+   * in-progress new observation (fields + GPS track captured so far). */
+  resumeDraft?: boolean;
 }
 
 export interface View {

@@ -22,6 +22,7 @@ const MIN_INTERVAL_MS = 2000;
 let watchId: number | null = null;
 let points: TrackPoint[] = [];
 let startedAt = 0;
+let wakeLock: { release(): Promise<void> } | null = null;
 
 function haversineMeters(a: TrackPoint, b: TrackPoint): number {
   const R = 6371000;
@@ -42,11 +43,49 @@ export function elapsedMs(): number {
   return startedAt ? Date.now() - startedAt : 0;
 }
 
-/** Starts recording; safely no-ops if geolocation is unsupported, already tracking, or permission is denied. */
+/** A read-only peek at what's been captured so far, without stopping the
+ * recording — used to auto-save a resumable draft (see lib/draft.ts).
+ * Returns null if no session is in progress. */
+export function snapshot(): { points: TrackPoint[]; startedAt: number } | null {
+  return startedAt ? { points: [...points], startedAt } : null;
+}
+
+/** Preloads points/timing from a saved draft before calling startTracking(),
+ * so the resumed recording appends onto what was already captured instead
+ * of starting over. No-ops if a recording is already active. */
+export function seedFromDraft(savedPoints: TrackPoint[], savedStartedAt: number): void {
+  if (watchId != null) return;
+  points = [...savedPoints];
+  startedAt = savedStartedAt;
+}
+
+async function acquireWakeLock(): Promise<void> {
+  try {
+    const nav = navigator as Navigator & { wakeLock?: { request(type: 'screen'): Promise<{ release(): Promise<void> }> } };
+    if (nav.wakeLock) wakeLock = await nav.wakeLock.request('screen');
+  } catch { /* unsupported / denied — the screen just won't be kept awake */ }
+}
+
+function releaseWakeLock(): void {
+  void wakeLock?.release().catch(() => {});
+  wakeLock = null;
+}
+
+// The Wake Lock spec auto-releases the lock once the tab is hidden — grab it
+// again if we're still actively recording when the tab becomes visible.
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && watchId != null) void acquireWakeLock();
+  });
+}
+
+/** Starts recording; safely no-ops if geolocation is unsupported or already
+ * tracking. Resumes onto an existing session (e.g. seeded from a draft)
+ * instead of resetting, if one is already in progress. */
 export function startTracking(): void {
   if (watchId != null || !navigator.geolocation) return;
-  points = [];
-  startedAt = Date.now();
+  if (!startedAt) { points = []; startedAt = Date.now(); }
+  void acquireWakeLock();
   watchId = navigator.geolocation.watchPosition(
     (pos) => {
       const p: TrackPoint = { lat: pos.coords.latitude, lng: pos.coords.longitude, t: Date.now() };
@@ -62,6 +101,7 @@ export function startTracking(): void {
 /** Stops recording and returns the classified track (empty segments if fewer than 2 points were captured). */
 export function stopTracking(): { points: TrackPoint[]; segments: TrackSegment[]; startedAt: number; endedAt: number } {
   if (watchId != null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+  releaseWakeLock();
   const endedAt = Date.now();
   const captured = points;
   points = [];

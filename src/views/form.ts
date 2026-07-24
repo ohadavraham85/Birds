@@ -12,8 +12,9 @@ import { getImageObjectUrl } from '../lib/media';
 import { pickLocation } from '../lib/location-picker';
 import { wireCombo } from '../lib/combo';
 import { entriesOf, entryImages, speciesNames } from '../lib/observation';
-import { startTracking, stopTracking, isTracking, elapsedMs } from '../lib/gps-track';
+import { startTracking, stopTracking, isTracking, elapsedMs, snapshot, seedFromDraft } from '../lib/gps-track';
 import { renderTrackPreview } from '../lib/track-preview';
+import { saveDraft, loadDraft, clearDraft, type ObservationDraft } from '../lib/draft';
 import { qs, input } from '../lib/dom';
 import { icon } from '../lib/icons';
 import { navigate, goBack } from '../main';
@@ -33,6 +34,8 @@ let prefillSpecies: string | null = null;
 let prefillCoords: { lat: number; lng: number } | null = null;
 let prefillLocationName: string | null = null;
 let prefillDate: string | null = null;
+let resumeDraftRequested = false;
+let draftInterval: ReturnType<typeof setInterval> | null = null;
 let obsId = '';
 let savedLocations = new Map<string, LocationRow>();
 let currentLat: number | null = null;
@@ -174,6 +177,80 @@ function stopAndDiscardTrack(): void {
   pendingTrack = null;
   const toggle = container.querySelector<HTMLInputElement>('#track-toggle');
   if (toggle) toggle.checked = false;
+  stopDraftAutosave();
+  clearDraft();
+}
+
+/* ---------- draft auto-save (survives the OS reloading/killing the app mid-session) ---------- */
+
+function collectDraftEntries(): { species: string; quantity: number; note?: string }[] {
+  const rowEls = Array.from(container.querySelectorAll<HTMLElement>('#species-rows .sp-entry'));
+  return rowEls
+    .map((row) => {
+      const species = row.querySelector<HTMLInputElement>('.sp-input')!.value.trim();
+      const quantity = Math.max(1, parseInt(row.querySelector<HTMLInputElement>('.sp-qty')!.value, 10) || 1);
+      const note = row.querySelector<HTMLInputElement>('.sp-note')!.value.trim();
+      return note ? { species, quantity, note } : { species, quantity };
+    })
+    .filter((e) => e.species);
+}
+
+function persistDraft(): void {
+  if (editId) return;
+  const snap = snapshot();
+  const track = snap
+    ? { points: snap.points, startedAt: snap.startedAt }
+    : pendingTrack
+      ? { points: pendingTrack.points, startedAt: new Date(pendingTrack.startedAt).getTime() }
+      : null;
+  const draft: ObservationDraft = {
+    savedAt: new Date().toISOString(),
+    fields: {
+      dateTime: input(container, '#f-datetime').value,
+      project: input(container, '#f-project').value,
+      location: input(container, '#f-location').value,
+      lat: currentLat,
+      lng: currentLng,
+      coordsLocked,
+      notes: qs<HTMLTextAreaElement>(container, '#f-notes').value,
+      entries: collectDraftEntries(),
+    },
+    track,
+  };
+  saveDraft(draft);
+}
+
+function startDraftAutosave(): void {
+  stopDraftAutosave();
+  draftInterval = setInterval(persistDraft, 3000);
+}
+
+function stopDraftAutosave(): void {
+  if (draftInterval) { clearInterval(draftInterval); draftInterval = null; }
+}
+
+/** Restores a previously auto-saved in-progress observation — fields plus
+ * whatever GPS track had been captured — and, if there was any track data,
+ * resumes recording onto it right away (rather than leaving the user to
+ * remember to flip the toggle back on themselves). */
+function resumeFromDraft(): void {
+  const draft = loadDraft();
+  if (!draft) return;
+  input(container, '#f-datetime').value = draft.fields.dateTime;
+  input(container, '#f-project').value = draft.fields.project;
+  input(container, '#f-location').value = draft.fields.location;
+  currentLat = draft.fields.lat;
+  currentLng = draft.fields.lng;
+  coordsLocked = draft.fields.coordsLocked;
+  updateLocationPinUI();
+  qs<HTMLTextAreaElement>(container, '#f-notes').value = draft.fields.notes;
+  setEntries(draft.fields.entries.length ? draft.fields.entries : [{ species: '', quantity: 1 }]);
+  if (draft.track && draft.track.points.length) {
+    seedFromDraft(draft.track.points, draft.track.startedAt);
+    qs<HTMLInputElement>(container, '#track-toggle').checked = true;
+    beginTrack();
+  }
+  toast('התצפית שלא נשמרה שוחזרה ✓');
 }
 
 function buildTrack(result: { points: ObservationTrack['points']; segments: ObservationTrack['segments']; startedAt: number; endedAt: number }): Omit<ObservationTrack, 'id' | 'updatedAt'> | null {
@@ -205,6 +282,7 @@ export function setParams(params: ViewParams): void {
   prefillCoords = (params?.lat != null && params?.lng != null) ? { lat: params.lat, lng: params.lng } : null;
   prefillLocationName = params?.locationName || null;
   prefillDate = params?.date || null;
+  resumeDraftRequested = params?.resumeDraft || false;
 }
 
 export async function activate(): Promise<void> {
@@ -241,6 +319,9 @@ export async function activate(): Promise<void> {
   prefillCoords = null;
   prefillLocationName = null;
   prefillDate = null;
+
+  if (resumeDraftRequested) resumeFromDraft();
+  resumeDraftRequested = false;
 }
 
 function resetForm(locate = true): void {
@@ -260,6 +341,7 @@ function resetForm(locate = true): void {
   stopTrackTimer();
   qs<HTMLInputElement>(container, '#track-toggle').checked = false;
   qs(container, '#track-toggle-row').hidden = false;
+  startDraftAutosave();
 }
 
 async function loadForEdit(id: string): Promise<void> {
@@ -513,6 +595,8 @@ async function onSave(e: Event): Promise<void> {
   };
   await saveObservation(obs);
   await stopAndSaveTrack(obsId);
+  stopDraftAutosave();
+  clearDraft();
   toast(editId ? 'התצפית עודכנה ✓' : 'התצפית נשמרה ✓');
   navigate('cards');
 }

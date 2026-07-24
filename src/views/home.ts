@@ -13,6 +13,7 @@ import { getImageObjectUrl } from '../lib/media';
 import { escapeHtml } from '../lib/markdown';
 import { fmtDateTime } from '../lib/ui';
 import { icon } from '../lib/icons';
+import { loadDraft, clearDraft } from '../lib/draft';
 import { qs } from '../lib/dom';
 import { navigate } from '../main';
 import type { Observation, ObservationImage } from '../types';
@@ -685,14 +686,45 @@ function donut(kind: BreakdownKind, rows: [string, number][], unit: string): str
 
 /* ---------- render + events ---------- */
 
+/** A recovery banner for a new observation that was being composed when the
+ * app got interrupted (incoming call, switching away to write a message,
+ * etc.) — mobile browsers can fully discard a backgrounded tab, wiping all
+ * in-memory state; the draft was auto-saved to localStorage so it survives
+ * that. See lib/draft.ts and views/form.ts's draft auto-save. */
+function draftBannerHtml(): string {
+  const draft = loadDraft();
+  if (!draft) return '';
+  const time = new Date(draft.savedAt).toLocaleString('he-IL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  const speciesCount = draft.fields.entries.filter((e) => e.species).length;
+  const trackNote = draft.track && draft.track.points.length >= 2 ? ` · מסלול GPS (${draft.track.points.length} נקודות)` : '';
+  return `
+    <div class="draft-banner">
+      <div class="draft-banner-text">
+        <b>${icon('alert')} תצפית פתוחה שלא נשמרה</b>
+        <span>מ-${escapeHtml(time)}${speciesCount ? ` · ${speciesCount} מינים` : ''}${trackNote}</span>
+      </div>
+      <div class="draft-banner-actions">
+        <button type="button" class="btn btn-sm btn-primary" data-draft-action="resume">המשך</button>
+        <button type="button" class="btn btn-sm" data-draft-action="discard">מחק</button>
+      </div>
+    </div>`;
+}
+
 function render(): void {
-  qs(container, '#home-body').innerHTML = birdOfDayHtml() + onThisDayHtml() + rangeBarHtml() + statsHtml(filteredObservations());
+  qs(container, '#home-body').innerHTML = draftBannerHtml() + birdOfDayHtml() + onThisDayHtml() + rangeBarHtml() + statsHtml(filteredObservations());
   renderBirdOfDayPhoto();
   renderOnThisDayPhoto();
 }
 
 function onClick(e: Event): void {
   const target = e.target as HTMLElement;
+
+  const draftAction = target.closest<HTMLElement>('[data-draft-action]');
+  if (draftAction) {
+    if (draftAction.dataset.draftAction === 'resume') navigate('form', { resumeDraft: true });
+    else { clearDraft(); render(); }
+    return;
+  }
 
   const bod = target.closest<HTMLElement>('#bod-card');
   if (bod) { navigate('species', { species: bod.dataset.name! }); return; }
