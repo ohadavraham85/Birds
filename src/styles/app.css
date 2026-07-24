@@ -553,6 +553,7 @@ textarea { min-height: 130px; resize: vertical; white-space: pre-wrap; line-heig
 .sync-icon { display: inline-block; }
 .syncing .sync-icon { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+.icon.spin { animation: spin 1s linear infinite; }
 
 /* ---------- species combobox ---------- */
 
@@ -1006,7 +1007,7 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
 
 .files-list { display: flex; flex-direction: column; }
 .file-row {
-  display: flex; align-items: center; gap: 10px; padding: 10px 0;
+  display: flex; align-items: center; gap: 8px; padding: 10px 0; flex-wrap: wrap;
   border-bottom: 1px solid var(--line);
 }
 .file-row:last-child { border-bottom: 0; }
@@ -1015,6 +1016,7 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
   display: flex; align-items: center; gap: 6px;
 }
 .file-row-meta { flex-shrink: 0; font-size: .78rem; color: var(--ink-soft); }
+.file-row .btn-icon { padding: 6px 8px; flex-shrink: 0; }
 
 .seg-toggle { display: inline-flex; width: 100%; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
 .seg-btn {

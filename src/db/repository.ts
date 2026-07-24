@@ -35,7 +35,7 @@ function emitChange(): void {
  * "something changed, re-render"). Sync backends that need to know exactly
  * which record changed (e.g. the Firebase sync engine) subscribe here
  * instead of re-scanning the whole database on every change. */
-export type MutationEntity = 'observation' | 'species' | 'location' | 'project';
+export type MutationEntity = 'observation' | 'species' | 'location' | 'project' | 'file';
 export type MutationOp = 'upsert' | 'delete';
 type MutationListener = (entity: MutationEntity, id: string, op: MutationOp, payload: unknown) => void;
 const mutationListeners = new Set<MutationListener>();
@@ -123,25 +123,47 @@ export async function deleteTrack(id: string): Promise<void> {
 
 /* ---------- stored files (Settings ← קבצים: PDF reports + external uploads) ---------- */
 
-/** Local-only — not part of the mutation feed / Firebase sync. */
 export async function saveFile(file: StoredFile): Promise<void> {
+  file.updatedAt = now();
   await db.files.put(file);
   emitChange();
+  emitMutation('file', file.id, 'upsert', file);
 }
 
 export function getFile(id: string): Promise<StoredFile | undefined> {
   return db.files.get(id);
 }
 
-/** Newest first. */
+/** Newest first, excluding deleted tombstones. */
 export async function listFiles(kind: StoredFile['kind']): Promise<StoredFile[]> {
   const all = await db.files.where('kind').equals(kind).toArray();
-  return all.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  return all.filter((f) => !f.deleted).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 }
 
-export async function deleteFile(id: string): Promise<void> {
-  await db.files.delete(id);
+/** Everything including tombstones — used by the Firebase sync engine. */
+export function listFilesRaw(): Promise<StoredFile[]> {
+  return db.files.toArray();
+}
+
+/** Write a row exactly as given (used by the Firebase sync engine to apply a remote merge). */
+export async function putFileRaw(file: StoredFile): Promise<void> {
+  await db.files.put(file);
   emitChange();
+  emitMutation('file', file.id, file.deleted ? 'delete' : 'upsert', file);
+}
+
+/** Soft-delete: keeps a lightweight tombstone (so the deletion propagates on
+ * sync) but drops the blob immediately, since it's already excluded from
+ * every listing and no longer needs to take up local storage space. */
+export async function deleteFile(id: string): Promise<void> {
+  const file = await db.files.get(id);
+  if (!file) return;
+  file.deleted = true;
+  file.blob = undefined;
+  file.updatedAt = now();
+  await db.files.put(file);
+  emitChange();
+  emitMutation('file', id, 'delete', file);
 }
 
 /* ---------- species ---------- */

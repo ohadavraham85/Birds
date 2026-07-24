@@ -406,7 +406,8 @@ async function renderFilesList(selector: string, kind: 'report' | 'external'): P
     ? files.map((f) => `
       <div class="file-row" data-id="${escapeHtml(f.id)}">
         <span class="file-row-name" title="${escapeHtml(f.name)}">${icon('document')} ${escapeHtml(f.name)}</span>
-        <span class="file-row-meta">${fmtDateTime(f.createdAt)} · <span dir="ltr">${fmtBytes(f.blob.size)}</span></span>
+        <span class="file-row-meta">${fmtDateTime(f.createdAt)} · <span dir="ltr">${fmtBytes(f.blob?.size ?? 0)}</span></span>
+        <button type="button" class="btn btn-icon file-view" title="צפייה" aria-label="צפייה">${icon('eye')}</button>
         <button type="button" class="btn btn-icon file-download" title="הורדה" aria-label="הורדה">${icon('download')}</button>
         <button type="button" class="btn btn-icon file-del" title="מחיקה" aria-label="מחיקה">${icon('trash')}</button>
       </div>`).join('')
@@ -418,9 +419,10 @@ async function onExternalFilesChosen(e: Event): Promise<void> {
   const files = fileInput.files;
   if (files) {
     for (const file of Array.from(files)) {
+      const createdAt = new Date().toISOString();
       await saveFile({
         id: crypto.randomUUID(), name: file.name, kind: 'external',
-        mime: file.type || 'application/pdf', blob: file, createdAt: new Date().toISOString(),
+        mime: file.type || 'application/pdf', blob: file, createdAt, updatedAt: createdAt,
       });
     }
   }
@@ -434,9 +436,17 @@ async function onFileRowClick(e: Event, kind: 'report' | 'external'): Promise<vo
   const row = target.closest<HTMLElement>('.file-row');
   if (!row) return;
   const id = row.dataset.id!;
+  if (target.closest('.file-view')) {
+    const file = await getFile(id);
+    if (!file?.blob) return;
+    // No `download` attribute — opening the blob URL in a new tab lets the
+    // browser's own PDF viewer show it, instead of just saving to disk.
+    window.open(URL.createObjectURL(file.blob), '_blank');
+    return;
+  }
   if (target.closest('.file-download')) {
     const file = await getFile(id);
-    if (!file) return;
+    if (!file?.blob) return;
     const a = document.createElement('a');
     a.href = URL.createObjectURL(file.blob);
     a.download = file.name;

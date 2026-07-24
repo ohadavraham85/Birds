@@ -9,7 +9,7 @@
 import {
   collection, doc, setDoc, onSnapshot, getDocs, query, limit, type Unsubscribe, type QuerySnapshot, type DocumentData,
 } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytes, getDownloadURL, getBytes } from 'firebase/storage';
 import { firebaseDb, firebaseStorage } from './app';
 import {
   onMutation, getSetting, setSetting,
@@ -17,17 +17,32 @@ import {
   listSpeciesRows, putSpeciesRaw, getSpeciesRaw,
   listLocationRows, putLocationRaw, getLocationRaw,
   listProjectRows, putProjectRaw, getProjectRaw,
+  listFilesRaw, putFileRaw, getFile,
   getMedia,
   type MutationEntity, type MutationOp,
 } from '../db/repository';
-import type { Observation, SpeciesRow, LocationRow, ProjectRow } from '../types';
+import type { Observation, SpeciesRow, LocationRow, ProjectRow, StoredFile } from '../types';
 
 const COLLECTION_BY_ENTITY: Record<MutationEntity, string> = {
   observation: 'observations',
   species: 'species',
   location: 'locations',
   project: 'projects',
+  file: 'files',
 };
+
+/** The `files` Firestore collection only ever holds this shape — the blob
+ * itself lives in Storage (uploaded/fetched by id), same split as observation
+ * photos. */
+interface StoredFileMeta {
+  id: string;
+  name: string;
+  kind: StoredFile['kind'];
+  mime: string;
+  createdAt: string;
+  updatedAt: string;
+  deleted: boolean;
+}
 
 let activeCode: string | null = null;
 let unsubs: Unsubscribe[] = [];
@@ -69,12 +84,13 @@ let pendingObs = false;
 let pendingSpecies = false;
 let pendingLocations = false;
 let pendingProjects = false;
+let pendingFiles = false;
 
 /** Recomputes the derived state from the last-known pending-writes flags and
  * live connectivity — called whenever either changes. */
 function recomputeStatus(): void {
   if (!activeCode) { setStatus({ state: 'disabled', pending: false }); return; }
-  const pending = pendingObs || pendingSpecies || pendingLocations || pendingProjects;
+  const pending = pendingObs || pendingSpecies || pendingLocations || pendingProjects || pendingFiles;
   if (!navigator.onLine) { setStatus({ state: 'offline', pending }); return; }
   setStatus({ state: pending ? 'syncing' : 'idle', pending, lastSync: pending ? status.lastSync : new Date().toISOString() });
 }
@@ -150,7 +166,7 @@ export function stopFirebaseSync(): void {
   stopMutationListener?.();
   stopMutationListener = null;
   activeCode = null;
-  pendingObs = pendingSpecies = pendingLocations = pendingProjects = false;
+  pendingObs = pendingSpecies = pendingLocations = pendingProjects = pendingFiles = false;
   setStatus({ state: 'disabled', pending: false, message: undefined });
 }
 
@@ -192,6 +208,9 @@ async function startFirebaseSync(code: string): Promise<void> {
         // not lose text-data sync (Firestore) just because photos can't upload.
         for (const o of await listObservationsRaw()) {
           try { await pushObservationMedia(o); } catch (err) { console.warn('Firebase: photo sync skipped', err); }
+        }
+        for (const f of await listFilesRaw()) {
+          try { await pushFile(f); } catch (err) { console.warn('Firebase: file sync skipped', err); }
         }
       });
       await setSetting(seedFlagKey, true);
@@ -235,6 +254,14 @@ async function startFirebaseSync(code: string): Promise<void> {
     });
     recomputeStatus();
   }, onSnapError));
+  unsubs.push(onSnapshot(collection(db, 'households', code, 'files'), { includeMetadataChanges: true }, (snap: QuerySnapshot<DocumentData>) => {
+    pendingFiles = snap.metadata.hasPendingWrites;
+    snap.docChanges().forEach((change) => {
+      if (change.type === 'removed') return;
+      void mergeRemoteFile(change.doc.data() as StoredFileMeta);
+    });
+    recomputeStatus();
+  }, onSnapError));
 
   stopMutationListener = onMutation((entity, id, op, payload) => {
     if (suppressDepth > 0 || !activeCode) return;
@@ -244,6 +271,10 @@ async function startFirebaseSync(code: string): Promise<void> {
 
 async function handleLocalMutation(entity: MutationEntity, id: string, _op: MutationOp, payload: unknown): Promise<void> {
   try {
+    if (entity === 'file') {
+      await pushFile(payload as StoredFile);
+      return;
+    }
     await pushDoc(COLLECTION_BY_ENTITY[entity], id, payload);
     if (entity === 'observation') {
       try { await pushObservationMedia(payload as Observation); } catch (err) { console.warn('Firebase: photo sync skipped', err); }
@@ -321,4 +352,48 @@ async function mergeRemoteProject(remote: ProjectRow): Promise<void> {
   const local = await getProjectRaw(remote.name);
   if (local && new Date(local.updatedAt) >= new Date(remote.updatedAt)) return;
   await withSuppressedPush(() => putProjectRaw(remote));
+}
+
+/** Uploads a StoredFile's blob to Storage (same as observation photos) and
+ * pushes its metadata (everything except the blob) to Firestore. A deleted
+ * tombstone has no blob to upload — it's just the metadata push. */
+async function pushFile(file: StoredFile): Promise<void> {
+  if (!activeCode) return;
+  const meta: StoredFileMeta = {
+    id: file.id, name: file.name, kind: file.kind, mime: file.mime,
+    createdAt: file.createdAt, updatedAt: file.updatedAt, deleted: !!file.deleted,
+  };
+  if (!file.deleted && file.blob) {
+    try {
+      const path = `households/${activeCode}/files/${file.id}`;
+      await uploadBytes(ref(firebaseStorage(), path), file.blob, { contentType: file.mime || 'application/octet-stream' });
+    } catch (err) {
+      // Storage not enabled yet, offline, etc. — leave this file for a later
+      // retry (next mutation/app start) rather than pushing metadata that
+      // claims a blob other devices can't actually fetch yet.
+      console.warn('Firebase: could not upload file', file.id, err);
+      return;
+    }
+  }
+  await pushDoc('files', file.id, meta);
+}
+
+async function mergeRemoteFile(remote: StoredFileMeta): Promise<void> {
+  const local = await getFile(remote.id);
+  if (local && new Date(local.updatedAt) >= new Date(remote.updatedAt)) return;
+  if (remote.deleted) {
+    await withSuppressedPush(() => putFileRaw({ ...remote, blob: undefined }));
+    return;
+  }
+  if (!activeCode) return;
+  try {
+    const path = `households/${activeCode}/files/${remote.id}`;
+    const bytes = await getBytes(ref(firebaseStorage(), path));
+    const blob = new Blob([bytes], { type: remote.mime || 'application/octet-stream' });
+    await withSuppressedPush(() => putFileRaw({ ...remote, blob }));
+  } catch (err) {
+    // Blob not uploaded yet (metadata can arrive slightly ahead of the
+    // Storage write) or offline — will retry on the next remote update.
+    console.warn('Firebase: could not download file', remote.id, err);
+  }
 }

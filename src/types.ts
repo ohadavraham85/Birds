@@ -109,14 +109,20 @@ export interface MediaRecord {
 
 /** A file kept in Settings ← קבצים: either a PDF report archived automatically
  * every time a "ייצוא PDF" runs ('report'), or one the user uploaded
- * themselves ('external'). Local-only, not part of Firebase sync. */
+ * themselves ('external'). Synced across devices via Firebase (blob in
+ * Storage, metadata in Firestore) the same way observation photos are. */
 export interface StoredFile {
   id: string;
   name: string;
   kind: 'report' | 'external';
   mime: string;
-  blob: Blob;
+  /** Missing only on a deleted tombstone (space freed locally once soft-deleted). */
+  blob?: Blob;
   createdAt: string; // ISO
+  /** Last local modification, ISO — used for last-write-wins merging. */
+  updatedAt: string;
+  /** Soft-delete tombstone so the deletion propagates on sync. */
+  deleted?: boolean;
 }
 
 /** Reference details for a species (from the field guide / PDF). */

@@ -2,7 +2,7 @@
  * של פרטי התצפית, עם כפתור "עריכה" ייעודי שפותח את טופס העריכה, וייצוא PDF. */
 
 import { getObservation } from '../db/repository';
-import { toast } from '../lib/ui';
+import { toast, withBusyButton } from '../lib/ui';
 import { renderObservationCard } from '../lib/obs-card';
 import { exportObservationsPdf } from '../lib/pdf';
 import { icon } from '../lib/icons';
@@ -32,7 +32,7 @@ export function init(el: HTMLElement): void {
   qs(container, '#detail-edit').addEventListener('click', () => {
     if (current) navigate('form', { editId: current.id });
   });
-  qs(container, '#detail-pdf').addEventListener('click', () => void onExportPdf());
+  qs(container, '#detail-pdf').addEventListener('click', (e) => void onExportPdf(e.currentTarget as HTMLButtonElement));
 }
 
 export function setParams(params: ViewParams): void {
@@ -56,10 +56,10 @@ export async function activate(): Promise<void> {
   body.appendChild(card);
 }
 
-async function onExportPdf(): Promise<void> {
+async function onExportPdf(btn: HTMLButtonElement): Promise<void> {
   if (!current) return;
   try {
-    await exportObservationsPdf([current]);
+    await withBusyButton(btn, 'מייצא...', () => exportObservationsPdf([current!]));
   } catch (err) {
     toast('הפקת ה-PDF נכשלה: ' + (err as Error).message, true, 5000);
   }
