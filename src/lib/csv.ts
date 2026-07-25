@@ -60,7 +60,7 @@ export function toCsv(rows: unknown[][]): string {
 
 export type CsvField =
   | 'dateTime' | 'locationName' | 'coordinates' | 'lat' | 'lng'
-  | 'project' | 'species' | 'quantity' | 'notes';
+  | 'tags' | 'species' | 'quantity' | 'notes';
 
 const HEADER_ALIASES: Record<CsvField, string[]> = {
   dateTime: ['תאריך ושעה', 'תאריך', 'date', 'datetime', 'date time', 'time'],
@@ -68,7 +68,8 @@ const HEADER_ALIASES: Record<CsvField, string[]> = {
   coordinates: ['קואורדינטות', 'קורדינטות', 'קואורדינאטות', 'coordinates', 'latlong', 'lat/long', 'latlng'],
   lat: ['רוחב', 'קו רוחב', 'lat', 'latitude'],
   lng: ['אורך', 'קו אורך', 'lng', 'lon', 'long', 'longitude'],
-  project: ['פרויקט', 'פרוייקט', 'project'],
+  // 'project'/'פרויקט' kept as an alias for files exported before the tags migration.
+  tags: ['תגיות', 'תגית', 'tags', 'tag', 'פרויקט', 'פרוייקט', 'project'],
   species: ['מין הציפור', 'מין', 'ציפור', 'species', 'bird', 'bird species'],
   quantity: ['מספר פרטים', 'כמות', 'פרטים', 'quantity', 'count', 'number'],
   notes: ['הערות', 'notes', 'comments', 'remarks'],

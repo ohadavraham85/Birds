@@ -1,7 +1,7 @@
 /* views/home.ts — מסך הבית: נקודת המוצא והחזרה הראשית של האפליקציה.
  * כולל את "ציפור היום" (מין שנבחר אוטומטית ומשתנה מדי יום, עם תמונה אם יש
  * ופרטים מכרטיס המין; לחיצה פותחת את הכרטיס המלא בטאב "מינים") ואת לוח
- * הסטטיסטיקה (שהיה בעבר טאב נפרד) — מספרי-על, פילוח לפי מין/מיקום/פרויקט
+ * הסטטיסטיקה (שהיה בעבר טאב נפרד) — מספרי-על, פילוח לפי מין/מיקום/תגית
  * ומגמה שנתית, עם סינון לפי שנה/חודש/טווח מותאם, פלטת צבעים מגוונת בגרפים,
  * ולחיצה על כל נתון שמפנה ליומן/ללוח השנה המסונן. חוזרים למסך הזה תמיד
  * באותו מצב סינון/גרפים וגלילה שהיו כשיצאת ממנו (למשל אחרי לחיצה על גרף). */
@@ -18,7 +18,7 @@ import { qs } from '../lib/dom';
 import { navigate } from '../main';
 import type { Observation, ObservationImage } from '../types';
 
-type BreakdownKind = 'species' | 'location' | 'project';
+type BreakdownKind = 'species' | 'location' | 'tag';
 type ChartMode = 'bar' | 'pie';
 type RangeMode = 'all' | 'year' | 'month' | 'custom';
 
@@ -36,7 +36,7 @@ let container: HTMLElement;
 let allObservations: Observation[] = [];
 let speciesMasterList: string[] = [];
 
-const chartMode: Record<BreakdownKind, ChartMode> = { species: 'pie', location: 'bar', project: 'bar' };
+const chartMode: Record<BreakdownKind, ChartMode> = { species: 'pie', location: 'bar', tag: 'bar' };
 let yearMode: 'bar' | 'line' = 'bar';
 
 let rangeMode: RangeMode = 'all';
@@ -262,7 +262,7 @@ function statsHtml(observations: Observation[]): string {
 
   const speciesCounts = new Map<string, number>();
   const locationCounts = new Map<string, number>();
-  const projectCounts = new Map<string, number>();
+  const tagCounts = new Map<string, number>();
   const yearCounts = new Map<string, number>();
   let minDate = observations[0]!.dateTime;
   let maxDate = observations[0]!.dateTime;
@@ -275,17 +275,16 @@ function statsHtml(observations: Observation[]): string {
 
     const loc = o.locationName.trim();
     if (loc) locationCounts.set(loc, (locationCounts.get(loc) || 0) + 1);
-    const proj = o.project.trim();
-    if (proj) projectCounts.set(proj, (projectCounts.get(proj) || 0) + 1);
+    for (const tag of new Set(o.tags)) tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
 
     const year = new Date(o.dateTime).getFullYear();
     if (!isNaN(year)) yearCounts.set(String(year), (yearCounts.get(String(year)) || 0) + 1);
   }
-  const tiles: { label: string; value: number; tile?: 'species' | 'location' | 'observations' | 'project' }[] = [
+  const tiles: { label: string; value: number; tile?: 'species' | 'location' | 'observations' | 'tag' }[] = [
     { label: 'תצפיות', value: observations.length, tile: 'observations' },
     { label: 'מינים', value: speciesCounts.size, tile: 'species' },
     { label: 'מיקומים', value: locationCounts.size, tile: 'location' },
-    { label: 'פרויקטים', value: projectCounts.size, tile: 'project' },
+    { label: 'תגיות', value: tagCounts.size, tile: 'tag' },
   ];
 
   const tileHtml = (t: (typeof tiles)[number]): string => {
@@ -312,10 +311,10 @@ function statsHtml(observations: Observation[]): string {
   const topLocations = [...locationCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
   const locationsChart = breakdownChart('location', 'מיקומים מובילים', topLocations, 'תצפיות');
 
-  const projects = [...projectCounts.entries()].sort((a, b) => b[1] - a[1]);
-  const projectsChart = breakdownChart('project', 'פילוח לפי פרויקט', projects, 'תצפיות');
+  const tags = [...tagCounts.entries()].sort((a, b) => b[1] - a[1]);
+  const tagsChart = breakdownChart('tag', 'פילוח לפי תגית', tags, 'תצפיות');
 
-  return tilesHtml + yearChart + goalsHtml() + speciesChart + familyChartHtml(observations) + locationsChart + projectsChart;
+  return tilesHtml + yearChart + goalsHtml() + speciesChart + familyChartHtml(observations) + locationsChart + tagsChart;
 }
 
 function yearCardHead(title: string): string {
@@ -624,7 +623,7 @@ function familyChartHtml(observations: Observation[]): string {
     </div>`;
 }
 
-const TITLES: Record<BreakdownKind, string> = { species: 'מין', location: 'מיקום', project: 'פרויקט' };
+const TITLES: Record<BreakdownKind, string> = { species: 'מין', location: 'מיקום', tag: 'תגית' };
 
 function breakdownChart(kind: BreakdownKind, title: string, rows: [string, number][], unit: string): string {
   if (!rows.length) return '';
@@ -741,7 +740,7 @@ function onClick(e: Event): void {
     if (kind === 'species') navigate('species');
     else if (kind === 'location') navigate('map');
     else if (kind === 'observations') { const { from, to } = activeRangeAsDates(); navigate('cards', { filterFrom: from, filterTo: to }); }
-    else if (kind === 'project') navigate('cards', { groupBy: 'project' });
+    else if (kind === 'tag') navigate('cards', { groupBy: 'tag' });
     return;
   }
 
@@ -761,7 +760,7 @@ function onClick(e: Event): void {
   const value = drill.dataset.value!;
   if (kind === 'species') navigate('cards', { filterSpecies: value });
   else if (kind === 'location') navigate('cards', { filterLocation: value });
-  else if (kind === 'project') navigate('cards', { filterProject: value });
+  else if (kind === 'tag') navigate('cards', { filterTag: value });
   else if (kind === 'year') navigate('calendar', { year: Number(value) });
   else if (kind === 'family') navigate('species');
 }
