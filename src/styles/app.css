@@ -348,6 +348,8 @@ body {
   overflow: hidden; background: var(--accent-50);
 }
 @keyframes track-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+.track-arrow-icon { background: none; border: none; }
+.track-arrow-icon svg { width: 16px; height: 16px; display: block; }
 
 /* ---------- observation detail (view mode) ---------- */
 

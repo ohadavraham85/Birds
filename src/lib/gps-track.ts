@@ -24,7 +24,7 @@ let points: TrackPoint[] = [];
 let startedAt = 0;
 let wakeLock: { release(): Promise<void> } | null = null;
 
-function haversineMeters(a: TrackPoint, b: TrackPoint): number {
+export function haversineMeters(a: TrackPoint, b: TrackPoint): number {
   const R = 6371000;
   const toRad = (d: number): number => (d * Math.PI) / 180;
   const dLat = toRad(b.lat - a.lat);
@@ -35,12 +35,43 @@ function haversineMeters(a: TrackPoint, b: TrackPoint): number {
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
+/** Compass bearing (0-360°, 0 = north) from point `a` to point `b` —
+ * used to orient the direction-of-travel arrows drawn along a track. */
+export function bearingDegrees(a: TrackPoint, b: TrackPoint): number {
+  const toRad = (d: number): number => (d * Math.PI) / 180;
+  const toDeg = (r: number): number => (r * 180) / Math.PI;
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const y = Math.sin(dLng) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+}
+
+/** Total ground distance covered along a sequence of fixes. */
+export function totalDistanceMeters(pts: TrackPoint[]): number {
+  let sum = 0;
+  for (let i = 1; i < pts.length; i++) sum += haversineMeters(pts[i - 1]!, pts[i]!);
+  return sum;
+}
+
+/** "340 מ'" under a km, "2.4 ק"מ" from a km up. */
+export function fmtDistance(meters: number): string {
+  if (meters < 1000) return `${Math.round(meters)} מ'`;
+  return `${(meters / 1000).toFixed(1)} ק"מ`;
+}
+
 export function isTracking(): boolean {
   return watchId != null;
 }
 
 export function elapsedMs(): number {
   return startedAt ? Date.now() - startedAt : 0;
+}
+
+/** Live running distance while a recording is in progress. */
+export function distanceMetersSoFar(): number {
+  return totalDistanceMeters(points);
 }
 
 /** A read-only peek at what's been captured so far, without stopping the
@@ -99,7 +130,7 @@ export function startTracking(): void {
 }
 
 /** Stops recording and returns the classified track (empty segments if fewer than 2 points were captured). */
-export function stopTracking(): { points: TrackPoint[]; segments: TrackSegment[]; startedAt: number; endedAt: number } {
+export function stopTracking(): { points: TrackPoint[]; segments: TrackSegment[]; startedAt: number; endedAt: number; distanceMeters: number } {
   if (watchId != null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
   releaseWakeLock();
   const endedAt = Date.now();
@@ -107,7 +138,7 @@ export function stopTracking(): { points: TrackPoint[]; segments: TrackSegment[]
   points = [];
   const started = startedAt;
   startedAt = 0;
-  return { points: captured, segments: classify(captured), startedAt: started, endedAt };
+  return { points: captured, segments: classify(captured), startedAt: started, endedAt, distanceMeters: totalDistanceMeters(captured) };
 }
 
 /** Classifies each leg (pair of consecutive points) by its speed. Consecutive

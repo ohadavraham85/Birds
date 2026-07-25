@@ -90,6 +90,8 @@ export interface ObservationTrack {
   startedAt: string; // ISO
   endedAt: string; // ISO
   durationMs: number;
+  /** Total ground distance covered, summed leg-by-leg with the haversine formula. */
+  distanceMeters: number;
   /** A small schematic PNG (data URL) of the route, rendered once when the
    * track is saved, so the observation itself can show its route without
    * initializing a full Leaflet map per card. */
