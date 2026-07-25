@@ -4,9 +4,9 @@
 import {
   listSpecies, addSpecies, deleteSpecies, listSpeciesRows,
   listLocationRows, addLocation, updateLocationCoords, deleteLocation, seedLocationsFromObservations,
-  listProjectRows, addProject, deleteProject, seedProjectsFromObservations,
-  findDuplicateSpeciesGroups, findDuplicateLocationGroups, findDuplicateProjectGroups,
-  mergeSpeciesNames, mergeLocationNames, mergeProjectNames,
+  listTagRows, addTag, updateTag, deleteTag,
+  findDuplicateSpeciesGroups, findDuplicateLocationGroups,
+  mergeSpeciesNames, mergeLocationNames,
   clearAllData, listObservations, listObservationsRaw, getObservation, saveObservation,
   putObservationRaw, saveMedia, mediaForObservation,
   listFiles, saveFile, getFile, deleteFile,
@@ -31,16 +31,22 @@ import {
   setTheme, setAccent, setFontColor, setFontSize, setFontWeight,
   type ThemeId, type AccentId, type FontColorId, type FontSizeId, type FontWeightId,
 } from '../lib/theme';
-import type { Observation, LocationRow, ProjectRow } from '../types';
+import type { Observation, LocationRow, TagRow, TagIconName } from '../types';
+import { TAG_ICON_NAMES } from '../types';
+
+const TAG_ICON_LABELS: Record<TagIconName, string> = {
+  tagRaptor: 'דורסים', tagOwl: 'ינשופים', tagHeron: 'אנפתאים/שיטנים', tagDuck: 'עופות מים',
+  tagSongbird: 'ציפורי שיר', tagGull: 'שחפים', tagWoodpecker: 'נקרים', tagDove: 'יונים',
+  tagShorebird: 'חופמאים', tagGeneric: 'כללי',
+};
 
 let container: HTMLElement;
 let unsubStatus: (() => void) | null = null;
 let speciesDupeGroups: DuplicateGroup[] = [];
 let locationDupeGroups: DuplicateGroup[] = [];
-let projectDupeGroups: DuplicateGroup[] = [];
 let renamingSpecies: string | null = null;
 let renamingLocation: string | null = null;
-let renamingProject: string | null = null;
+let renamingTag: string | null = null;
 let selectedSpeciesNames = new Set<string>();
 let selectedLocationNames = new Set<string>();
 let newLocationCoords: LatLng | null = null;
@@ -63,7 +69,7 @@ let activeCategory: SettingsCategory | null = null;
 const CATEGORY_META: Record<SettingsCategory, { icon: IconName; title: string; subtitle: string }> = {
   appearance: { icon: 'palette', title: 'עיצוב', subtitle: 'ערכת נושא, צבעים, גודל ומשקל טקסט' },
   sync: { icon: 'cloud', title: 'סנכרון וגיבוי', subtitle: 'סנכרון לענן (Firebase), גיבוי ושחזור' },
-  lists: { icon: 'list', title: 'ניהול רשימות', subtitle: 'מינים, מיקומים ופרויקטים' },
+  lists: { icon: 'list', title: 'ניהול רשימות', subtitle: 'מינים, מיקומים ותגיות' },
   photos: { icon: 'camera', title: 'ייבוא תמונות', subtitle: 'שיוך תמונות לתצפיות לפי תאריך' },
   notifications: { icon: 'bell', title: 'התראות', subtitle: 'תזכורות נדידה ו"בתאריך הזה"' },
   files: { icon: 'folder', title: 'קבצים', subtitle: 'דוחות תצפית וקבצים חיצוניים' },
@@ -237,7 +243,7 @@ function syncHtml(fbCode: string): string {
       <h3>${icon('cloud')} סנכרון לענן (Firebase)</h3>
       <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
         סנכרון דו-כיווני בזמן-אמת דרך Firebase. מזינים אותו "קוד משפחה" בכל
-        המכשירים (טלפון, מחשב וכו') ותצפיות/מינים/מיקומים/פרויקטים/תמונות
+        המכשירים (טלפון, מחשב וכו') ותצפיות/מינים/מיקומים/תגיות/תמונות
         שנשמרים באחד מופיעים אוטומטית בשאר. עובד גם ללא רשת — השינויים נשמרים
         מיידית במכשיר ומסתנכרנים אוטומטית כשחוזר החיבור.
       </p>
@@ -251,7 +257,7 @@ function syncHtml(fbCode: string): string {
         <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)">
           <p style="font-size:.85rem;color:var(--ink-soft);margin-top:0">
             אם מכשיר אחר עשה שינויים (למשל מיזוג כפילויות ברשימת המינים) שלא
-            מופיעים כאן, אפשר לאלץ סנכרון מחדש של רשימות המינים/מיקומים/פרויקטים
+            מופיעים כאן, אפשר לאלץ סנכרון מחדש של רשימות המינים/מיקומים/תגיות
             מהענן — זה דורס את המצב המקומי שלהן במכשיר הזה בלי תנאי.
           </p>
           <button class="btn btn-sm" id="s-fb-resync">${icon('refresh')} סנכרון מחדש של הרשימות מהענן</button>
@@ -463,7 +469,7 @@ async function onFileRowClick(e: Event, kind: 'report' | 'external'): Promise<vo
   }
 }
 
-/* ---------- ניהול רשימות (מינים / מיקומים / פרויקטים) ---------- */
+/* ---------- ניהול רשימות (מינים / מיקומים / תגיות) ---------- */
 
 function listsHtml(): string {
   return `
@@ -512,25 +518,27 @@ function listsHtml(): string {
     </div>
 
     <div class="settings-card">
-      <h3>${icon('list')} ניהול רשימת הפרויקטים</h3>
+      <h3>${icon('logo')} ניהול תגיות</h3>
       <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
-        הרשימה המוצעת בשדה "פרויקט" בטופס התצפית. שינוי שם פרויקט (עריכה) מעדכן
-        אותו בכל התצפיות שכבר משתמשות בו; מחיקה מסירה אותו מהרשימה בלבד —
-        תצפיות קיימות אינן נפגעות.
+        תגיות מוצגות ככרטיסייה צבעונית על כל תצפית, ואפשר לשייך כמה תגיות
+        לאותה תצפית. שינוי שם תגית (עריכה) מעדכן אותה בכל התצפיות שכבר
+        משתמשות בה; מחיקה מסירה אותה מהרשימה בלבד — תצפיות קיימות אינן נפגעות.
       </p>
-      <div class="add-species-row">
-        <input type="text" id="s-proj-new" placeholder="הוספת פרויקט חדש לרשימה...">
-        <button class="btn" id="s-proj-add">${icon('plus')} הוספה</button>
+      <div class="tag-new-row">
+        <input type="text" id="s-tag-new-name" placeholder="שם התגית...">
+        <input type="color" id="s-tag-new-color" value="#2e7d32" title="צבע">
+        <select id="s-tag-new-icon" title="סוג הציפור">
+          ${tagIconOptionsHtml()}
+        </select>
+        <button class="btn" id="s-tag-add">${icon('plus')} הוספה</button>
       </div>
-      <div class="dupe-toolbar">
-        <button type="button" class="btn btn-sm" id="s-proj-find-dupes">${icon('search')} איתור כפילויות</button>
-        <button type="button" class="btn btn-sm btn-primary" id="s-proj-merge-all" hidden>${icon('layers')} מיזוג הכל</button>
-      </div>
-      <div class="dupe-list" id="s-project-dupes"></div>
-      <div class="species-list" id="s-project-list"></div>
-      <button class="btn btn-sm" id="s-proj-seed" style="margin-top:10px">${icon('refresh')} ייבוא פרויקטים מהתצפיות הקיימות</button>
+      <div class="tag-list" id="s-tag-list"></div>
     </div>
   `;
+}
+
+function tagIconOptionsHtml(selected?: TagIconName): string {
+  return TAG_ICON_NAMES.map((name) => `<option value="${name}"${name === selected ? ' selected' : ''}>${TAG_ICON_LABELS[name]}</option>`).join('');
 }
 
 function wireLists(): void {
@@ -564,17 +572,11 @@ function wireLists(): void {
   qs(container, '#s-loc-merge-selected').addEventListener('click', () => void onMergeSelectedLocations());
   qs(container, '#s-location-dupes').addEventListener('click', (e) => void onLocationDupesClick(e));
 
-  qs(container, '#s-proj-add').addEventListener('click', () => void onAddProjectManaged());
-  input(container, '#s-proj-new').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); void onAddProjectManaged(); } });
-  qs(container, '#s-proj-seed').addEventListener('click', () => void onSeedProjects());
-  qs(container, '#s-project-list').addEventListener('click', (e) => void onProjectListClick(e));
-  void renderProjectManageList();
-
-  projectDupeGroups = [];
-  renamingProject = null;
-  qs(container, '#s-proj-find-dupes').addEventListener('click', () => void onFindProjectDupes());
-  qs(container, '#s-proj-merge-all').addEventListener('click', () => void onMergeAllProjectDupes());
-  qs(container, '#s-project-dupes').addEventListener('click', (e) => void onProjectDupesClick(e));
+  qs(container, '#s-tag-add').addEventListener('click', () => void onAddTagManaged());
+  input(container, '#s-tag-new-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); void onAddTagManaged(); } });
+  qs(container, '#s-tag-list').addEventListener('click', (e) => void onTagListClick(e));
+  void renderTagManageList();
+  renamingTag = null;
 }
 
 /* ---------- נתונים מקומיים ---------- */
@@ -942,122 +944,78 @@ async function onMergeSelectedLocations(): Promise<void> {
   toast('בחרו את השם הנכון בקבוצה למטה ולחצו "מיזוג"');
 }
 
-/* ---------- projects list management ---------- */
+/* ---------- tags management ---------- */
 
-async function renderProjectManageList(): Promise<void> {
-  const rows = await listProjectRows();
-  const el = container.querySelector<HTMLElement>('#s-project-list');
+async function renderTagManageList(): Promise<void> {
+  const rows = await listTagRows();
+  const el = container.querySelector<HTMLElement>('#s-tag-list');
   if (!el) return;
   el.innerHTML = rows.length
     ? rows.map((r) => {
-      const isRenaming = renamingProject === r.name;
+      const isRenaming = renamingTag === r.name;
       return `
-      <div class="sp-row proj-row" data-name="${escapeHtml(r.name)}">
+      <div class="tag-row" data-name="${escapeHtml(r.name)}">
+        <span class="tag-swatch" style="background:${escapeHtml(r.color)}">${icon(r.icon)}</span>
         ${isRenaming
-          ? `<input type="text" class="rename-input" value="${escapeHtml(r.name)}">`
-          : `<span>${escapeHtml(r.name)}</span>`}
+          ? `<input type="text" class="rename-input" value="${escapeHtml(r.name)}">
+             <input type="color" class="tag-edit-color" value="${escapeHtml(r.color)}" title="צבע">
+             <select class="tag-edit-icon" title="סוג הציפור">${tagIconOptionsHtml(r.icon)}</select>`
+          : `<span class="tag-row-name">${escapeHtml(r.name)}</span>`}
         ${isRenaming
-          ? `<button type="button" class="rename-save" data-name="${escapeHtml(r.name)}" title="שמירת שם" aria-label="שמירת שם">${icon('check')}</button>
+          ? `<button type="button" class="rename-save" data-name="${escapeHtml(r.name)}" title="שמירה" aria-label="שמירה">${icon('check')}</button>
              <button type="button" class="rename-cancel" title="ביטול" aria-label="ביטול">✕</button>`
-          : `<button type="button" class="rename" data-name="${escapeHtml(r.name)}" title="שינוי שם" aria-label="שינוי שם">${icon('edit')}</button>`}
-        <button type="button" class="del" data-name="${escapeHtml(r.name)}" title="הסרה מהרשימה" aria-label="הסרה מהרשימה">${icon('trash')}</button>
+          : `<button type="button" class="rename" data-name="${escapeHtml(r.name)}" title="עריכה" aria-label="עריכה">${icon('edit')}</button>`}
+        <button type="button" class="del" data-name="${escapeHtml(r.name)}" title="מחיקה" aria-label="מחיקה">${icon('trash')}</button>
       </div>`;
     }).join('')
-    : '<p class="hint" style="padding:10px 12px">אין פרויקטים ברשימה.</p>';
-  if (renamingProject) el.querySelector<HTMLInputElement>('.rename-input')?.focus();
+    : '<p class="hint" style="padding:10px 12px">אין תגיות עדיין.</p>';
+  if (renamingTag) el.querySelector<HTMLInputElement>('.rename-input')?.focus();
 }
 
-async function onAddProjectManaged(): Promise<void> {
-  const inp = input(container, '#s-proj-new');
-  const name = inp.value.trim();
+async function onAddTagManaged(): Promise<void> {
+  const nameInp = input(container, '#s-tag-new-name');
+  const name = nameInp.value.trim();
   if (!name) return;
-  await addProject(name);
-  inp.value = '';
-  await renderProjectManageList();
-  toast(`"${name}" נוסף לרשימת הפרויקטים`);
+  const color = input(container, '#s-tag-new-color').value;
+  const iconName = (container.querySelector<HTMLSelectElement>('#s-tag-new-icon')!.value) as TagIconName;
+  await addTag(name, color, iconName);
+  nameInp.value = '';
+  await renderTagManageList();
+  toast(`התגית "${name}" נוספה`);
 }
 
-async function onSeedProjects(): Promise<void> {
-  const n = await seedProjectsFromObservations();
-  toast(n ? `נוספו ${n} פרויקטים מהתצפיות הקיימות` : 'אין פרויקטים חדשים לייבוא');
-  if (n) await renderProjectManageList();
-}
-
-async function onProjectListClick(e: Event): Promise<void> {
+async function onTagListClick(e: Event): Promise<void> {
   const target = e.target as HTMLElement;
   if (target.closest('.rename')) {
-    renamingProject = target.closest<HTMLElement>('.rename')!.dataset.name!;
-    await renderProjectManageList();
+    renamingTag = target.closest<HTMLElement>('.rename')!.dataset.name!;
+    await renderTagManageList();
     return;
   }
   if (target.closest('.rename-cancel')) {
-    renamingProject = null;
-    await renderProjectManageList();
+    renamingTag = null;
+    await renderTagManageList();
     return;
   }
   if (target.closest('.rename-save')) {
     const oldName = target.closest<HTMLElement>('.rename-save')!.dataset.name!;
-    const row = target.closest<HTMLElement>('.proj-row')!;
+    const row = target.closest<HTMLElement>('.tag-row')!;
     const newName = row.querySelector<HTMLInputElement>('.rename-input')!.value.trim();
-    renamingProject = null;
-    if (!newName || newName === oldName) { await renderProjectManageList(); return; }
-    const n = await mergeProjectNames([oldName], newName);
-    await renderProjectManageList();
-    toast(`"${oldName}" שונה ל-"${newName}" (${n} תצפיות עודכנו)`);
+    const color = row.querySelector<HTMLInputElement>('.tag-edit-color')!.value;
+    const iconName = row.querySelector<HTMLSelectElement>('.tag-edit-icon')!.value as TagIconName;
+    renamingTag = null;
+    if (!newName) { await renderTagManageList(); return; }
+    await updateTag(oldName, newName, color, iconName);
+    await renderTagManageList();
+    toast(newName === oldName ? `התגית "${oldName}" עודכנה` : `"${oldName}" שונה ל-"${newName}"`);
     return;
   }
   const btn = target.closest<HTMLElement>('.del');
   if (!btn) return;
   const name = btn.dataset.name!;
-  if (!(await confirmDialog(`להסיר את "${name}" מרשימת הפרויקטים? תצפיות קיימות לא ייפגעו.`, 'הסרה'))) return;
-  await deleteProject(name);
-  await renderProjectManageList();
-  toast(`"${name}" הוסר מהרשימה`);
-}
-
-async function onFindProjectDupes(): Promise<void> {
-  projectDupeGroups = await findDuplicateProjectGroups();
-  renderProjectDupes();
-  if (!projectDupeGroups.length) toast('לא נמצאו כפילויות ברשימת הפרויקטים');
-}
-
-function renderProjectDupes(): void {
-  renderDupeGroups(container.querySelector<HTMLElement>('#s-project-dupes'), projectDupeGroups, 'proj');
-  const mergeAllBtn = container.querySelector<HTMLButtonElement>('#s-proj-merge-all');
-  if (mergeAllBtn) mergeAllBtn.hidden = projectDupeGroups.length < 2;
-}
-
-async function onProjectDupesClick(e: Event): Promise<void> {
-  const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('.merge-btn');
-  if (!btn) return;
-  const idx = Number(btn.dataset.idx);
-  const group = projectDupeGroups[idx];
-  if (!group) return;
-  const canonical = pickedCanonical('#s-project-dupes', idx, group);
-  if (!(await confirmDialog(
-    `למזג ${group.names.length} וריאציות של אותו פרויקט ל-"${canonical}"? כל התצפיות הרלוונטיות יעודכנו.`,
-    'מיזוג',
-  ))) return;
-  const n = await mergeProjectNames(group.names, canonical);
-  toast(`מוזגו ${group.names.length} שמות ל-"${canonical}" (${n} תצפיות עודכנו)`);
-  projectDupeGroups.splice(idx, 1);
-  renderProjectDupes();
-  await renderProjectManageList();
-}
-
-async function onMergeAllProjectDupes(): Promise<void> {
-  if (!projectDupeGroups.length) return;
-  if (!(await confirmDialog(
-    `למזג את כל ${projectDupeGroups.length} קבוצות הכפילויות, כל אחת לפי השם שנבחר לה? התצפיות יעודכנו.`,
-    'מיזוג הכל',
-  ))) return;
-  let totalObs = 0;
-  const groups = projectDupeGroups.map((g, i) => ({ group: g, canonical: pickedCanonical('#s-project-dupes', i, g) }));
-  for (const { group, canonical } of groups) totalObs += await mergeProjectNames(group.names, canonical);
-  toast(`מוזגו ${groups.length} קבוצות כפילויות (${totalObs} תצפיות עודכנו)`);
-  projectDupeGroups = [];
-  renderProjectDupes();
-  await renderProjectManageList();
+  if (!(await confirmDialog(`למחוק את התגית "${name}"? תצפיות קיימות לא ייפגעו.`, 'מחיקה'))) return;
+  await deleteTag(name);
+  await renderTagManageList();
+  toast(`התגית "${name}" נמחקה`);
 }
 
 function pickSwatch(groupSelector: string, e: Event, apply: (btn: HTMLElement) => void): void {
@@ -1110,14 +1068,14 @@ async function onSaveFirebaseSync(): Promise<void> {
 
 async function onForceResync(): Promise<void> {
   if (!(await confirmDialog(
-    'לדרוס את רשימות המינים/מיקומים/פרויקטים במכשיר הזה בערכים מהענן? שינויים מקומיים שטרם עלו לענן עלולים ללכת לאיבוד.',
+    'לדרוס את רשימות המינים/מיקומים/תגיות במכשיר הזה בערכים מהענן? שינויים מקומיים שטרם עלו לענן עלולים ללכת לאיבוד.',
     'סנכרון מחדש',
   ))) return;
   const btn = qs<HTMLButtonElement>(container, '#s-fb-resync');
   btn.disabled = true;
   try {
     const n = await forceResyncListsFromCloud();
-    toast(`הרשימות סונכרנו מחדש (${n.species} מינים, ${n.locations} מיקומים, ${n.projects} פרויקטים)`);
+    toast(`הרשימות סונכרנו מחדש (${n.species} מינים, ${n.locations} מיקומים, ${n.tags} תגיות)`);
   } catch (err) {
     toast('סנכרון מחדש נכשל: ' + (err as Error).message, true, 6000);
   } finally {
@@ -1164,14 +1122,14 @@ async function onBackup(): Promise<void> {
   const observations = await listObservationsRaw();
   const species = await listSpecies();
   const locations = await listLocationRows();
-  const projects = await listProjectRows();
+  const tags = await listTagRows();
   const media: Array<{ id: string; obsId: string; name: string; mime: string; data: string }> = [];
   for (const o of observations) {
     for (const m of await mediaForObservation(o.id)) {
       media.push({ id: m.id, obsId: m.obsId, name: m.name, mime: m.mime, data: await blobToDataUrl(m.blob) });
     }
   }
-  const backup = { app: 'birds-journal', format: 2, exportedAt: new Date().toISOString(), species, locations, projects, observations, media };
+  const backup = { app: 'birds-journal', format: 3, exportedAt: new Date().toISOString(), species, locations, tags, observations, media };
   const blob = new Blob([JSON.stringify(backup)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -1186,7 +1144,11 @@ async function onRestore(e: Event): Promise<void> {
   const file = fileInput.files?.[0];
   fileInput.value = '';
   if (!file) return;
-  let backup: { app?: string; observations?: Observation[]; species?: string[]; locations?: LocationRow[]; projects?: ProjectRow[]; media?: Array<{ id: string; obsId: string; name: string; mime: string; data: string }> };
+  let backup: {
+    app?: string; observations?: Observation[]; species?: string[]; locations?: LocationRow[];
+    tags?: TagRow[]; projects?: { name: string }[]; // `projects` kept for restoring pre-tags backups
+    media?: Array<{ id: string; obsId: string; name: string; mime: string; data: string }>;
+  };
   try {
     backup = JSON.parse(await file.text());
     if (backup.app !== 'birds-journal' || !Array.isArray(backup.observations)) throw new Error();
@@ -1194,14 +1156,17 @@ async function onRestore(e: Event): Promise<void> {
   if (!(await confirmDialog(`לשחזר ${backup.observations!.length} תצפיות מהגיבוי?`, 'שחזור'))) return;
   for (const name of backup.species || []) await addSpecies(name);
   for (const l of backup.locations || []) await addLocation(l.name, l.lat, l.lng);
-  for (const p of backup.projects || []) await addProject(p.name);
+  for (const t of backup.tags || []) await addTag(t.name, t.color, t.icon);
+  // pre-tags backup: each old project becomes a plain generic-icon tag
+  for (const p of backup.projects || []) await addTag(p.name, '#2e7d32', 'tagGeneric');
   for (const o of backup.observations!) {
-    // migrate older backups that used a single species/quantity per row
-    const legacy = o as unknown as { species?: string; quantity?: number };
+    // migrate older backups that used a single species/quantity per row, or a single `project` instead of `tags`
+    const legacy = o as unknown as { species?: string; quantity?: number; project?: string };
     const entries = Array.isArray(o.entries)
       ? o.entries
       : [{ species: legacy.species ?? '', quantity: legacy.quantity ?? 1 }];
-    await putObservationRaw({ ...o, entries, updatedAt: o.updatedAt || new Date().toISOString() });
+    const tagsArr = Array.isArray(o.tags) ? o.tags : (legacy.project ? [legacy.project] : []);
+    await putObservationRaw({ ...o, entries, tags: tagsArr, updatedAt: o.updatedAt || new Date().toISOString() });
   }
   for (const m of backup.media || []) {
     await saveMedia({ id: m.id, obsId: m.obsId, name: m.name, mime: m.mime, blob: await dataUrlToBlob(m.data) });

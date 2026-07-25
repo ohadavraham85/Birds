@@ -6,6 +6,7 @@ import type {
   SpeciesRow,
   LocationRow,
   ProjectRow,
+  TagRow,
   MediaRecord,
   SettingRow,
   OutboxEntry,
@@ -13,11 +14,15 @@ import type {
   StoredFile,
 } from '../types';
 
+/** Cycled through when migrating old projects (which had no color) into tags. */
+const MIGRATED_TAG_COLORS = ['#2e7d32', '#1565c0', '#c62828', '#6a1b9a', '#ef6c00', '#00838f'];
+
 export class BirdsDatabase extends Dexie {
   observations!: EntityTable<Observation, 'id'>;
   species!: EntityTable<SpeciesRow, 'name'>;
   locations!: EntityTable<LocationRow, 'name'>;
   projects!: EntityTable<ProjectRow, 'name'>;
+  tags!: EntityTable<TagRow, 'name'>;
   media!: EntityTable<MediaRecord, 'id'>;
   settings!: EntityTable<SettingRow, 'key'>;
   outbox!: EntityTable<OutboxEntry, 'id'>;
@@ -68,6 +73,29 @@ export class BirdsDatabase extends Dexie {
     this.version(7).stores({
       ...stores, locations: 'name, updatedAt', projects: 'name, updatedAt', tracks: 'id, updatedAt',
       files: 'id, kind, createdAt',
+    });
+    // v8: tags (multi-valued, colored+iconed) replace the single-valued project
+    // field — every existing project becomes a tag of the same name, and every
+    // observation's single project string becomes a one-element tags array.
+    this.version(8).stores({
+      ...stores, locations: 'name, updatedAt', projects: 'name, updatedAt', tracks: 'id, updatedAt',
+      files: 'id, kind, createdAt', tags: 'name, updatedAt',
+    }).upgrade(async (tx) => {
+      const projectRows = await tx.table('projects').toArray() as ProjectRow[];
+      const now = new Date().toISOString();
+      await tx.table('tags').bulkPut(projectRows.map((p, i): TagRow => ({
+        name: p.name,
+        color: MIGRATED_TAG_COLORS[i % MIGRATED_TAG_COLORS.length]!,
+        icon: 'tagGeneric',
+        updatedAt: p.updatedAt || now,
+        deleted: p.deleted,
+      })));
+      await tx.table('observations').toCollection().modify((o: Record<string, unknown>) => {
+        if (!Array.isArray(o.tags)) {
+          const project = (o.project as string) || '';
+          o.tags = project ? [project] : [];
+        }
+      });
     });
   }
 }
