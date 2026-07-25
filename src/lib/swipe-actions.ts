@@ -62,6 +62,10 @@ export function wrapSwipeActions(card: HTMLElement, handlers: SwipeActionHandler
 
   front.addEventListener('pointerdown', (e: PointerEvent) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
+    // A nested interactive element (star button, place-link) must handle its
+    // own click natively — setPointerCapture below would otherwise re-target
+    // the resulting click event to `front` itself, silently swallowing it.
+    if ((e.target as HTMLElement).closest('button, a')) return;
     startX = e.clientX;
     startY = e.clientY;
     dx = 0;

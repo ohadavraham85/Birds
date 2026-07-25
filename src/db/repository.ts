@@ -66,6 +66,19 @@ export function getObservation(id: string): Promise<Observation | undefined> {
   return db.observations.get(id);
 }
 
+/** Flips the favorite flag on one observation and pushes it through the same
+ * mutation/sync path as any other edit, so starring syncs across devices too. */
+export async function toggleStarred(id: string): Promise<boolean> {
+  const obs = await db.observations.get(id);
+  if (!obs) return false;
+  obs.starred = !obs.starred;
+  obs.updatedAt = now();
+  await db.observations.put(obs);
+  emitChange();
+  emitMutation('observation', id, 'upsert', obs);
+  return obs.starred;
+}
+
 /** All non-deleted observations, newest first. */
 export async function listObservations(): Promise<Observation[]> {
   const all = await db.observations.toArray();

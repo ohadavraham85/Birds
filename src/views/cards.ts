@@ -36,6 +36,7 @@ let collapsedGroups = new Set<string>();
 let selectedProjects = new Set<string>();
 let selectedLocations = new Set<string>();
 let selectedSpecies = new Set<string>();
+let starredOnly = false;
 /** Date-range drill-down from the home screen's "תצפיות" stats tile (YYYY-MM-DD, inclusive; '' = unbounded). */
 let filterFrom = '';
 let filterTo = '';
@@ -61,6 +62,7 @@ export function init(el: HTMLElement): void {
       <button type="button" class="btn btn-icon j-filter-btn" id="j-filter-btn" title="סינון מתקדם" aria-label="סינון מתקדם">
         ${icon('filter')}<span class="filter-badge" id="j-filter-badge" hidden></span>
       </button>
+      <button type="button" class="btn btn-icon j-starred-btn" id="j-starred-btn" title="הצגת מועדפים בלבד" aria-label="הצגת מועדפים בלבד">${icon('star')}</button>
       <button type="button" class="btn btn-icon" id="j-sort-btn" title="היפוך סדר כרונולוגי" aria-label="היפוך סדר כרונולוגי">${icon('sortArrows')}</button>
       <button type="button" class="btn btn-icon" id="j-expand-all" title="פתיחת כל הקבוצות" aria-label="פתיחת כל הקבוצות">${icon('chevronsDown')}</button>
       <button type="button" class="btn btn-icon" id="j-collapse-all" title="סגירת כל הקבוצות" aria-label="סגירת כל הקבוצות">${icon('chevronsUp')}</button>
@@ -88,6 +90,7 @@ export function init(el: HTMLElement): void {
     render();
   });
   qs(container, '#j-filter-btn').addEventListener('click', openFilterModal);
+  qs(container, '#j-starred-btn').addEventListener('click', () => { starredOnly = !starredOnly; render(); });
   qs(container, '#j-sort-btn').addEventListener('click', () => {
     sortDir = sortDir === 'desc' ? 'asc' : 'desc';
     render();
@@ -184,6 +187,7 @@ function matches(o: Observation): boolean {
   if (selectedProjects.size && !selectedProjects.has(o.project || '(ללא פרויקט)')) return false;
   if (selectedLocations.size && !selectedLocations.has(o.locationName || '(ללא מיקום)')) return false;
   if (selectedSpecies.size && !speciesNames(o).some((s) => selectedSpecies.has(s))) return false;
+  if (starredOnly && !o.starred) return false;
   const day = o.dateTime.slice(0, 10);
   if (filterFrom && day < filterFrom) return false;
   if (filterTo && day > filterTo) return false;
@@ -305,6 +309,7 @@ function render(): void {
   badge.hidden = !filterCount;
   badge.textContent = String(filterCount);
   qs(container, '#j-filter-btn').classList.toggle('active', !!filterCount);
+  qs(container, '#j-starred-btn').classList.toggle('active', starredOnly);
   qs<HTMLButtonElement>(container, '#j-expand-all').hidden = groupBy === 'none';
   qs<HTMLButtonElement>(container, '#j-collapse-all').hidden = groupBy === 'none';
   const sortBtn = qs(container, '#j-sort-btn');

@@ -12,13 +12,38 @@ import { entriesOf, entryImages } from './observation';
 import { icon } from './icons';
 import { renderTrackMap } from './track-map';
 import { fmtDistance } from './gps-track';
-import { getTrack, deleteTrack } from '../db/repository';
+import { getTrack, deleteTrack, toggleStarred } from '../db/repository';
 import type { Observation } from '../types';
 
 function mapsUrl(o: Observation): string | null {
   if (o.lat != null && o.lng != null) return `https://www.google.com/maps/search/?api=1&query=${o.lat},${o.lng}`;
   if (o.locationName) return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(o.locationName)}`;
   return null;
+}
+
+/** Shared by every place an observation is shown (journal rows/tiles, the
+ * full card, detail view) so favoriting works identically everywhere. */
+export function starButtonHtml(o: Observation): string {
+  const label = o.starred ? 'הסרה מהמועדפים' : 'הוספה למועדפים';
+  return `<button type="button" class="star-btn${o.starred ? ' starred' : ''}" data-star-btn data-obs-id="${o.id}" title="${label}" aria-label="${label}">${icon('star')}</button>`;
+}
+
+/** Wires the click handler for a starButtonHtml() button already in the DOM
+ * under `root` — stops the click from bubbling into the card's own "open
+ * detail" handler, since starring shouldn't navigate anywhere. */
+export function wireStarButton(root: HTMLElement): void {
+  const btn = root.querySelector<HTMLButtonElement>('[data-star-btn]');
+  if (!btn) return;
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    void (async () => {
+      const starred = await toggleStarred(btn.dataset.obsId!);
+      btn.classList.toggle('starred', starred);
+      const label = starred ? 'הסרה מהמועדפים' : 'הוספה למועדפים';
+      btn.title = label;
+      btn.setAttribute('aria-label', label);
+    })();
+  });
 }
 
 function headMetaHtml(o: Observation): string {
@@ -31,6 +56,7 @@ function headMetaHtml(o: Observation): string {
           : `<span>${icon('pin')} ${escapeHtml(o.locationName || '—')}</span>`}
         ${o.project ? `<span class="badge">${escapeHtml(o.project)}</span>` : ''}
       </div>
+      ${starButtonHtml(o)}
     </div>
     <div class="meta">
       <span>${icon('clock')} ${fmtDateTime(o.dateTime)}</span>
@@ -44,6 +70,7 @@ export function renderObservationSummary(o: Observation): HTMLElement {
   const card = document.createElement('article');
   card.className = 'obs-card obs-card-compact';
   card.innerHTML = headMetaHtml(o);
+  wireStarButton(card);
   return card;
 }
 
@@ -56,6 +83,7 @@ export function renderObservationCard(o: Observation): HTMLElement {
     <div class="track-preview" data-track-preview hidden></div>
     ${o.notes ? `<div class="notes">${renderMarkdown(o.notes)}</div>` : ''}
   `;
+  wireStarButton(card);
 
   void getTrack(o.id).then((track) => {
     if (!track || track.points.length < 2) return;
