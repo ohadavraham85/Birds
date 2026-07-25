@@ -1,7 +1,7 @@
 /* lib/tile-card.ts — compact observation tile for the "square"/"rectangular
  * tiles" view modes (journal + table). Shows a photo thumbnail when the
  * observation has one, otherwise a plain accent-colored placeholder, plus
- * the observation's main fields (location, time, project, coordinates) —
+ * the observation's main fields (location, time, tags, coordinates) —
  * not the species, which the list/detail views already cover. */
 
 import { fmtDateTime, fmtCoords } from './ui';
@@ -10,6 +10,7 @@ import { getImageObjectUrl } from './media';
 import { entriesOf, entryImages } from './observation';
 import { icon } from './icons';
 import { starButtonHtml, wireStarButton } from './obs-card';
+import { tagBadgesHtml, wireTagBadges } from './tag-badge';
 import type { Observation } from '../types';
 
 export function renderObservationTile(o: Observation, mode: 'square' | 'rect'): HTMLElement {
@@ -23,10 +24,11 @@ export function renderObservationTile(o: Observation, mode: 'square' | 'rect'): 
       <span class="obs-tile-headline">${escapeHtml(o.locationName || 'ללא מיקום')}</span>
       <span class="obs-tile-meta">${icon('clock')} ${fmtDateTime(o.dateTime)}</span>
       ${mode === 'rect' && coords ? `<span class="obs-tile-meta" dir="ltr">${icon('compass')} ${coords}</span>` : ''}
-      ${mode === 'rect' && o.project ? `<span class="badge obs-tile-badge">${escapeHtml(o.project)}</span>` : ''}
+      ${mode === 'rect' && o.tags?.length ? `<div class="tag-badge-row">${tagBadgesHtml(o.tags, 'obs-tile-badge')}</div>` : ''}
     </div>
   `;
   wireStarButton(tile);
+  wireTagBadges(tile);
 
   const media = tile.querySelector<HTMLElement>('.obs-tile-media')!;
   for (const entry of entriesOf(o)) {

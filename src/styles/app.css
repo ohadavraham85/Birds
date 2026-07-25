@@ -937,6 +937,8 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
   background: var(--tag-color); border: 0; cursor: pointer;
 }
 .tag-badge .icon { width: 13px; height: 13px; stroke: #fff; }
+.tag-badge-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.obs-tile-badge { align-self: flex-start; font-size: .68rem; padding: 1px 8px; margin-top: 0; }
 
 /* ---------- calendar view ---------- */
 

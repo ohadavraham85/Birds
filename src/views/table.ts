@@ -1,5 +1,5 @@
-/* views/table.ts — רשימת התצפיות: סינון (חיפוש + מין + פרויקט + טווח תאריכים),
- * מיון לפי עמודה, קיבוץ (פרויקט / מין), סימון מרובה, וייצוא Excel/PDF. */
+/* views/table.ts — רשימת התצפיות: סינון (חיפוש + מין + תגית + טווח תאריכים),
+ * מיון לפי עמודה, קיבוץ (תגית / מין), סימון מרובה, וייצוא Excel/PDF. */
 
 import {
   listObservations, deleteObservation, saveObservation, listSpecies, addSpecies,
@@ -13,6 +13,7 @@ import { openBulkEditModal, applyBulkEdit } from '../lib/bulk-edit';
 import { qs, input, select } from '../lib/dom';
 import { icon } from '../lib/icons';
 import { renderObservationTile } from '../lib/tile-card';
+import { tagBadgesHtml, wireTagBadges } from '../lib/tag-badge';
 import { viewModeToggleHtml, wireViewModeToggle, syncViewModeToggle, type ViewDisplayMode } from '../lib/view-mode';
 import { speciesNames, totalQuantity, hasSpecies, primarySpecies, speciesLabel } from '../lib/observation';
 import { navigate } from '../main';
@@ -23,9 +24,9 @@ let container: HTMLElement;
 let selected = new Set<string>();
 let observations: Observation[] = [];
 let filtered: Observation[] = [];
-const filters = { q: '', species: '', project: '', from: '', to: '' };
-let groupBy: 'none' | 'project' | 'species' = 'none';
-let sortBy: 'dateTime' | 'species' | 'quantity' | 'locationName' | 'project' = 'dateTime';
+const filters = { q: '', species: '', tag: '', from: '', to: '' };
+let groupBy: 'none' | 'tag' | 'species' = 'none';
+let sortBy: 'dateTime' | 'species' | 'quantity' | 'locationName' | 'tags' = 'dateTime';
 let sortDir: 'asc' | 'desc' = 'desc';
 let displayMode: ViewDisplayMode = 'list';
 
@@ -34,12 +35,12 @@ export function init(el: HTMLElement): void {
   container.innerHTML = `
     <h2>רשימת תצפיות</h2>
     <div class="filter-bar">
-      <input type="search" id="flt-q" class="filter-search" placeholder="חיפוש (מין, מיקום, פרויקט, הערות)...">
+      <input type="search" id="flt-q" class="filter-search" placeholder="חיפוש (מין, מיקום, תגית, הערות)...">
       <select id="flt-species" class="filter-sel"><option value="">כל המינים</option></select>
-      <select id="flt-project" class="filter-sel"><option value="">כל הפרויקטים</option></select>
+      <select id="flt-tag" class="filter-sel"><option value="">כל התגיות</option></select>
       <select id="flt-group" class="filter-sel">
         <option value="none">ללא קיבוץ</option>
-        <option value="project">קיבוץ לפי פרויקט</option>
+        <option value="tag">קיבוץ לפי תגית</option>
         <option value="species">קיבוץ לפי מין</option>
       </select>
       <label class="date-range">מ־<input type="date" id="flt-from" title="מתאריך"></label>
@@ -74,7 +75,7 @@ export function init(el: HTMLElement): void {
             <th class="sortable" data-sort="quantity">כמות<span class="sort-ind"></span></th>
             <th class="sortable" data-sort="locationName">מיקום<span class="sort-ind"></span></th>
             <th>קואורדינטות</th>
-            <th class="sortable" data-sort="project">פרויקט<span class="sort-ind"></span></th>
+            <th class="sortable" data-sort="tags">תגיות<span class="sort-ind"></span></th>
             <th>הערות</th>
             <th></th>
           </tr>
@@ -89,7 +90,7 @@ export function init(el: HTMLElement): void {
   wireViewModeToggle(container, 'tbl-view-mode', (mode) => { displayMode = mode; renderRows(); });
   input(container, '#flt-q').addEventListener('input', (e) => { filters.q = (e.target as HTMLInputElement).value; applyFilters(); });
   select(container, '#flt-species').addEventListener('change', (e) => { filters.species = (e.target as HTMLSelectElement).value; applyFilters(); });
-  select(container, '#flt-project').addEventListener('change', (e) => { filters.project = (e.target as HTMLSelectElement).value; applyFilters(); });
+  select(container, '#flt-tag').addEventListener('change', (e) => { filters.tag = (e.target as HTMLSelectElement).value; applyFilters(); });
   select(container, '#flt-group').addEventListener('change', (e) => { groupBy = (e.target as HTMLSelectElement).value as typeof groupBy; renderRows(); });
   input(container, '#flt-from').addEventListener('change', (e) => { filters.from = (e.target as HTMLInputElement).value; applyFilters(); });
   input(container, '#flt-to').addEventListener('change', (e) => { filters.to = (e.target as HTMLInputElement).value; applyFilters(); });
@@ -110,7 +111,7 @@ export function init(el: HTMLElement): void {
 
 export function setParams(params: ViewParams): void {
   if (params && 'species' in params) {
-    filters.q = ''; filters.project = ''; filters.from = ''; filters.to = '';
+    filters.q = ''; filters.tag = ''; filters.from = ''; filters.to = '';
     filters.species = params.species || '';
     if (container) {
       input(container, '#flt-q').value = '';
@@ -131,13 +132,13 @@ export async function activate(): Promise<void> {
 
 function populateFilterOptions(): void {
   const species = [...new Set(observations.flatMap(speciesNames))].sort((a, b) => a.localeCompare(b, 'he'));
-  const projects = [...new Set(observations.map((o) => o.project).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'he'));
+  const tags = [...new Set(observations.flatMap((o) => o.tags))].sort((a, b) => a.localeCompare(b, 'he'));
   const fill = (sel: HTMLSelectElement, items: string[], keep: string, allLabel: string): void => {
     sel.innerHTML = `<option value="">${allLabel}</option>`
       + items.map((v) => `<option value="${escapeHtml(v)}"${v === keep ? ' selected' : ''}>${escapeHtml(v)}</option>`).join('');
   };
   fill(select(container, '#flt-species'), species, filters.species, 'כל המינים');
-  fill(select(container, '#flt-project'), projects, filters.project, 'כל הפרויקטים');
+  fill(select(container, '#flt-tag'), tags, filters.tag, 'כל התגיות');
 }
 
 function localDay(iso: string): string {
@@ -151,14 +152,14 @@ function applyFilters(): void {
   const q = filters.q.trim().toLowerCase();
   filtered = observations.filter((o) => {
     if (filters.species && !hasSpecies(o, filters.species)) return false;
-    if (filters.project && (o.project || '') !== filters.project) return false;
+    if (filters.tag && !o.tags.includes(filters.tag)) return false;
     if (filters.from || filters.to) {
       const day = localDay(o.dateTime);
       if (filters.from && day && day < filters.from) return false;
       if (filters.to && day && day > filters.to) return false;
     }
     if (q) {
-      const hay = `${speciesNames(o).join(' ')} ${o.locationName || ''} ${o.project || ''} ${o.notes || ''}`.toLowerCase();
+      const hay = `${speciesNames(o).join(' ')} ${o.locationName || ''} ${o.tags.join(' ')} ${o.notes || ''}`.toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
@@ -176,6 +177,7 @@ function sortFiltered(): void {
     if (sortBy === 'quantity') r = totalQuantity(a) - totalQuantity(b);
     else if (sortBy === 'dateTime') r = byDate(a, b);
     else if (sortBy === 'species') r = primarySpecies(a).localeCompare(primarySpecies(b), 'he');
+    else if (sortBy === 'tags') r = (a.tags[0] || '').localeCompare(b.tags[0] || '', 'he');
     else r = String(a[sortBy] || '').localeCompare(String(b[sortBy] || ''), 'he');
     if (r === 0) r = byDate(a, b);
     return r * dir;
@@ -201,10 +203,10 @@ function updateSortIndicators(): void {
 }
 
 function clearFilters(): void {
-  filters.q = ''; filters.species = ''; filters.project = ''; filters.from = ''; filters.to = '';
+  filters.q = ''; filters.species = ''; filters.tag = ''; filters.from = ''; filters.to = '';
   input(container, '#flt-q').value = '';
   select(container, '#flt-species').value = '';
-  select(container, '#flt-project').value = '';
+  select(container, '#flt-tag').value = '';
   input(container, '#flt-from').value = '';
   input(container, '#flt-to').value = '';
   applyFilters();
@@ -221,7 +223,7 @@ function rowHtml(o: Observation): string {
       <td>${totalQuantity(o)}</td>
       <td>${escapeHtml(o.locationName || '')}</td>
       <td class="num">${fmtCoords(o.lat, o.lng)}</td>
-      <td>${o.project ? `<span class="badge">${escapeHtml(o.project)}</span>` : ''}</td>
+      <td>${o.tags.length ? tagBadgesHtml(o.tags) : ''}</td>
       <td class="notes-cell" title="${escapeHtml(o.notes || '')}">${escapeHtml((o.notes || '').replace(/\s+/g, ' '))}</td>
       <td class="row-actions">
         <button class="btn btn-sm act-edit" title="עריכה">${icon('edit')}</button>
@@ -231,7 +233,7 @@ function rowHtml(o: Observation): string {
 }
 
 function groupKeys(o: Observation): string[] {
-  if (groupBy === 'project') return [o.project || '(ללא פרויקט)'];
+  if (groupBy === 'tag') return o.tags.length ? o.tags : ['(ללא תגית)'];
   if (groupBy === 'species') return speciesNames(o).length ? speciesNames(o) : ['(ללא מין)'];
   return [];
 }
@@ -278,6 +280,7 @@ function renderRows(): void {
         </tr>` + rows.map(rowHtml).join('');
     }).join('');
   }
+  wireTagBadges(tbody);
   updateSortIndicators();
   updateToolbar();
 }
@@ -346,7 +349,7 @@ async function onBulkEdit(): Promise<void> {
   if (!result) return;
 
   const changeParts: string[] = [];
-  if ('project' in result) changeParts.push(`פרויקט → "${result.project}"`);
+  if ('tags' in result) changeParts.push(`תגיות → ${result.tags!.length ? result.tags!.join(', ') : '(ללא תגית)'}`);
   if ('location' in result) changeParts.push(`מיקום → "${result.location!.name}"`);
   if (!(await confirmDialog(`לעדכן ${selected.size} תצפיות: ${changeParts.join(', ')}? הפעולה אינה הפיכה אוטומטית.`, 'עדכון'))) return;
 

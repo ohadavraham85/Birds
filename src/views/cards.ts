@@ -20,7 +20,7 @@ import { navigate } from '../main';
 import type { Observation } from '../types';
 import type { ViewParams } from './view';
 
-type GroupMode = 'none' | 'day' | 'month' | 'location' | 'project';
+type GroupMode = 'none' | 'day' | 'month' | 'location' | 'project' | 'tag';
 type SortDir = 'desc' | 'asc';
 
 const LONG_PRESS_MS = 500;
@@ -34,6 +34,7 @@ let query = '';
 let displayMode: ViewDisplayMode = 'list';
 let collapsedGroups = new Set<string>();
 let selectedProjects = new Set<string>();
+let selectedTags = new Set<string>();
 let selectedLocations = new Set<string>();
 let selectedSpecies = new Set<string>();
 let starredOnly = false;
@@ -51,13 +52,13 @@ export function init(el: HTMLElement): void {
   container.innerHTML = `
     <h2>יומן תצפית</h2>
     <div class="filter-bar">
-      <input type="search" id="j-q" class="filter-search" placeholder="חיפוש (מין, מיקום, פרויקט, הערות)...">
+      <input type="search" id="j-q" class="filter-search" placeholder="חיפוש (מין, מיקום, תגית, הערות)...">
       <select id="j-group" class="filter-sel">
         <option value="none">ללא קיבוץ</option>
         <option value="day">קיבוץ לפי יום</option>
         <option value="month">קיבוץ לפי חודש</option>
         <option value="location">קיבוץ לפי מיקום</option>
-        <option value="project">קיבוץ לפי פרויקט</option>
+        <option value="tag">קיבוץ לפי תגית</option>
       </select>
       <button type="button" class="btn btn-icon j-filter-btn" id="j-filter-btn" title="סינון מתקדם" aria-label="סינון מתקדם">
         ${icon('filter')}<span class="filter-badge" id="j-filter-badge" hidden></span>
@@ -130,7 +131,7 @@ async function onBulkEditSelected(): Promise<void> {
   const result = await openBulkEditModal(selectedIds.size, observations);
   if (!result) return;
   const changeParts: string[] = [];
-  if ('project' in result) changeParts.push(`פרויקט → "${result.project}"`);
+  if ('tags' in result) changeParts.push(`תגיות → ${result.tags!.length ? result.tags!.join(', ') : '(ללא תגית)'}`);
   if ('location' in result) changeParts.push(`מיקום → "${result.location!.name}"`);
   if (!(await confirmDialog(`לעדכן ${selectedIds.size} תצפיות: ${changeParts.join(', ')}? הפעולה אינה הפיכה אוטומטית.`, 'עדכון'))) return;
   const updated = await applyBulkEdit([...selectedIds], result);
@@ -142,10 +143,11 @@ async function onBulkEditSelected(): Promise<void> {
 /** Drill-down from the stats tab / home screen: pre-applies exactly one of a
  * single-value filter, a date range, or a grouping mode, clearing the rest. */
 export function setParams(params: ViewParams): void {
-  if (params.filterSpecies || params.filterLocation || params.filterProject) {
+  if (params.filterSpecies || params.filterLocation || params.filterProject || params.filterTag) {
     selectedSpecies = params.filterSpecies ? new Set([params.filterSpecies]) : new Set();
     selectedLocations = params.filterLocation ? new Set([params.filterLocation]) : new Set();
     selectedProjects = params.filterProject ? new Set([params.filterProject]) : new Set();
+    selectedTags = params.filterTag ? new Set([params.filterTag]) : new Set();
     filterFrom = '';
     filterTo = '';
     query = '';
@@ -158,6 +160,7 @@ export function setParams(params: ViewParams): void {
     selectedSpecies = new Set();
     selectedLocations = new Set();
     selectedProjects = new Set();
+    selectedTags = new Set();
     query = '';
     groupBy = 'none';
     return;
@@ -167,6 +170,7 @@ export function setParams(params: ViewParams): void {
     selectedSpecies = new Set();
     selectedLocations = new Set();
     selectedProjects = new Set();
+    selectedTags = new Set();
     filterFrom = '';
     filterTo = '';
     query = '';
@@ -181,10 +185,14 @@ export async function activate(): Promise<void> {
 function matches(o: Observation): boolean {
   const q = query.trim().toLowerCase();
   if (q) {
-    const haystack = [o.locationName, o.project, o.notes, ...speciesNames(o)].join(' ').toLowerCase();
+    const haystack = [o.locationName, ...o.tags, o.notes, ...speciesNames(o)].join(' ').toLowerCase();
     if (!haystack.includes(q)) return false;
   }
   if (selectedProjects.size && !selectedProjects.has(o.project || '(ללא פרויקט)')) return false;
+  if (selectedTags.size) {
+    const bucket = o.tags.length ? o.tags : ['(ללא תגית)'];
+    if (!bucket.some((t) => selectedTags.has(t))) return false;
+  }
   if (selectedLocations.size && !selectedLocations.has(o.locationName || '(ללא מיקום)')) return false;
   if (selectedSpecies.size && !speciesNames(o).some((s) => selectedSpecies.has(s))) return false;
   if (starredOnly && !o.starred) return false;
@@ -197,17 +205,17 @@ function matches(o: Observation): boolean {
 /* ---------- advanced filter modal ---------- */
 
 function openFilterModal(): void {
-  const projects = [...new Set(observations.map((o) => o.project || '(ללא פרויקט)'))].sort((a, b) => a.localeCompare(b, 'he'));
+  const tags = [...new Set(observations.flatMap((o) => (o.tags.length ? o.tags : ['(ללא תגית)'])))].sort((a, b) => a.localeCompare(b, 'he'));
   const locations = [...new Set(observations.map((o) => o.locationName || '(ללא מיקום)'))].sort((a, b) => a.localeCompare(b, 'he'));
   const species = [...new Set(observations.flatMap(speciesNames))].sort((a, b) => a.localeCompare(b, 'he'));
 
-  const localSets: Record<'project' | 'location' | 'species', Set<string>> = {
-    project: new Set(selectedProjects),
+  const localSets: Record<'tag' | 'location' | 'species', Set<string>> = {
+    tag: new Set(selectedTags),
     location: new Set(selectedLocations),
     species: new Set(selectedSpecies),
   };
 
-  const section = (title: string, group: 'project' | 'location' | 'species', values: string[]): string => `
+  const section = (title: string, group: 'tag' | 'location' | 'species', values: string[]): string => `
     <div class="filter-modal-section">
       <h4>${escapeHtml(title)}</h4>
       <div class="filter-modal-checks">
@@ -223,7 +231,7 @@ function openFilterModal(): void {
   wrap.className = 'filter-modal';
   wrap.innerHTML = `
     <h3>סינון מתקדם</h3>
-    ${section('פרויקט', 'project', projects)}
+    ${section('תגיות', 'tag', tags)}
     ${section('מיקום', 'location', locations)}
     ${section('מין', 'species', species)}
     <div class="modal-actions">
@@ -235,13 +243,13 @@ function openFilterModal(): void {
 
   wrap.querySelectorAll<HTMLInputElement>('input[type=checkbox]').forEach((cb) => {
     cb.addEventListener('change', () => {
-      const group = cb.dataset.group as 'project' | 'location' | 'species';
+      const group = cb.dataset.group as 'tag' | 'location' | 'species';
       if (cb.checked) localSets[group].add(cb.value);
       else localSets[group].delete(cb.value);
     });
   });
   wrap.querySelector('#filter-apply')!.addEventListener('click', () => {
-    selectedProjects = localSets.project;
+    selectedTags = localSets.tag;
     selectedLocations = localSets.location;
     selectedSpecies = localSets.species;
     close();
@@ -249,6 +257,7 @@ function openFilterModal(): void {
   });
   wrap.querySelector('#filter-clear')!.addEventListener('click', () => {
     selectedProjects = new Set();
+    selectedTags = new Set();
     selectedLocations = new Set();
     selectedSpecies = new Set();
     close();
@@ -267,36 +276,44 @@ function monthKey(iso: string): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-function groupOf(o: Observation): { key: string; label: string } {
+/** Most grouping modes place an observation in exactly one group; 'tag' is
+ * multi-valued, so an observation with several tags appears once under
+ * each — hence this always returns an array. */
+function groupKeysOf(o: Observation): { key: string; label: string }[] {
   switch (groupBy) {
     case 'day': {
       const key = dayKey(o.dateTime);
       const label = new Date(o.dateTime).toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-      return { key, label };
+      return [{ key, label }];
     }
     case 'month': {
       const key = monthKey(o.dateTime);
       const label = new Date(o.dateTime).toLocaleDateString('he-IL', { month: 'long', year: 'numeric' });
-      return { key, label };
+      return [{ key, label }];
     }
     case 'location': {
       const label = o.locationName || '(ללא מיקום)';
-      return { key: label, label };
+      return [{ key: label, label }];
     }
     case 'project': {
       const label = o.project || '(ללא פרויקט)';
-      return { key: label, label };
+      return [{ key: label, label }];
+    }
+    case 'tag': {
+      const tags = o.tags.length ? o.tags : ['(ללא תגית)'];
+      return tags.map((t) => ({ key: t, label: t }));
     }
     default:
-      return { key: '', label: '' };
+      return [{ key: '', label: '' }];
   }
 }
 
 function groupsOf(list: Observation[]): Map<string, { label: string; items: Observation[] }> {
   const groups = new Map<string, { label: string; items: Observation[] }>();
   for (const o of list) {
-    const { key, label } = groupOf(o);
-    (groups.get(key) ?? groups.set(key, { label, items: [] }).get(key)!).items.push(o);
+    for (const { key, label } of groupKeysOf(o)) {
+      (groups.get(key) ?? groups.set(key, { label, items: [] }).get(key)!).items.push(o);
+    }
   }
   return groups;
 }
@@ -304,7 +321,7 @@ function groupsOf(list: Observation[]): Map<string, { label: string; items: Obse
 function render(): void {
   input(container, '#j-q').value = query;
   select(container, '#j-group').value = groupBy;
-  const filterCount = selectedProjects.size + selectedLocations.size + selectedSpecies.size;
+  const filterCount = selectedProjects.size + selectedTags.size + selectedLocations.size + selectedSpecies.size;
   const badge = qs(container, '#j-filter-badge');
   badge.hidden = !filterCount;
   badge.textContent = String(filterCount);
