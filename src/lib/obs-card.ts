@@ -2,7 +2,7 @@
  * feed (views/cards.ts) and the single-observation detail view
  * (views/detail.ts): place (linked to maps), meta, numbered species list
  * (each with its own note + photos), and general notes. Also exports a
- * compact summary (place/time/project/coordinates only, no species or
+ * compact summary (place/time/tags/coordinates only, no species or
  * notes) for the journal's "list" display mode. */
 
 import { fmtDateTime, fmtCoords, showImageModal, confirmDialog, toast } from './ui';
@@ -13,6 +13,7 @@ import { icon } from './icons';
 import { renderTrackMap } from './track-map';
 import { fmtDistance } from './gps-track';
 import { getTrack, deleteTrack, toggleStarred } from '../db/repository';
+import { tagBadgesHtml, wireTagBadges } from './tag-badge';
 import type { Observation } from '../types';
 
 function mapsUrl(o: Observation): string | null {
@@ -54,23 +55,24 @@ function headMetaHtml(o: Observation): string {
         ${url
           ? `<a href="${url}" target="_blank" rel="noopener" class="place-link">${icon('pin')} ${escapeHtml(o.locationName || 'מיקום')}</a>`
           : `<span>${icon('pin')} ${escapeHtml(o.locationName || '—')}</span>`}
-        ${o.project ? `<span class="badge">${escapeHtml(o.project)}</span>` : ''}
       </div>
       ${starButtonHtml(o)}
     </div>
     <div class="meta">
       <span>${icon('clock')} ${fmtDateTime(o.dateTime)}</span>
       ${fmtCoords(o.lat, o.lng) ? `<span dir="ltr">${icon('compass')} ${fmtCoords(o.lat, o.lng)}</span>` : ''}
-    </div>`;
+    </div>
+    ${o.tags?.length ? `<div class="tag-badge-row">${tagBadgesHtml(o.tags)}</div>` : ''}`;
 }
 
-/** Compact row: location, time, project and coordinates only — no species
+/** Compact row: location, time, tags and coordinates only — no species
  * or notes. Used by the journal's "list" display mode. */
 export function renderObservationSummary(o: Observation): HTMLElement {
   const card = document.createElement('article');
   card.className = 'obs-card obs-card-compact';
   card.innerHTML = headMetaHtml(o);
   wireStarButton(card);
+  wireTagBadges(card);
   return card;
 }
 
@@ -84,6 +86,7 @@ export function renderObservationCard(o: Observation): HTMLElement {
     ${o.notes ? `<div class="notes">${renderMarkdown(o.notes)}</div>` : ''}
   `;
   wireStarButton(card);
+  wireTagBadges(card);
 
   void getTrack(o.id).then((track) => {
     if (!track || track.points.length < 2) return;

@@ -13,6 +13,8 @@ export interface ViewParams {
   filterSpecies?: string;
   filterLocation?: string;
   filterProject?: string;
+  /** Clicking a tag badge anywhere jumps here, filtering to that one tag. */
+  filterTag?: string;
   /** Drill-down from the stats tab: opens the calendar in year view for this year. */
   year?: number;
   /** Drill-down from the home screen's stats tiles: pre-applies a date-range
@@ -21,7 +23,7 @@ export interface ViewParams {
   filterFrom?: string;
   filterTo?: string;
   /** Drill-down from the home screen's "פרויקטים" tile: opens the journal grouped by project. */
-  groupBy?: 'day' | 'month' | 'location' | 'project';
+  groupBy?: 'day' | 'month' | 'location' | 'project' | 'tag';
   /** From the home screen's draft-recovery banner: restore an auto-saved
    * in-progress new observation (fields + GPS track captured so far). */
   resumeDraft?: boolean;
