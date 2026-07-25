@@ -339,6 +339,9 @@ body {
 .track-toggle-row { margin-bottom: 14px; }
 .track-toggle-row[hidden] { display: none; }
 
+.voice-dictate-btn { margin-bottom: 10px; }
+.voice-dictate-btn.recording { background: var(--danger); border-color: var(--danger); color: #fff; }
+
 .obs-card .track-preview { margin-top: 10px; }
 .obs-card .track-preview[hidden] { display: none; }
 .obs-card .track-preview-label { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: .8rem; color: var(--ink-soft); margin-bottom: 4px; }

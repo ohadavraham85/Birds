@@ -13,6 +13,8 @@ import { pickLocation } from '../lib/location-picker';
 import { wireCombo } from '../lib/combo';
 import { entriesOf, entryImages, speciesNames } from '../lib/observation';
 import { startTracking, stopTracking, isTracking, elapsedMs, snapshot, seedFromDraft, distanceMetersSoFar, fmtDistance } from '../lib/gps-track';
+import { isVoiceDictationSupported, startDictation, stopDictation, isDictating } from '../lib/voice-dictation';
+import { parseObservationVoice } from '../lib/voice-parse';
 import { renderTrackPreview } from '../lib/track-preview';
 import { saveDraft, loadDraft, clearDraft, type ObservationDraft } from '../lib/draft';
 import { qs, input } from '../lib/dom';
@@ -55,6 +57,11 @@ export function init(el: HTMLElement): void {
     <div class="form-head">
       <button type="button" class="btn btn-sm" id="back-btn">→ חזרה</button>
       <h2 id="form-title">תצפית חדשה</h2>
+    </div>
+    <button type="button" class="btn btn-block voice-dictate-btn" id="voice-dictate-btn">${icon('mic')} הכתבת תצפית בקול</button>
+    <div class="track-status voice-status" id="voice-status" hidden>
+      <span class="track-dot"></span>
+      <span id="voice-interim">מקשיב...</span>
     </div>
     <label class="notif-toggle-row track-toggle-row" id="track-toggle-row" hidden>
       <span>הקלטת מסלול GPS לתצפית זו</span>
@@ -119,7 +126,8 @@ export function init(el: HTMLElement): void {
   input(container, '#f-location').addEventListener('input', (e) => applyLocationName((e.target as HTMLInputElement).value));
   qs(container, '#pick-map-btn').addEventListener('click', () => void openPicker());
   qs(container, '#add-species-row').addEventListener('click', () => addSpeciesRow({ species: '', quantity: 1 }, true));
-  qs(container, '#back-btn').addEventListener('click', () => { stopAndDiscardTrack(); goBack(); });
+  qs(container, '#back-btn').addEventListener('click', () => { stopAndDiscardTrack(); stopDictation(); goBack(); });
+  qs(container, '#voice-dictate-btn').addEventListener('click', () => onVoiceDictateClick());
   qs<HTMLInputElement>(container, '#track-toggle').addEventListener('change', (e) => {
     if ((e.target as HTMLInputElement).checked) beginTrack();
     else stashTrack();
@@ -133,6 +141,70 @@ export function init(el: HTMLElement): void {
  * observation would keep the GPS watch running forever in the background. */
 export function deactivate(): void {
   stopAndDiscardTrack();
+  stopDictation();
+}
+
+/* ---------- voice dictation (speak a whole observation instead of typing) ---------- */
+
+function onVoiceDictateClick(): void {
+  if (isDictating()) { stopDictation(); return; }
+  if (!isVoiceDictationSupported()) {
+    toast('הדפדפן הזה לא תומך בהכתבה קולית — נסו דפדפן Chrome, ורק כשיש חיבור אינטרנט (ההכתבה אינה עובדת אופליין)', true, 6000);
+    return;
+  }
+  const btn = qs<HTMLButtonElement>(container, '#voice-dictate-btn');
+  const status = qs(container, '#voice-status');
+  const interim = qs(container, '#voice-interim');
+  btn.classList.add('recording');
+  btn.innerHTML = `${icon('mic')} הפסקת הקלטה`;
+  status.hidden = false;
+  interim.textContent = 'מקשיב...';
+
+  startDictation({
+    onInterim: (text) => { interim.textContent = text; },
+    onFinal: (text) => {
+      interim.textContent = text;
+      applyVoiceResult(parseObservationVoice(text, speciesCache, locationSuggestions));
+    },
+    onError: (msg) => toast(msg, true, 5000),
+    onEnd: () => {
+      btn.classList.remove('recording');
+      btn.innerHTML = `${icon('mic')} הכתבת תצפית בקול`;
+      status.hidden = true;
+    },
+  });
+}
+
+/** Fills in whatever the dictated sentence could confidently be matched to
+ * (a known species name, a number, a known location) and always keeps the
+ * full transcript in the notes — so an unrecognized species/location name
+ * is never silently dropped, just left as free text for manual cleanup. */
+function applyVoiceResult(result: ReturnType<typeof parseObservationVoice>): void {
+  if (result.species) {
+    const rows = Array.from(container.querySelectorAll<HTMLElement>('#species-rows .sp-entry'));
+    const emptyRow = rows.find((r) => !r.querySelector<HTMLInputElement>('.sp-input')!.value.trim());
+    if (emptyRow) {
+      emptyRow.querySelector<HTMLInputElement>('.sp-input')!.value = result.species;
+      emptyRow.querySelector<HTMLInputElement>('.sp-qty')!.value = String(result.quantity);
+    } else {
+      addSpeciesRow({ species: result.species, quantity: result.quantity }, false);
+    }
+  }
+  if (result.locationName) {
+    input(container, '#f-location').value = result.locationName;
+    applyLocationName(result.locationName);
+  }
+  const notesEl = qs<HTMLTextAreaElement>(container, '#f-notes');
+  notesEl.value = notesEl.value.trim() ? `${notesEl.value}\n${result.notes}` : result.notes;
+
+  const parts: string[] = [];
+  if (result.species) parts.push(`${result.quantity} × ${result.species}`);
+  if (result.locationName) parts.push(`מיקום: ${result.locationName}`);
+  toast(
+    parts.length ? `זוהה מההכתבה: ${parts.join(' · ')} — בדקו לפני שמירה` : 'לא זוהה מין/מיקום ידוע בהכתבה — הטקסט נוסף להערות',
+    false,
+    5000,
+  );
 }
 
 /* ---------- GPS track recording (new observations only; opt-in via the toggle) ---------- */
