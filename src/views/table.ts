@@ -430,6 +430,7 @@ async function onImportCsv(e: Event): Promise<void> {
     if (map.coordinates != null) ({ lat, lng } = parseCoordinates(val(r, 'coordinates')));
     if (map.lat != null && val(r, 'lat') !== '') lat = parseFloat(val(r, 'lat'));
     if (map.lng != null && val(r, 'lng') !== '') lng = parseFloat(val(r, 'lng'));
+    const tags = val(r, 'tags').split(',').map((t) => t.trim()).filter(Boolean);
 
     await saveObservation({
       id: crypto.randomUUID(),
@@ -437,8 +438,8 @@ async function onImportCsv(e: Event): Promise<void> {
       locationName: val(r, 'locationName'),
       lat: Number.isFinite(lat) ? lat : null,
       lng: Number.isFinite(lng) ? lng : null,
-      project: val(r, 'project'),
-      tags: val(r, 'project') ? [val(r, 'project')] : [],
+      project: tags[0] || '',
+      tags,
       entries: [{ species, quantity: Math.max(1, parseInt(val(r, 'quantity'), 10) || 1) }],
       images: [],
       notes: map.notes != null ? String(r[map.notes] ?? '') : '',

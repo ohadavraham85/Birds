@@ -62,7 +62,7 @@ async function obsBlock(o: Observation): Promise<string> {
         <div><b>תאריך ושעה:</b> ${fmtDateTime(o.dateTime)}</div>
         <div><b>מיקום:</b> ${escapeHtml(o.locationName || '—')}</div>
         <div><b>קואורדינטות:</b> <span dir="ltr">${fmtCoords(o.lat, o.lng) || '—'}</span></div>
-        <div><b>פרויקט:</b> ${escapeHtml(o.project || '—')}</div>
+        <div><b>תגיות:</b> ${o.tags.length ? o.tags.map(escapeHtml).join(', ') : '—'}</div>
       </div>
       <ol class="rpt-species">${entriesHtml.join('')}</ol>
       ${o.notes ? `<div class="rpt-notes">${renderMarkdown(o.notes)}</div>` : ''}
@@ -72,7 +72,7 @@ async function obsBlock(o: Observation): Promise<string> {
 async function buildReportElement(observations: Observation[]): Promise<HTMLElement> {
   const el = document.createElement('div');
   el.className = 'pdf-report';
-  const projects = [...new Set(observations.map((o) => o.project).filter(Boolean))];
+  const tags = [...new Set(observations.flatMap((o) => o.tags))];
   const blocks = (await Promise.all(observations.map(obsBlock))).join('');
   el.innerHTML = `
     ${contactBlock()}
@@ -81,7 +81,7 @@ async function buildReportElement(observations: Observation[]): Promise<HTMLElem
       <div class="rpt-sub">
         הופק בתאריך ${fmtDateTime(new Date().toISOString())} ·
         ${observations.length} תצפיות
-        ${projects.length ? ' · פרויקטים: ' + projects.map(escapeHtml).join(', ') : ''}
+        ${tags.length ? ' · תגיות: ' + tags.map(escapeHtml).join(', ') : ''}
       </div>
     </div>
     ${blocks}
