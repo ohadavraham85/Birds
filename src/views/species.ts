@@ -15,7 +15,7 @@ import { navigate } from '../main';
 import type { ViewParams } from './view';
 import type { SpeciesDetail, ObservationImage } from '../types';
 
-type SortMode = 'family' | 'alpha' | 'recent' | 'seen' | 'project';
+type SortMode = 'family' | 'alpha' | 'recent' | 'seen' | 'tag';
 type SortDir = 'asc' | 'desc';
 
 let container: HTMLElement;
@@ -24,13 +24,13 @@ let counts: Record<string, number> = {};
 let descriptions: Record<string, string> = {};
 let imagesByName: Record<string, { img: ObservationImage; obsId: string }[]> = {};
 let lastObserved: Record<string, string> = {};
-/** Every project name a species has been logged under, across all its observations — a species can span several projects, unlike location/family which are single-valued. */
-let projectsByName: Record<string, Set<string>> = {};
+/** Every tag a species has been logged under, across all its observations — a species can span several tags, unlike location/family which are single-valued. */
+let tagsByName: Record<string, Set<string>> = {};
 let query = '';
 let sortMode: SortMode = 'family';
 /** 'asc' reproduces each mode's original default ordering; 'desc' reverses it — see the toggle button's dynamic tooltip for what's actually shown. */
 let sortDir: SortDir = 'asc';
-let selectedProjects = new Set<string>();
+let selectedTags = new Set<string>();
 let displayMode: ViewDisplayMode = 'list';
 let openKey: string | null = null;
 let collapsedGroups = new Set<string>();
@@ -49,11 +49,11 @@ export function init(el: HTMLElement): void {
       <select id="sp-group" class="filter-sel">
         <option value="family">קיבוץ לפי משפחה</option>
         <option value="seen">נצפה / לא נצפה</option>
-        <option value="project">קיבוץ לפי פרויקט</option>
+        <option value="tag">קיבוץ לפי תגית</option>
         <option value="alpha">לפי א״ב</option>
         <option value="recent">לפי תצפית אחרונה</option>
       </select>
-      <button type="button" class="btn btn-icon sp-filter-btn" id="sp-filter-btn" title="סינון לפי פרויקט" aria-label="סינון לפי פרויקט">
+      <button type="button" class="btn btn-icon sp-filter-btn" id="sp-filter-btn" title="סינון לפי תגית" aria-label="סינון לפי תגית">
         ${icon('filter')}<span class="filter-badge" id="sp-filter-badge" hidden></span>
       </button>
       <button type="button" class="btn btn-icon" id="sp-sort-btn" title="היפוך סדר" aria-label="היפוך סדר">${icon('sortArrows')}</button>
@@ -104,13 +104,13 @@ export async function activate(): Promise<void> {
   counts = {};
   imagesByName = {};
   lastObserved = {};
-  projectsByName = {};
+  tagsByName = {};
   for (const o of obs) {
-    const project = o.project || '(ללא פרויקט)';
+    const tags = o.tags.length ? o.tags : ['(ללא תגית)'];
     for (const name of speciesNames(o)) {
       counts[name] = (counts[name] || 0) + 1;
       if (!lastObserved[name] || o.dateTime > lastObserved[name]!) lastObserved[name] = o.dateTime;
-      (projectsByName[name] ??= new Set()).add(project);
+      for (const tag of tags) (tagsByName[name] ??= new Set()).add(tag);
     }
     for (const entry of entriesOf(o)) {
       const imgs = entryImages(entry);
@@ -141,9 +141,9 @@ function matches(name: string): boolean {
     const d = detailsFor(name);
     if (!`${d.he} ${d.en} ${d.sci} ${d.family}`.toLowerCase().includes(q)) return false;
   }
-  if (selectedProjects.size) {
-    const projects = projectsByName[name] ?? new Set(['(ללא פרויקט)']);
-    if (![...projects].some((p) => selectedProjects.has(p))) return false;
+  if (selectedTags.size) {
+    const tags = tagsByName[name] ?? new Set(['(ללא תגית)']);
+    if (![...tags].some((t) => selectedTags.has(t))) return false;
   }
   return true;
 }
@@ -158,23 +158,23 @@ function itemsHtml(list: string[]): string {
   return `<div class="obs-tile-grid obs-tile-grid-${displayMode}">${list.map((n) => tileHtml(n, displayMode)).join('')}</div>`;
 }
 
-/* ---------- advanced filter modal (by project) ---------- */
+/* ---------- advanced filter modal (by tag) ---------- */
 
 function openFilterModal(): void {
-  const projects = [...new Set(Object.values(projectsByName).flatMap((s) => [...s]))].sort((a, b) => a.localeCompare(b, 'he'));
-  const localSet = new Set(selectedProjects);
+  const tags = [...new Set(Object.values(tagsByName).flatMap((s) => [...s]))].sort((a, b) => a.localeCompare(b, 'he'));
+  const localSet = new Set(selectedTags);
 
   const wrap = document.createElement('div');
   wrap.className = 'filter-modal';
   wrap.innerHTML = `
-    <h3>סינון לפי פרויקט</h3>
+    <h3>סינון לפי תגית</h3>
     <div class="filter-modal-section">
       <div class="filter-modal-checks">
-        ${projects.map((p) => `
+        ${tags.map((t) => `
           <label class="filter-modal-check">
-            <input type="checkbox" value="${escapeHtml(p)}" ${localSet.has(p) ? 'checked' : ''}>
-            <span>${escapeHtml(p)}</span>
-          </label>`).join('') || '<p class="hint">אין פרויקטים עדיין</p>'}
+            <input type="checkbox" value="${escapeHtml(t)}" ${localSet.has(t) ? 'checked' : ''}>
+            <span>${escapeHtml(t)}</span>
+          </label>`).join('') || '<p class="hint">אין תגיות עדיין</p>'}
       </div>
     </div>
     <div class="modal-actions">
@@ -190,12 +190,12 @@ function openFilterModal(): void {
     });
   });
   wrap.querySelector('#filter-apply')!.addEventListener('click', () => {
-    selectedProjects = localSet;
+    selectedTags = localSet;
     close();
     render();
   });
   wrap.querySelector('#filter-clear')!.addEventListener('click', () => {
-    selectedProjects = new Set();
+    selectedTags = new Set();
     close();
     render();
   });
@@ -203,7 +203,7 @@ function openFilterModal(): void {
 
 function render(): void {
   syncViewModeToggle(container, 'sp-view-mode', displayMode);
-  const filterCount = selectedProjects.size;
+  const filterCount = selectedTags.size;
   const badge = qs(container, '#sp-filter-badge');
   badge.hidden = !filterCount;
   badge.textContent = String(filterCount);
@@ -220,12 +220,12 @@ function render(): void {
   const el = qs(container, '#sp-list');
   if (!list.length) { el.innerHTML = '<p style="color:var(--ink-soft)">אין מין תואם.</p>'; return; }
 
-  if (sortMode === 'family' || sortMode === 'seen' || sortMode === 'project') {
+  if (sortMode === 'family' || sortMode === 'seen' || sortMode === 'tag') {
     const groups = new Map<string, string[]>();
     for (const n of list) {
       const keys = sortMode === 'family' ? [detailsFor(n).family || '(ללא משפחה)']
         : sortMode === 'seen' ? [counts[n] ? 'נצפה' : 'לא נצפה']
-        : [...(projectsByName[n] ?? new Set(['(ללא פרויקט)']))];
+        : [...(tagsByName[n] ?? new Set(['(ללא תגית)']))];
       for (const key of keys) (groups.get(key) ?? groups.set(key, []).get(key)!).push(n);
     }
     const keys = sortMode === 'seen'
