@@ -12,7 +12,6 @@ export interface ViewParams {
   /** Drill-down from the stats tab: pre-applies a single-value advanced filter in the journal. */
   filterSpecies?: string;
   filterLocation?: string;
-  filterProject?: string;
   /** Clicking a tag badge anywhere jumps here, filtering to that one tag. */
   filterTag?: string;
   /** Drill-down from the stats tab: opens the calendar in year view for this year. */
@@ -22,8 +21,8 @@ export interface ViewParams {
    * selected there ('' means no bound on that side). */
   filterFrom?: string;
   filterTo?: string;
-  /** Drill-down from the home screen's "פרויקטים" tile: opens the journal grouped by project. */
-  groupBy?: 'day' | 'month' | 'location' | 'project' | 'tag';
+  /** Drill-down from the home screen's "תגיות" tile: opens the journal grouped by tag. */
+  groupBy?: 'day' | 'month' | 'location' | 'tag';
   /** From the home screen's draft-recovery banner: restore an auto-saved
    * in-progress new observation (fields + GPS track captured so far). */
   resumeDraft?: boolean;

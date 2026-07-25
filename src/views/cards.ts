@@ -1,7 +1,7 @@
 /* views/cards.ts — מסך יומן (ראשי): כרטיס לכל תצפית עם מיקום לחיץ (מפות),
  * רשימת מינים ממוספרת, הערה ותמונות לכל מין. לחיצה על כרטיס פותחת מסך צפייה
  * (View Mode) בלבד — העריכה עוברת דרך כפתור ייעודי שם. כולל קיבוץ/מיון לפי
- * תאריך, מיקום או פרויקט, וכפתור FAB להוספת תצפית. */
+ * תאריך, מיקום או תגית, וכפתור FAB להוספת תצפית. */
 
 import { listObservations, deleteObservation } from '../db/repository';
 import { renderObservationSummary } from '../lib/obs-card';
@@ -20,7 +20,7 @@ import { navigate } from '../main';
 import type { Observation } from '../types';
 import type { ViewParams } from './view';
 
-type GroupMode = 'none' | 'day' | 'month' | 'location' | 'project' | 'tag';
+type GroupMode = 'none' | 'day' | 'month' | 'location' | 'tag';
 type SortDir = 'desc' | 'asc';
 
 const LONG_PRESS_MS = 500;
@@ -33,7 +33,6 @@ let sortDir: SortDir = 'desc';
 let query = '';
 let displayMode: ViewDisplayMode = 'list';
 let collapsedGroups = new Set<string>();
-let selectedProjects = new Set<string>();
 let selectedTags = new Set<string>();
 let selectedLocations = new Set<string>();
 let selectedSpecies = new Set<string>();
@@ -143,10 +142,9 @@ async function onBulkEditSelected(): Promise<void> {
 /** Drill-down from the stats tab / home screen: pre-applies exactly one of a
  * single-value filter, a date range, or a grouping mode, clearing the rest. */
 export function setParams(params: ViewParams): void {
-  if (params.filterSpecies || params.filterLocation || params.filterProject || params.filterTag) {
+  if (params.filterSpecies || params.filterLocation || params.filterTag) {
     selectedSpecies = params.filterSpecies ? new Set([params.filterSpecies]) : new Set();
     selectedLocations = params.filterLocation ? new Set([params.filterLocation]) : new Set();
-    selectedProjects = params.filterProject ? new Set([params.filterProject]) : new Set();
     selectedTags = params.filterTag ? new Set([params.filterTag]) : new Set();
     filterFrom = '';
     filterTo = '';
@@ -159,7 +157,6 @@ export function setParams(params: ViewParams): void {
     filterTo = params.filterTo || '';
     selectedSpecies = new Set();
     selectedLocations = new Set();
-    selectedProjects = new Set();
     selectedTags = new Set();
     query = '';
     groupBy = 'none';
@@ -169,7 +166,6 @@ export function setParams(params: ViewParams): void {
     groupBy = params.groupBy;
     selectedSpecies = new Set();
     selectedLocations = new Set();
-    selectedProjects = new Set();
     selectedTags = new Set();
     filterFrom = '';
     filterTo = '';
@@ -188,7 +184,6 @@ function matches(o: Observation): boolean {
     const haystack = [o.locationName, ...o.tags, o.notes, ...speciesNames(o)].join(' ').toLowerCase();
     if (!haystack.includes(q)) return false;
   }
-  if (selectedProjects.size && !selectedProjects.has(o.project || '(ללא פרויקט)')) return false;
   if (selectedTags.size) {
     const bucket = o.tags.length ? o.tags : ['(ללא תגית)'];
     if (!bucket.some((t) => selectedTags.has(t))) return false;
@@ -256,7 +251,6 @@ function openFilterModal(): void {
     render();
   });
   wrap.querySelector('#filter-clear')!.addEventListener('click', () => {
-    selectedProjects = new Set();
     selectedTags = new Set();
     selectedLocations = new Set();
     selectedSpecies = new Set();
@@ -295,10 +289,6 @@ function groupKeysOf(o: Observation): { key: string; label: string }[] {
       const label = o.locationName || '(ללא מיקום)';
       return [{ key: label, label }];
     }
-    case 'project': {
-      const label = o.project || '(ללא פרויקט)';
-      return [{ key: label, label }];
-    }
     case 'tag': {
       const tags = o.tags.length ? o.tags : ['(ללא תגית)'];
       return tags.map((t) => ({ key: t, label: t }));
@@ -321,7 +311,7 @@ function groupsOf(list: Observation[]): Map<string, { label: string; items: Obse
 function render(): void {
   input(container, '#j-q').value = query;
   select(container, '#j-group').value = groupBy;
-  const filterCount = selectedProjects.size + selectedTags.size + selectedLocations.size + selectedSpecies.size;
+  const filterCount = selectedTags.size + selectedLocations.size + selectedSpecies.size;
   const badge = qs(container, '#j-filter-badge');
   badge.hidden = !filterCount;
   badge.textContent = String(filterCount);
