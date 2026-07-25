@@ -25,6 +25,8 @@ export interface Observation {
   lat: number | null;
   lng: number | null;
   project: string;
+  /** Marked by the user as a favorite, for quick filtering in the journal. */
+  starred?: boolean;
   /** One or more species seen in this observation, each with a count. */
   entries: SpeciesEntry[];
   /** @deprecated observation-level images — migrated into entries[0].images. */

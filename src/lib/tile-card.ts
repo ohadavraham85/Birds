@@ -9,6 +9,7 @@ import { escapeHtml } from './markdown';
 import { getImageObjectUrl } from './media';
 import { entriesOf, entryImages } from './observation';
 import { icon } from './icons';
+import { starButtonHtml, wireStarButton } from './obs-card';
 import type { Observation } from '../types';
 
 export function renderObservationTile(o: Observation, mode: 'square' | 'rect'): HTMLElement {
@@ -17,6 +18,7 @@ export function renderObservationTile(o: Observation, mode: 'square' | 'rect'): 
   const coords = fmtCoords(o.lat, o.lng);
   tile.innerHTML = `
     <div class="obs-tile-media">${icon('bird', 'obs-tile-fallback-icon')}</div>
+    ${starButtonHtml(o)}
     <div class="obs-tile-info">
       <span class="obs-tile-headline">${escapeHtml(o.locationName || 'ללא מיקום')}</span>
       <span class="obs-tile-meta">${icon('clock')} ${fmtDateTime(o.dateTime)}</span>
@@ -24,6 +26,7 @@ export function renderObservationTile(o: Observation, mode: 'square' | 'rect'): 
       ${mode === 'rect' && o.project ? `<span class="badge obs-tile-badge">${escapeHtml(o.project)}</span>` : ''}
     </div>
   `;
+  wireStarButton(tile);
 
   const media = tile.querySelector<HTMLElement>('.obs-tile-media')!;
   for (const entry of entriesOf(o)) {
