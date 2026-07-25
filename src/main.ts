@@ -232,11 +232,16 @@ async function init(): Promise<void> {
   await initFirebaseSyncFromSettings();
   void checkAndNotify(await listObservations());
 
-  // when a sync pulls remote changes, refresh whatever screen is open
+  // When a sync pulls remote changes (or any local write elsewhere fires
+  // onDataChanged), refresh whatever screen is open — except the form: unlike
+  // every other view, activate() there calls resetForm()/loadForEdit(), which
+  // discards whatever the user is mid-composing. A stray mutation while the
+  // form is open (e.g. quick-adding a tag from inside the form itself) must
+  // not wipe out an in-progress observation just to refresh its suggestion lists.
   let refreshTimer: ReturnType<typeof setTimeout> | undefined;
   onDataChanged(() => {
     clearTimeout(refreshTimer);
-    refreshTimer = setTimeout(() => { if (currentView) void VIEWS[currentView]!.activate(); }, 150);
+    refreshTimer = setTimeout(() => { if (currentView && currentView !== 'form') void VIEWS[currentView]!.activate(); }, 150);
   });
 
   // A hard refresh always lands on Home — in-session back/forward is the only
