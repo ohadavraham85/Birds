@@ -1120,12 +1120,20 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
 .tag-new-row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; align-items: center; }
 .tag-new-row input[type="text"] { flex: 1 1 140px; min-width: 100px; }
 .tag-new-row input[type="color"] { width: 40px; height: 34px; padding: 2px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); cursor: pointer; }
-.tag-new-row select { border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--ink); padding: 6px 8px; font-size: .85rem; }
 .tag-list { max-height: 320px; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--radius); margin-top: 10px; }
-.tag-row { display: flex; align-items: center; gap: 8px; padding: 7px 12px; border-bottom: 1px solid var(--line); }
+.tag-row { display: flex; align-items: center; gap: 8px; padding: 7px 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .tag-row:last-child { border-bottom: 0; }
-.tag-row select { border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--ink); padding: 4px 6px; font-size: .8rem; }
 .tag-row input[type="color"] { width: 32px; height: 28px; padding: 2px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); cursor: pointer; flex-shrink: 0; }
+.tag-icon-picker { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+#s-tag-new-icon .tag-icon-picker { margin-top: 4px; }
+.tag-edit-icon { flex-basis: 100%; }
+.tag-icon-opt {
+  display: inline-flex; align-items: center; gap: 5px; border-radius: 8px;
+  padding: 5px 10px; font-size: .78rem; cursor: pointer;
+  border: 1.5px solid var(--line); background: var(--card); color: var(--ink-soft);
+}
+.tag-icon-opt .icon { width: 15px; height: 15px; }
+.tag-icon-opt.selected { border-color: var(--accent-700); background: var(--accent-50); color: var(--accent-900); font-weight: 600; }
 .tag-swatch {
   flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center;
   justify-content: center; color: #fff;

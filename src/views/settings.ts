@@ -527,18 +527,38 @@ function listsHtml(): string {
       <div class="tag-new-row">
         <input type="text" id="s-tag-new-name" placeholder="שם התגית...">
         <input type="color" id="s-tag-new-color" value="#2e7d32" title="צבע">
-        <select id="s-tag-new-icon" title="סוג הציפור">
-          ${tagIconOptionsHtml()}
-        </select>
         <button class="btn" id="s-tag-add">${icon('plus')} הוספה</button>
       </div>
+      <div id="s-tag-new-icon">${tagIconPickerHtml()}</div>
       <div class="tag-list" id="s-tag-list"></div>
     </div>
   `;
 }
 
-function tagIconOptionsHtml(selected?: TagIconName): string {
-  return TAG_ICON_NAMES.map((name) => `<option value="${name}"${name === selected ? ' selected' : ''}>${TAG_ICON_LABELS[name]}</option>`).join('');
+/** A visual grid of the bird-family icons themselves (not just their Hebrew
+ * names in a plain <select>) — so choosing one shows what it actually looks
+ * like instead of picking blind. */
+function tagIconPickerHtml(selected: TagIconName = 'tagGeneric'): string {
+  return `
+    <div class="tag-icon-picker">
+      ${TAG_ICON_NAMES.map((name) => `
+        <button type="button" class="tag-icon-opt${name === selected ? ' selected' : ''}" data-icon="${name}" title="${TAG_ICON_LABELS[name]}">
+          ${icon(name)}<span>${TAG_ICON_LABELS[name]}</span>
+        </button>`).join('')}
+    </div>`;
+}
+
+function selectedTagIcon(scope: HTMLElement): TagIconName {
+  return (scope.querySelector<HTMLElement>('.tag-icon-opt.selected')?.dataset.icon as TagIconName) || 'tagGeneric';
+}
+
+function wireTagIconPicker(scope: HTMLElement): void {
+  scope.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLElement>('.tag-icon-opt');
+    if (!btn) return;
+    scope.querySelectorAll('.tag-icon-opt').forEach((b) => b.classList.remove('selected'));
+    btn.classList.add('selected');
+  });
 }
 
 function wireLists(): void {
@@ -574,6 +594,7 @@ function wireLists(): void {
 
   qs(container, '#s-tag-add').addEventListener('click', () => void onAddTagManaged());
   input(container, '#s-tag-new-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); void onAddTagManaged(); } });
+  wireTagIconPicker(qs(container, '#s-tag-new-icon'));
   qs(container, '#s-tag-list').addEventListener('click', (e) => void onTagListClick(e));
   void renderTagManageList();
   renamingTag = null;
@@ -958,14 +979,14 @@ async function renderTagManageList(): Promise<void> {
         <span class="tag-swatch" style="background:${escapeHtml(r.color)}">${icon(r.icon)}</span>
         ${isRenaming
           ? `<input type="text" class="rename-input" value="${escapeHtml(r.name)}">
-             <input type="color" class="tag-edit-color" value="${escapeHtml(r.color)}" title="צבע">
-             <select class="tag-edit-icon" title="סוג הציפור">${tagIconOptionsHtml(r.icon)}</select>`
+             <input type="color" class="tag-edit-color" value="${escapeHtml(r.color)}" title="צבע">`
           : `<span class="tag-row-name">${escapeHtml(r.name)}</span>`}
         ${isRenaming
           ? `<button type="button" class="rename-save" data-name="${escapeHtml(r.name)}" title="שמירה" aria-label="שמירה">${icon('check')}</button>
              <button type="button" class="rename-cancel" title="ביטול" aria-label="ביטול">✕</button>`
           : `<button type="button" class="rename" data-name="${escapeHtml(r.name)}" title="עריכה" aria-label="עריכה">${icon('edit')}</button>`}
         <button type="button" class="del" data-name="${escapeHtml(r.name)}" title="מחיקה" aria-label="מחיקה">${icon('trash')}</button>
+        ${isRenaming ? `<div class="tag-edit-icon">${tagIconPickerHtml(r.icon)}</div>` : ''}
       </div>`;
     }).join('')
     : '<p class="hint" style="padding:10px 12px">אין תגיות עדיין.</p>';
@@ -977,7 +998,7 @@ async function onAddTagManaged(): Promise<void> {
   const name = nameInp.value.trim();
   if (!name) return;
   const color = input(container, '#s-tag-new-color').value;
-  const iconName = (container.querySelector<HTMLSelectElement>('#s-tag-new-icon')!.value) as TagIconName;
+  const iconName = selectedTagIcon(qs(container, '#s-tag-new-icon'));
   await addTag(name, color, iconName);
   nameInp.value = '';
   await renderTagManageList();
@@ -986,6 +1007,12 @@ async function onAddTagManaged(): Promise<void> {
 
 async function onTagListClick(e: Event): Promise<void> {
   const target = e.target as HTMLElement;
+  const iconOpt = target.closest<HTMLElement>('.tag-icon-opt');
+  if (iconOpt) {
+    iconOpt.closest('.tag-edit-icon')!.querySelectorAll('.tag-icon-opt').forEach((b) => b.classList.remove('selected'));
+    iconOpt.classList.add('selected');
+    return;
+  }
   if (target.closest('.rename')) {
     renamingTag = target.closest<HTMLElement>('.rename')!.dataset.name!;
     await renderTagManageList();
@@ -1001,7 +1028,7 @@ async function onTagListClick(e: Event): Promise<void> {
     const row = target.closest<HTMLElement>('.tag-row')!;
     const newName = row.querySelector<HTMLInputElement>('.rename-input')!.value.trim();
     const color = row.querySelector<HTMLInputElement>('.tag-edit-color')!.value;
-    const iconName = row.querySelector<HTMLSelectElement>('.tag-edit-icon')!.value as TagIconName;
+    const iconName = selectedTagIcon(row.querySelector<HTMLElement>('.tag-edit-icon')!);
     renamingTag = null;
     if (!newName) { await renderTagManageList(); return; }
     await updateTag(oldName, newName, color, iconName);
