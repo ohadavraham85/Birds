@@ -918,6 +918,26 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
   border-radius: 999px; padding: 2px 10px; font-size: .78rem; font-weight: 600;
 }
 
+/* ---------- tag picker (observation form) + tag badges (shown wherever an observation appears) ---------- */
+
+.tag-picker { display: flex; flex-wrap: wrap; gap: 6px; }
+.tag-chip {
+  display: inline-flex; align-items: center; gap: 5px; border-radius: 999px;
+  padding: 4px 12px 4px 8px; font-size: .82rem; font-weight: 600; cursor: pointer;
+  border: 1.5px solid var(--tag-color, var(--line)); background: var(--card); color: var(--tag-color, var(--ink));
+}
+.tag-chip .icon { width: 15px; height: 15px; }
+.tag-chip.selected { background: var(--tag-color, var(--accent-700)); color: #fff; }
+.tag-quick-add { display: flex; gap: 8px; margin-top: 8px; }
+.tag-quick-add input { flex: 1; }
+
+.tag-badge {
+  display: inline-flex; align-items: center; gap: 4px; border-radius: 999px;
+  padding: 2px 10px; font-size: .78rem; font-weight: 600; color: #fff;
+  background: var(--tag-color); border: 0; cursor: pointer;
+}
+.tag-badge .icon { width: 13px; height: 13px; stroke: #fff; }
+
 /* ---------- calendar view ---------- */
 
 .cal-header {

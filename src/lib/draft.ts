@@ -18,7 +18,7 @@ export interface ObservationDraft {
   editId?: string;
   fields: {
     dateTime: string;
-    project: string;
+    tags: string[];
     location: string;
     lat: number | null;
     lng: number | null;

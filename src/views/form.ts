@@ -4,7 +4,7 @@
 
 import {
   saveObservation, getObservation, listObservations, listSpecies,
-  saveMedia, mediaForObservation, deleteMedia, listLocationRows, listProjectRows, saveTrack, getTrack,
+  saveMedia, mediaForObservation, deleteMedia, listLocationRows, listTagRows, addTag, saveTrack, getTrack,
 } from '../db/repository';
 import { toast, toLocalInputValue, fromLocalInputValue } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
@@ -21,15 +21,18 @@ import { qs, input } from '../lib/dom';
 import { icon } from '../lib/icons';
 import { navigate, goBack } from '../main';
 import type { ViewParams } from './view';
-import type { Observation, ObservationImage, SpeciesEntry, LocationRow, ObservationTrack } from '../types';
+import type { Observation, ObservationImage, SpeciesEntry, LocationRow, ObservationTrack, TagRow } from '../types';
 
 interface PendingImage { id: string; file: File; url: string }
 interface RowImages { pending: PendingImage[]; kept: ObservationImage[] }
 
+const DEFAULT_TAG_COLORS = ['#2e7d32', '#1565c0', '#c62828', '#6a1b9a', '#ef6c00', '#00838f'];
+
 let container: HTMLElement;
 let speciesCache: string[] = [];
 let seenSpeciesCache: string[] = [];
-let projectSuggestions: string[] = [];
+let availableTags: TagRow[] = [];
+let selectedTags = new Set<string>();
 let locationSuggestions: string[] = [];
 let editId: string | null = null;
 let prefillSpecies: string | null = null;
@@ -72,18 +75,17 @@ export function init(el: HTMLElement): void {
       <span>מקליט מסלול GPS · <span id="track-timer">00:00</span> · <span id="track-distance">0 מ'</span></span>
     </div>
     <form id="obs-form" autocomplete="off">
-      <div class="row-2">
-        <div class="field">
-          <label for="f-datetime">תאריך ושעה</label>
-          <input type="datetime-local" id="f-datetime" required>
-        </div>
-        <div class="field">
-          <label for="f-project">פרויקט <span class="hint">(בחירה מרשימה או יצירת חדש)</span></label>
-          <div class="combo with-arrow">
-            <input type="text" id="f-project" placeholder='למשל: "קינון חיוויאים 2026"'>
-            <button type="button" class="combo-toggle" title="פתיחת הרשימה" aria-label="פתיחת הרשימה">▾</button>
-            <div class="combo-list" id="project-list" hidden></div>
-          </div>
+      <div class="field">
+        <label for="f-datetime">תאריך ושעה</label>
+        <input type="datetime-local" id="f-datetime" required>
+      </div>
+
+      <div class="field">
+        <label>תגיות <span class="hint">(בחירה מרובה; אפשר גם להוסיף תגית חדשה)</span></label>
+        <div class="tag-picker" id="tag-picker"></div>
+        <div class="tag-quick-add">
+          <input type="text" id="f-tag-new" placeholder="הוספת תגית חדשה...">
+          <button type="button" class="btn btn-sm" id="f-tag-add">${icon('plus')} הוספה</button>
         </div>
       </div>
 
@@ -119,7 +121,9 @@ export function init(el: HTMLElement): void {
     </form>
   `;
 
-  wireCombo(input(container, '#f-project'), qs(container, '#project-list'), () => projectSuggestions);
+  qs(container, '#tag-picker').addEventListener('click', (e) => onTagChipClick(e));
+  qs(container, '#f-tag-add').addEventListener('click', () => void onQuickAddTag());
+  input(container, '#f-tag-new').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); void onQuickAddTag(); } });
   wireCombo(input(container, '#f-location'), qs(container, '#location-list'), () => locationSuggestions, {
     onSelect: (name) => applyLocationName(name),
   });
@@ -290,7 +294,7 @@ function persistDraft(): void {
     ...(editId ? { editId } : {}),
     fields: {
       dateTime: input(container, '#f-datetime').value,
-      project: input(container, '#f-project').value,
+      tags: [...selectedTags],
       location: input(container, '#f-location').value,
       lat: currentLat,
       lng: currentLng,
@@ -320,7 +324,8 @@ function resumeFromDraft(): void {
   const draft = loadDraft();
   if (!draft) return;
   input(container, '#f-datetime').value = draft.fields.dateTime;
-  input(container, '#f-project').value = draft.fields.project;
+  selectedTags = new Set(draft.fields.tags ?? []);
+  renderTagPicker();
   input(container, '#f-location').value = draft.fields.location;
   currentLat = draft.fields.lat;
   currentLng = draft.fields.lng;
@@ -376,9 +381,7 @@ export async function activate(): Promise<void> {
   const seen = new Set<string>();
   for (const o of all) for (const name of speciesNames(o)) seen.add(name);
   seenSpeciesCache = speciesCache.filter((s) => seen.has(s));
-  const savedProjectRows = await listProjectRows();
-  projectSuggestions = [...new Set([...all.map((o) => o.project), ...savedProjectRows.map((p) => p.name)].filter(Boolean))]
-    .sort((a, b) => a.localeCompare(b, 'he'));
+  availableTags = await listTagRows();
   const savedLocationRows = await listLocationRows();
   savedLocations = new Map(savedLocationRows.map((l) => [l.name, l]));
   locationSuggestions = [...new Set([...all.map((o) => o.locationName), ...savedLocationRows.map((l) => l.name)].filter(Boolean))]
@@ -422,6 +425,8 @@ function resetForm(locate = true): void {
   setEntries([{ species: '', quantity: 1 }]);
   qs(container, '#form-title').textContent = 'תצפית חדשה';
   qs(container, '#save-btn').innerHTML = `${icon('save')} שמירת התצפית`;
+  selectedTags = new Set();
+  renderTagPicker();
   currentLat = null;
   currentLng = null;
   coordsLocked = false;
@@ -451,7 +456,8 @@ async function loadForEdit(id: string): Promise<void> {
   qs(container, '#save-btn').innerHTML = `${icon('save')} עדכון התצפית`;
   input(container, '#f-datetime').value = toLocalInputValue(new Date(obs.dateTime));
   input(container, '#f-location').value = obs.locationName || '';
-  input(container, '#f-project').value = obs.project || '';
+  selectedTags = new Set(obs.tags?.length ? obs.tags : (obs.project ? [obs.project] : []));
+  renderTagPicker();
   currentLat = obs.lat ?? null;
   currentLng = obs.lng ?? null;
   applyLocationName(obs.locationName || '');
@@ -461,6 +467,39 @@ async function loadForEdit(id: string): Promise<void> {
     i === 0 && obs.images?.length ? { ...e, images: [...entryImages(e), ...obs.images] } : e);
   setEntries(withLegacy.length ? withLegacy : [{ species: '', quantity: 1 }]);
   qs<HTMLTextAreaElement>(container, '#f-notes').value = obs.notes || '';
+}
+
+/* ---------- tags (multi-select chip picker; replaces the old single project field) ---------- */
+
+function renderTagPicker(): void {
+  const el = qs(container, '#tag-picker');
+  el.innerHTML = availableTags.length
+    ? availableTags.map((t) => `
+      <button type="button" class="tag-chip${selectedTags.has(t.name) ? ' selected' : ''}" data-name="${escapeHtml(t.name)}" style="--tag-color:${escapeHtml(t.color)}">
+        ${icon(t.icon)} ${escapeHtml(t.name)}
+      </button>`).join('')
+    : '<p class="hint" style="padding:2px 0">אין עדיין תגיות — אפשר להוסיף אחת למטה.</p>';
+}
+
+function onTagChipClick(e: Event): void {
+  const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('.tag-chip');
+  if (!btn) return;
+  const name = btn.dataset.name!;
+  if (selectedTags.has(name)) selectedTags.delete(name); else selectedTags.add(name);
+  btn.classList.toggle('selected', selectedTags.has(name));
+}
+
+async function onQuickAddTag(): Promise<void> {
+  const inp = input(container, '#f-tag-new');
+  const name = inp.value.trim();
+  if (!name) return;
+  if (!availableTags.some((t) => t.name === name)) {
+    await addTag(name, DEFAULT_TAG_COLORS[availableTags.length % DEFAULT_TAG_COLORS.length]!, 'tagGeneric');
+    availableTags = await listTagRows();
+  }
+  selectedTags.add(name);
+  inp.value = '';
+  renderTagPicker();
 }
 
 /* ---------- location ---------- */
@@ -684,11 +723,10 @@ async function onSave(e: Event): Promise<void> {
     locationName: input(container, '#f-location').value.trim(),
     lat: currentLat,
     lng: currentLng,
-    // TODO(tags phase 2): #f-project is being replaced by a multi-tag picker;
-    // for now still write the single legacy field and mirror it into tags so
-    // existing data keeps working until the picker UI lands.
-    project: input(container, '#f-project').value.trim(),
-    tags: input(container, '#f-project').value.trim() ? [input(container, '#f-project').value.trim()] : (prev?.tags ?? []),
+    // `project` is deprecated but kept in sync (first tag) for any code path
+    // not yet migrated off it — see types.ts.
+    tags: [...selectedTags],
+    project: [...selectedTags][0] || '',
     entries,
     images: [], // per-species now; keep empty for legacy field
     notes: qs<HTMLTextAreaElement>(container, '#f-notes').value,
