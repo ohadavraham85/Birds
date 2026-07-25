@@ -13,6 +13,8 @@ import type {
   SpeciesRow,
   LocationRow,
   ProjectRow,
+  TagRow,
+  TagIconName,
   MediaRecord,
   ObservationTrack,
   StoredFile,
@@ -35,7 +37,7 @@ function emitChange(): void {
  * "something changed, re-render"). Sync backends that need to know exactly
  * which record changed (e.g. the Firebase sync engine) subscribe here
  * instead of re-scanning the whole database on every change. */
-export type MutationEntity = 'observation' | 'species' | 'location' | 'project' | 'file';
+export type MutationEntity = 'observation' | 'species' | 'location' | 'project' | 'file' | 'tag';
 export type MutationOp = 'upsert' | 'delete';
 type MutationListener = (entity: MutationEntity, id: string, op: MutationOp, payload: unknown) => void;
 const mutationListeners = new Set<MutationListener>();
@@ -398,6 +400,84 @@ export async function seedProjectsFromObservations(): Promise<number> {
   const ts = now();
   await db.projects.bulkPut([...toAdd].map((name) => ({ name, updatedAt: ts, deleted: false })));
   return toAdd.size;
+}
+
+/* ---------- tags (multi-valued, colored+iconed — replaces the old single
+ * `project` field; observations carry an array of tag names in `tags`) ---------- */
+
+/** All non-deleted saved tags, name-sorted. */
+export async function listTagRows(): Promise<TagRow[]> {
+  const all = await db.tags.toArray();
+  return all.filter((t) => !t.deleted).sort((a, b) => a.name.localeCompare(b.name, 'he'));
+}
+
+export async function getTag(name: string): Promise<TagRow | undefined> {
+  const row = await db.tags.get(name);
+  return row && !row.deleted ? row : undefined;
+}
+
+/** Raw fetch including tombstones — for last-write-wins comparisons. */
+export function getTagRaw(name: string): Promise<TagRow | undefined> {
+  return db.tags.get(name);
+}
+
+export async function addTag(name: string, color: string, icon: TagIconName): Promise<boolean> {
+  name = String(name || '').trim();
+  if (!name) return false;
+  const row: TagRow = { name, color, icon, updatedAt: now(), deleted: false };
+  await db.tags.put(row);
+  emitChange();
+  emitMutation('tag', name, 'upsert', row);
+  return true;
+}
+
+/** Updates a tag's color/icon, and — if the name changed — rewrites every
+ * observation carrying the old name to the new one so nothing gets silently
+ * detached from its history. */
+export async function updateTag(oldName: string, newName: string, color: string, icon: TagIconName): Promise<boolean> {
+  newName = String(newName || '').trim();
+  if (!newName) return false;
+  if (newName !== oldName) {
+    const obs = await listObservationsRaw();
+    for (const o of obs) {
+      if (!o.tags?.includes(oldName)) continue;
+      o.tags = [...new Set(o.tags.map((t) => (t === oldName ? newName : t)))];
+      o.updatedAt = now();
+      await db.observations.put(o);
+      emitMutation('observation', o.id, 'upsert', o);
+    }
+    const old = await db.tags.get(oldName);
+    if (old) {
+      old.deleted = true;
+      old.updatedAt = now();
+      await db.tags.put(old);
+      emitMutation('tag', oldName, 'delete', old);
+    }
+  }
+  const row: TagRow = { name: newName, color, icon, updatedAt: now(), deleted: false };
+  await db.tags.put(row);
+  emitChange();
+  emitMutation('tag', newName, 'upsert', row);
+  return true;
+}
+
+/** Soft-deletes the master tag row only — matches the app's established
+ * policy (same as locations/projects/species) that removing a master-list
+ * entry never retroactively edits observations that already reference it. */
+export async function deleteTag(name: string): Promise<void> {
+  const row = await db.tags.get(name);
+  if (!row) return;
+  row.deleted = true;
+  row.updatedAt = now();
+  await db.tags.put(row);
+  emitChange();
+  emitMutation('tag', name, 'delete', row);
+}
+
+export async function putTagRaw(row: TagRow): Promise<void> {
+  await db.tags.put(row);
+  emitChange();
+  emitMutation('tag', row.name, row.deleted ? 'delete' : 'upsert', row);
 }
 
 /* ---------- duplicate detection & merge (species / locations / projects) ----------

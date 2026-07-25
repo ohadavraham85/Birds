@@ -24,7 +24,12 @@ export interface Observation {
   locationName: string;
   lat: number | null;
   lng: number | null;
+  /** @deprecated superseded by `tags` — kept so old data (pre-migration
+   * backups, un-migrated remote docs) still reads; no UI writes here anymore. */
   project: string;
+  /** Names of TagRow entries this observation carries. Multi-valued —
+   * replaces the old single `project` field. */
+  tags: string[];
   /** Marked by the user as a favorite, for quick filtering in the journal. */
   starred?: boolean;
   /** One or more species seen in this observation, each with a count. */
@@ -59,12 +64,31 @@ export interface LocationRow {
 
 /** Master project-list entry (name only), editable in Settings — the same
  * pattern as SpeciesRow, giving projects their own manageable list instead
- * of existing only as free text scattered across observations. */
+ * of existing only as free text scattered across observations.
+ * @deprecated superseded by TagRow — kept only so old backups/sync data
+ * carrying a `projects` collection still parse; no UI writes here anymore. */
 export interface ProjectRow {
   name: string;
   updatedAt: string;
   deleted?: boolean;
 }
+
+/** A named, multi-assignable label (e.g. "קינון 2026", "נדירים") — replaces
+ * the old single-valued `project` field. Color + icon make it a visible
+ * badge everywhere an observation is shown. */
+export interface TagRow {
+  name: string;
+  color: string; // hex
+  icon: TagIconName;
+  updatedAt: string;
+  deleted?: boolean;
+}
+
+export const TAG_ICON_NAMES = [
+  'tagRaptor', 'tagOwl', 'tagHeron', 'tagDuck', 'tagSongbird',
+  'tagGull', 'tagWoodpecker', 'tagDove', 'tagShorebird', 'tagGeneric',
+] as const;
+export type TagIconName = typeof TAG_ICON_NAMES[number];
 
 /** One fix along a recorded GPS track. */
 export interface TrackPoint {

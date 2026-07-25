@@ -1077,9 +1077,8 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
 
 .loc-add-row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; align-items: center; }
 .loc-add-row input[type="text"] { flex: 1 1 160px; min-width: 120px; }
-.species-list .loc-row, .species-list .proj-row { gap: 8px; }
+.species-list .loc-row { gap: 8px; }
 .loc-row-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.proj-row span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rename-input {
   flex: 1; min-width: 0; padding: 5px 8px; font-size: .85rem;
   border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--ink);
@@ -1095,6 +1094,26 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
 .species-list .sp-row.loc-row .loc-pick-coords.locked {
   color: var(--accent-700); border-color: var(--accent-300); background: var(--accent-50);
 }
+
+.tag-new-row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; align-items: center; }
+.tag-new-row input[type="text"] { flex: 1 1 140px; min-width: 100px; }
+.tag-new-row input[type="color"] { width: 40px; height: 34px; padding: 2px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); cursor: pointer; }
+.tag-new-row select { border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--ink); padding: 6px 8px; font-size: .85rem; }
+.tag-list { max-height: 320px; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--radius); margin-top: 10px; }
+.tag-row { display: flex; align-items: center; gap: 8px; padding: 7px 12px; border-bottom: 1px solid var(--line); }
+.tag-row:last-child { border-bottom: 0; }
+.tag-row select { border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--ink); padding: 4px 6px; font-size: .8rem; }
+.tag-row input[type="color"] { width: 32px; height: 28px; padding: 2px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); cursor: pointer; flex-shrink: 0; }
+.tag-swatch {
+  flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center;
+  justify-content: center; color: #fff;
+}
+.tag-swatch .icon { width: 15px; height: 15px; stroke: #fff; }
+.tag-row-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag-row .rename,
+.tag-row .rename-cancel { color: var(--ink-soft); border: 0; background: none; cursor: pointer; }
+.tag-row .rename-save { color: var(--accent-700); border: 0; background: none; cursor: pointer; }
+.tag-row .del { border: 0; background: none; color: var(--danger); cursor: pointer; font-size: 1rem; }
 
 .dupe-toolbar { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
 .dupe-list:not(:empty) { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }

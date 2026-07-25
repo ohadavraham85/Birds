@@ -435,6 +435,7 @@ async function onImportCsv(e: Event): Promise<void> {
       lat: Number.isFinite(lat) ? lat : null,
       lng: Number.isFinite(lng) ? lng : null,
       project: val(r, 'project'),
+      tags: val(r, 'project') ? [val(r, 'project')] : [],
       entries: [{ species, quantity: Math.max(1, parseInt(val(r, 'quantity'), 10) || 1) }],
       images: [],
       notes: map.notes != null ? String(r[map.notes] ?? '') : '',

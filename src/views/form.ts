@@ -684,7 +684,11 @@ async function onSave(e: Event): Promise<void> {
     locationName: input(container, '#f-location').value.trim(),
     lat: currentLat,
     lng: currentLng,
+    // TODO(tags phase 2): #f-project is being replaced by a multi-tag picker;
+    // for now still write the single legacy field and mirror it into tags so
+    // existing data keeps working until the picker UI lands.
     project: input(container, '#f-project').value.trim(),
+    tags: input(container, '#f-project').value.trim() ? [input(container, '#f-project').value.trim()] : (prev?.tags ?? []),
     entries,
     images: [], // per-species now; keep empty for legacy field
     notes: qs<HTMLTextAreaElement>(container, '#f-notes').value,
