@@ -5,7 +5,7 @@
  * compact summary (place/time/tags/coordinates only, no species or
  * notes) for the journal's "list" display mode. */
 
-import { fmtDateTime, fmtCoords, showImageModal, confirmDialog, toast, safeHttpUrl } from './ui';
+import { fmtDateTimeWithWeekday, fmtCoords, showImageModal, confirmDialog, toast, safeHttpUrl } from './ui';
 import { renderMarkdown, escapeHtml } from './markdown';
 import { getImageObjectUrl } from './media';
 import { entriesOf, entryImages, allImages } from './observation';
@@ -62,7 +62,7 @@ function headMetaHtml(o: Observation): string {
     </div>
     <div class="meta">
       ${o.seqNo ? `<span class="obs-seq" dir="ltr">#${o.seqNo}</span>` : ''}
-      <span>${icon('clock')} ${fmtDateTime(o.dateTime)}</span>
+      <span>${icon('clock')} ${fmtDateTimeWithWeekday(o.dateTime)}</span>
       ${fmtCoords(o.lat, o.lng) ? `<span dir="ltr">${icon('compass')} ${fmtCoords(o.lat, o.lng)}</span>` : ''}
       ${hasPhotos ? `<span class="media-indicator" title="כולל תמונות מצורפות">${icon('camera')}</span>` : ''}
       ${mediaHref ? `<a href="${escapeHtml(mediaHref)}" target="_blank" rel="noopener" class="media-indicator media-link-icon" title="פתיחת התמונות/סרטונים בענן">${icon('link')}</a>` : ''}

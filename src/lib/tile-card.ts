@@ -4,7 +4,7 @@
  * the observation's main fields (location, time, tags, coordinates) —
  * not the species, which the list/detail views already cover. */
 
-import { fmtDateTime, fmtCoords } from './ui';
+import { fmtDateTimeWithWeekday, fmtCoords } from './ui';
 import { escapeHtml } from './markdown';
 import { getImageObjectUrl } from './media';
 import { entriesOf, entryImages } from './observation';
@@ -23,7 +23,7 @@ export function renderObservationTile(o: Observation, mode: 'square' | 'rect'): 
     ${o.seqNo ? `<span class="obs-tile-seq" dir="ltr">#${o.seqNo}</span>` : ''}
     <div class="obs-tile-info">
       <span class="obs-tile-headline">${escapeHtml(o.locationName || 'ללא מיקום')}</span>
-      <span class="obs-tile-meta">${icon('clock')} ${fmtDateTime(o.dateTime)}</span>
+      <span class="obs-tile-meta">${icon('clock')} ${fmtDateTimeWithWeekday(o.dateTime)}</span>
       ${mode === 'rect' && coords ? `<span class="obs-tile-meta" dir="ltr">${icon('compass')} ${coords}</span>` : ''}
       ${mode === 'rect' && o.tags?.length ? `<div class="tag-badge-row">${tagBadgesHtml(o.tags, 'obs-tile-badge')}</div>` : ''}
     </div>
