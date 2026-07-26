@@ -15,7 +15,7 @@ import { navigate } from '../main';
 import type { ViewParams } from './view';
 import type { SpeciesDetail, ObservationImage } from '../types';
 
-type SortMode = 'family' | 'alpha' | 'recent' | 'seen' | 'tag';
+type SortMode = 'family' | 'alpha' | 'recent' | 'seen' | 'tag' | 'count';
 type SortDir = 'asc' | 'desc';
 
 let container: HTMLElement;
@@ -52,6 +52,7 @@ export function init(el: HTMLElement): void {
         <option value="tag">קיבוץ לפי תגית</option>
         <option value="alpha">לפי א״ב</option>
         <option value="recent">לפי תצפית אחרונה</option>
+        <option value="count">לפי מספר צפיות</option>
       </select>
       <button type="button" class="btn btn-icon sp-filter-btn" id="sp-filter-btn" title="סינון לפי תגית" aria-label="סינון לפי תגית">
         ${icon('filter')}<span class="filter-badge" id="sp-filter-badge" hidden></span>
@@ -210,7 +211,9 @@ function render(): void {
   qs(container, '#sp-filter-btn').classList.toggle('active', !!filterCount);
   const sortBtn = qs(container, '#sp-sort-btn');
   sortBtn.innerHTML = icon('sortArrows', sortDir === 'desc' ? 'icon-flip' : '');
-  sortBtn.title = sortDir === 'asc' ? 'מוצג: סדר רגיל' : 'מוצג: סדר הפוך';
+  sortBtn.title = sortMode === 'count'
+    ? (sortDir === 'asc' ? 'מוצג: מהשכיח לנדיר' : 'מוצג: מהנדיר לשכיח')
+    : sortDir === 'asc' ? 'מוצג: סדר רגיל' : 'מוצג: סדר הפוך';
 
   const list = names.filter(matches);
   const withDetails = names.filter((n) => detailsFor(n).en).length;
@@ -251,6 +254,12 @@ function render(): void {
       if (la) return -1;
       if (lb) return 1;
       return a.localeCompare(b, 'he');
+    });
+    el.innerHTML = itemsHtml(sorted);
+  } else if (sortMode === 'count') {
+    const sorted = [...list].sort((a, b) => {
+      const cmp = (counts[b] || 0) - (counts[a] || 0);
+      return (sortDir === 'asc' ? cmp : -cmp) || a.localeCompare(b, 'he');
     });
     el.innerHTML = itemsHtml(sorted);
   } else {

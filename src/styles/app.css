@@ -275,28 +275,6 @@ body {
 }
 .topbar-btn:hover { background: rgba(255, 255, 255, 0.28); }
 
-.topbar-menu { position: relative; }
-.topbar-menu-list {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-lg);
-  z-index: 1300;
-  overflow: hidden;
-  min-width: 150px;
-}
-.topbar-menu-list[hidden] { display: none; }
-.topbar-menu-list button {
-  display: flex; align-items: center; gap: 9px; width: 100%; text-align: right;
-  padding: 11px 14px; border: 0; background: none; font: inherit; color: var(--ink-soft);
-  cursor: pointer;
-}
-.topbar-menu-list button .icon { color: var(--accent-700); }
-.topbar-menu-list button:hover { background: var(--accent-50); }
-
 /* ---------- floating action button ---------- */
 
 .fab {
@@ -338,6 +316,9 @@ body {
 
 .track-toggle-row { margin-bottom: 14px; }
 .track-toggle-row[hidden] { display: none; }
+/* Ready-to-record (orange) vs actively recording (red, matching .track-dot). */
+label.notif-toggle-row.track-toggle-row input[type="checkbox"] { background: #e8a13c; }
+label.notif-toggle-row.track-toggle-row input[type="checkbox"]:checked { background: var(--danger); }
 
 .voice-dictate-btn { margin-bottom: 10px; }
 .voice-dictate-btn.recording { background: var(--danger); border-color: var(--danger); color: #fff; }
