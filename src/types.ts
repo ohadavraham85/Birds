@@ -47,6 +47,9 @@ export interface Observation {
    * (e.g. a shared Google Photos or Lightroom cloud album), since full media
    * libraries are too large to store locally — just a pointer out to them. */
   mediaLink?: string;
+  /** Names of ObserverRow entries — other people present for this
+   * observation, in addition to whoever's keeping the journal. */
+  observers?: string[];
   /** Soft-delete tombstone — kept so the deletion propagates on sync. */
   deleted: boolean;
   /** Last local modification, ISO. Used for last-write-wins merging. */
@@ -78,6 +81,16 @@ export interface LocationRow {
  * @deprecated superseded by TagRow — kept only so old backups/sync data
  * carrying a `projects` collection still parse; no UI writes here anymore. */
 export interface ProjectRow {
+  name: string;
+  updatedAt: string;
+  deleted?: boolean;
+}
+
+/** Master observer-list entry (name only), editable in Settings — same
+ * plain-name pattern as ProjectRow/LocationRow. Lets an observation record
+ * who else was present, multi-selected from this shared list (with an
+ * inline quick-add for a name not yet on it) rather than free text. */
+export interface ObserverRow {
   name: string;
   updatedAt: string;
   deleted?: boolean;

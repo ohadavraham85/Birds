@@ -5,6 +5,7 @@ import {
   listSpecies, addSpecies, deleteSpecies, listSpeciesRows,
   listLocationRows, addLocation, updateLocationCoords, deleteLocation, seedLocationsFromObservations,
   listTagRows, addTag, updateTag, deleteTag,
+  listObserverRows, addObserver, deleteObserver,
   findDuplicateSpeciesGroups, findDuplicateLocationGroups,
   mergeSpeciesNames, mergeLocationNames,
   clearAllData, listObservations, listObservationsRaw, getObservation, saveObservation,
@@ -31,7 +32,7 @@ import {
   setTheme, setAccent, setFontColor, setFontSize, setFontWeight,
   type ThemeId, type AccentId, type FontColorId, type FontSizeId, type FontWeightId,
 } from '../lib/theme';
-import type { Observation, LocationRow, TagRow, TagIconName } from '../types';
+import type { Observation, LocationRow, TagRow, TagIconName, ObserverRow } from '../types';
 import { TAG_ICON_NAMES } from '../types';
 
 const TAG_ICON_LABELS: Record<TagIconName, string> = {
@@ -69,7 +70,7 @@ let activeCategory: SettingsCategory | null = null;
 const CATEGORY_META: Record<SettingsCategory, { icon: IconName; title: string; subtitle: string }> = {
   appearance: { icon: 'palette', title: 'עיצוב', subtitle: 'ערכת נושא, צבעים, גודל ומשקל טקסט' },
   sync: { icon: 'cloud', title: 'סנכרון וגיבוי', subtitle: 'סנכרון לענן (Firebase), גיבוי ושחזור' },
-  lists: { icon: 'list', title: 'ניהול רשימות', subtitle: 'מינים, מיקומים ותגיות' },
+  lists: { icon: 'list', title: 'ניהול רשימות', subtitle: 'מינים, מיקומים, תגיות וצופים' },
   photos: { icon: 'camera', title: 'ייבוא תמונות', subtitle: 'שיוך תמונות לתצפיות לפי תאריך' },
   notifications: { icon: 'bell', title: 'התראות', subtitle: 'תזכורות נדידה ו"בתאריך הזה"' },
   files: { icon: 'folder', title: 'קבצים', subtitle: 'דוחות תצפית וקבצים חיצוניים' },
@@ -532,6 +533,20 @@ function listsHtml(): string {
       <div id="s-tag-new-icon">${tagIconPickerHtml()}</div>
       <div class="tag-list" id="s-tag-list"></div>
     </div>
+
+    <div class="settings-card">
+      <h3>${icon('bird')} ניהול רשימת הצופים</h3>
+      <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
+        רשימת צופים נוספים שאפשר לשייך לתצפית (מי עוד היה נוכח), נבחרת בטופס
+        התצפית. מחיקת צופה מסירה אותו מהרשימה בלבד — תצפיות קיימות ששייכו
+        אותו אינן נפגעות.
+      </p>
+      <div class="add-species-row">
+        <input type="text" id="s-observer-new" placeholder="הוספת צופה חדש לרשימה...">
+        <button class="btn" id="s-observer-add">${icon('plus')} הוספה</button>
+      </div>
+      <div class="species-list" id="s-observer-list"></div>
+    </div>
   `;
 }
 
@@ -598,6 +613,11 @@ function wireLists(): void {
   qs(container, '#s-tag-list').addEventListener('click', (e) => void onTagListClick(e));
   void renderTagManageList();
   renamingTag = null;
+
+  qs(container, '#s-observer-add').addEventListener('click', () => void onAddObserverManaged());
+  input(container, '#s-observer-new').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); void onAddObserverManaged(); } });
+  qs(container, '#s-observer-list').addEventListener('click', (e) => void onObserverListClick(e));
+  void renderObserverManageList();
 }
 
 /* ---------- נתונים מקומיים ---------- */
@@ -1045,6 +1065,41 @@ async function onTagListClick(e: Event): Promise<void> {
   toast(`התגית "${name}" נמחקה`);
 }
 
+/* ---------- ניהול רשימת הצופים (שם בלבד, ללא שינוי שם/מיזוג) ---------- */
+
+async function renderObserverManageList(): Promise<void> {
+  const rows = await listObserverRows();
+  const el = container.querySelector<HTMLElement>('#s-observer-list');
+  if (!el) return;
+  el.innerHTML = rows.length
+    ? rows.map((r) => `
+      <div class="sp-row" data-name="${escapeHtml(r.name)}">
+        <span>${escapeHtml(r.name)}</span>
+        <button type="button" class="del" data-name="${escapeHtml(r.name)}" title="הסרה מהרשימה" aria-label="הסרה מהרשימה">${icon('trash')}</button>
+      </div>`).join('')
+    : '<p class="hint" style="padding:10px 12px">אין צופים ברשימה.</p>';
+}
+
+async function onAddObserverManaged(): Promise<void> {
+  const nameInp = input(container, '#s-observer-new');
+  const name = nameInp.value.trim();
+  if (!name) return;
+  await addObserver(name);
+  nameInp.value = '';
+  await renderObserverManageList();
+  toast(`הצופה "${name}" נוסף`);
+}
+
+async function onObserverListClick(e: Event): Promise<void> {
+  const btn = (e.target as HTMLElement).closest<HTMLElement>('.del');
+  if (!btn) return;
+  const name = btn.dataset.name!;
+  if (!(await confirmDialog(`למחוק את "${name}" מרשימת הצופים? תצפיות קיימות לא ייפגעו.`, 'מחיקה'))) return;
+  await deleteObserver(name);
+  await renderObserverManageList();
+  toast(`"${name}" הוסר מרשימת הצופים`);
+}
+
 function pickSwatch(groupSelector: string, e: Event, apply: (btn: HTMLElement) => void): void {
   const btn = (e.target as HTMLElement).closest<HTMLElement>('.theme-swatch');
   if (!btn) return;
@@ -1102,7 +1157,7 @@ async function onForceResync(): Promise<void> {
   btn.disabled = true;
   try {
     const n = await forceResyncListsFromCloud();
-    toast(`הרשימות סונכרנו מחדש (${n.species} מינים, ${n.locations} מיקומים, ${n.tags} תגיות)`);
+    toast(`הרשימות סונכרנו מחדש (${n.species} מינים, ${n.locations} מיקומים, ${n.tags} תגיות, ${n.observers} צופים)`);
   } catch (err) {
     toast('סנכרון מחדש נכשל: ' + (err as Error).message, true, 6000);
   } finally {
@@ -1150,13 +1205,14 @@ async function onBackup(): Promise<void> {
   const species = await listSpecies();
   const locations = await listLocationRows();
   const tags = await listTagRows();
+  const observers = await listObserverRows();
   const media: Array<{ id: string; obsId: string; name: string; mime: string; data: string }> = [];
   for (const o of observations) {
     for (const m of await mediaForObservation(o.id)) {
       media.push({ id: m.id, obsId: m.obsId, name: m.name, mime: m.mime, data: await blobToDataUrl(m.blob) });
     }
   }
-  const backup = { app: 'birds-journal', format: 3, exportedAt: new Date().toISOString(), species, locations, tags, observations, media };
+  const backup = { app: 'birds-journal', format: 3, exportedAt: new Date().toISOString(), species, locations, tags, observers, observations, media };
   const blob = new Blob([JSON.stringify(backup)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -1174,6 +1230,7 @@ async function onRestore(e: Event): Promise<void> {
   let backup: {
     app?: string; observations?: Observation[]; species?: string[]; locations?: LocationRow[];
     tags?: TagRow[]; projects?: { name: string }[]; // `projects` kept for restoring pre-tags backups
+    observers?: ObserverRow[];
     media?: Array<{ id: string; obsId: string; name: string; mime: string; data: string }>;
   };
   try {
@@ -1186,6 +1243,7 @@ async function onRestore(e: Event): Promise<void> {
   for (const t of backup.tags || []) await addTag(t.name, t.color, t.icon);
   // pre-tags backup: each old project becomes a plain generic-icon tag
   for (const p of backup.projects || []) await addTag(p.name, '#2e7d32', 'tagGeneric');
+  for (const ob of backup.observers || []) await addObserver(ob.name);
   for (const o of backup.observations!) {
     // migrate older backups that used a single species/quantity per row, or a single `project` instead of `tags`
     const legacy = o as unknown as { species?: string; quantity?: number; project?: string };

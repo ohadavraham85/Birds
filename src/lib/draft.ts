@@ -19,6 +19,7 @@ export interface ObservationDraft {
   fields: {
     dateTime: string;
     tags: string[];
+    observers: string[];
     location: string;
     lat: number | null;
     lng: number | null;
