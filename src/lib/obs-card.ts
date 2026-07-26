@@ -8,7 +8,7 @@
 import { fmtDateTime, fmtCoords, showImageModal, confirmDialog, toast, safeHttpUrl } from './ui';
 import { renderMarkdown, escapeHtml } from './markdown';
 import { getImageObjectUrl } from './media';
-import { entriesOf, entryImages } from './observation';
+import { entriesOf, entryImages, allImages } from './observation';
 import { icon } from './icons';
 import { renderTrackMap } from './track-map';
 import { fmtDistance } from './gps-track';
@@ -49,6 +49,8 @@ export function wireStarButton(root: HTMLElement): void {
 
 function headMetaHtml(o: Observation): string {
   const url = mapsUrl(o);
+  const hasPhotos = allImages(o).length > 0;
+  const hasMediaLink = !!(o.mediaLink && safeHttpUrl(o.mediaLink));
   return `
     <div class="card-head">
       <div class="card-place">
@@ -62,6 +64,8 @@ function headMetaHtml(o: Observation): string {
       ${o.seqNo ? `<span class="obs-seq" dir="ltr">#${o.seqNo}</span>` : ''}
       <span>${icon('clock')} ${fmtDateTime(o.dateTime)}</span>
       ${fmtCoords(o.lat, o.lng) ? `<span dir="ltr">${icon('compass')} ${fmtCoords(o.lat, o.lng)}</span>` : ''}
+      ${hasPhotos ? `<span class="media-indicator" title="כולל תמונות מצורפות">${icon('camera')}</span>` : ''}
+      ${hasMediaLink ? `<span class="media-indicator" title="כולל קישור לתמונות/סרטונים בענן">${icon('link')}</span>` : ''}
     </div>
     ${o.tags?.length ? `<div class="tag-badge-row">${tagBadgesHtml(o.tags)}</div>` : ''}`;
 }
