@@ -217,7 +217,7 @@ function renderAgenda(): void {
     const card = renderObservationCard(o);
     card.addEventListener('click', (e) => {
       const target = e.target as HTMLElement;
-      if (target.closest('.place-link, .species-imgs img, .media-link')) return;
+      if (target.closest('.place-link, .species-imgs img, .media-link, .media-link-icon')) return;
       navigate('detail', { viewId: o.id });
     });
     feed.appendChild(card);
