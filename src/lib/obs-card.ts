@@ -50,7 +50,7 @@ export function wireStarButton(root: HTMLElement): void {
 function headMetaHtml(o: Observation): string {
   const url = mapsUrl(o);
   const hasPhotos = allImages(o).length > 0;
-  const hasMediaLink = !!(o.mediaLink && safeHttpUrl(o.mediaLink));
+  const mediaHref = o.mediaLink ? safeHttpUrl(o.mediaLink) : null;
   return `
     <div class="card-head">
       <div class="card-place">
@@ -65,7 +65,7 @@ function headMetaHtml(o: Observation): string {
       <span>${icon('clock')} ${fmtDateTime(o.dateTime)}</span>
       ${fmtCoords(o.lat, o.lng) ? `<span dir="ltr">${icon('compass')} ${fmtCoords(o.lat, o.lng)}</span>` : ''}
       ${hasPhotos ? `<span class="media-indicator" title="כולל תמונות מצורפות">${icon('camera')}</span>` : ''}
-      ${hasMediaLink ? `<span class="media-indicator" title="כולל קישור לתמונות/סרטונים בענן">${icon('link')}</span>` : ''}
+      ${mediaHref ? `<a href="${escapeHtml(mediaHref)}" target="_blank" rel="noopener" class="media-indicator media-link-icon" title="פתיחת התמונות/סרטונים בענן">${icon('link')}</a>` : ''}
     </div>
     ${o.tags?.length ? `<div class="tag-badge-row">${tagBadgesHtml(o.tags)}</div>` : ''}`;
 }

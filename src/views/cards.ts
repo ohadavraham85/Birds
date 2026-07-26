@@ -394,7 +394,7 @@ function cardWithClick(o: Observation): HTMLElement {
   const wrapped = wrapSwipeActions(card, {
     onTap: (e) => {
       const target = e.target as HTMLElement;
-      if (target.closest('.place-link')) return;
+      if (target.closest('.place-link, .media-link-icon')) return;
       navigate('detail', { viewId: o.id });
     },
     onEdit: () => navigate('form', { editId: o.id }),
