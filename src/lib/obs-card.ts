@@ -59,6 +59,7 @@ function headMetaHtml(o: Observation): string {
       ${starButtonHtml(o)}
     </div>
     <div class="meta">
+      ${o.seqNo ? `<span class="obs-seq" dir="ltr">#${o.seqNo}</span>` : ''}
       <span>${icon('clock')} ${fmtDateTime(o.dateTime)}</span>
       ${fmtCoords(o.lat, o.lng) ? `<span dir="ltr">${icon('compass')} ${fmtCoords(o.lat, o.lng)}</span>` : ''}
     </div>

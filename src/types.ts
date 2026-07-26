@@ -20,6 +20,12 @@ export interface SpeciesEntry {
 /** A single observation row (גיליון "תצפיות"). */
 export interface Observation {
   id: string;
+  /** Permanent sequential display number (1, 2, 3...), assigned once when
+   * the observation is first saved and never reassigned — stays fixed
+   * regardless of filtering/grouping/search/sort in any view. Optional only
+   * because rows saved before this field existed get it backfilled by a
+   * one-time DB migration rather than at construction time. */
+  seqNo?: number;
   dateTime: string; // ISO
   locationName: string;
   lat: number | null;

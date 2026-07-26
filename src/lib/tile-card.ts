@@ -20,6 +20,7 @@ export function renderObservationTile(o: Observation, mode: 'square' | 'rect'): 
   tile.innerHTML = `
     <div class="obs-tile-media">${icon('bird', 'obs-tile-fallback-icon')}</div>
     ${starButtonHtml(o)}
+    ${o.seqNo ? `<span class="obs-tile-seq" dir="ltr">#${o.seqNo}</span>` : ''}
     <div class="obs-tile-info">
       <span class="obs-tile-headline">${escapeHtml(o.locationName || 'ללא מיקום')}</span>
       <span class="obs-tile-meta">${icon('clock')} ${fmtDateTime(o.dateTime)}</span>

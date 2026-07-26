@@ -827,6 +827,11 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
   box-shadow: var(--shadow);
 }
 .obs-tile .star-btn { position: absolute; top: 6px; inset-inline-end: 6px; z-index: 1; }
+.obs-tile-seq {
+  position: absolute; top: 6px; inset-inline-start: 6px; z-index: 1;
+  background: rgba(0, 0, 0, .55); color: #fff; font-size: .68rem; font-weight: 700;
+  padding: 2px 7px; border-radius: 999px;
+}
 .obs-tile:hover { box-shadow: var(--shadow-lg); }
 .obs-tile-square { aspect-ratio: 1; }
 .obs-tile-rect { aspect-ratio: 16 / 10; }
@@ -869,6 +874,7 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
 .obs-card .species { font-size: 1.15rem; font-weight: 700; color: var(--accent-900); }
 .obs-card .qty { color: var(--accent-700); font-weight: 600; font-size: .9rem; }
 .obs-card .meta { color: var(--ink-soft); font-size: .85rem; margin-top: 3px; display: flex; gap: 12px; flex-wrap: wrap; }
+.obs-seq { font-weight: 700; color: var(--accent-700); }
 
 .species-ol { margin: 10px 0 0; padding-inline-start: 22px; }
 .species-li { margin-bottom: 8px; }
