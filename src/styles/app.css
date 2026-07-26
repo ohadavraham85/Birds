@@ -773,7 +773,18 @@ textarea { min-height: 130px; resize: vertical; white-space: pre-wrap; line-heig
 .obs-table tr.group-head .group-title { font-weight: 700; color: var(--accent-900); }
 .obs-table tr.group-head .group-meta { color: var(--accent-700); font-size: .82rem; margin-inline-start: 10px; }
 
-.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); }
+/* Bounded height + its own vertical scrollbar is what actually lets the
+   `position: sticky` header below stick — without a max-height the wrap
+   never overflows vertically itself (the page scrolls instead), so the
+   header would just sit at the top with nothing to visibly stick against. */
+.table-wrap {
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: calc(100vh - var(--topbar-h) - var(--tabbar-h) - 170px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+}
 table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font-size: .92rem; }
 .obs-table th, .obs-table td { padding: 9px 10px; text-align: right; border-bottom: 1px solid var(--line); vertical-align: top; }
 .obs-table th { background: var(--accent-50); color: var(--accent-900); position: sticky; top: 0; }

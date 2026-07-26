@@ -5,14 +5,18 @@
 import { icon } from './icons';
 import { qs } from './dom';
 
-export type ViewDisplayMode = 'list' | 'square' | 'rect';
+export type ViewDisplayMode = 'list' | 'square' | 'rect' | 'table';
 
-export function viewModeToggleHtml(id: string): string {
+/** `includeTable` adds a 4th "spreadsheet" button — opt-in per view (only the
+ * journal uses it so far) so species/table tabs keep their existing 3-mode
+ * toggle unchanged. */
+export function viewModeToggleHtml(id: string, opts: { includeTable?: boolean } = {}): string {
   return `
     <div class="view-mode-toggle" id="${id}">
       <button type="button" class="btn btn-icon" data-mode="list" title="תצוגת רשימה" aria-label="תצוגת רשימה">${icon('list')}</button>
       <button type="button" class="btn btn-icon" data-mode="square" title="תצוגת אריחים מרובעים" aria-label="תצוגת אריחים מרובעים">${icon('grid')}</button>
       <button type="button" class="btn btn-icon" data-mode="rect" title="תצוגת אריחים מלבניים" aria-label="תצוגת אריחים מלבניים">${icon('gridRect')}</button>
+      ${opts.includeTable ? `<button type="button" class="btn btn-icon" data-mode="table" title="תצוגת גיליון טבלאי" aria-label="תצוגת גיליון טבלאי">${icon('table')}</button>` : ''}
     </div>`;
 }
 

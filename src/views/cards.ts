@@ -6,9 +6,10 @@
 import { listObservations, deleteObservation } from '../db/repository';
 import { renderObservationSummary } from '../lib/obs-card';
 import { renderObservationTile } from '../lib/tile-card';
-import { speciesNames } from '../lib/observation';
+import { speciesNames, speciesLabel, totalQuantity, allImages } from '../lib/observation';
 import { escapeHtml } from '../lib/markdown';
-import { showModal, confirmDialog, toast, withBusyButton } from '../lib/ui';
+import { showModal, confirmDialog, toast, withBusyButton, fmtDateTime, fmtCoords, safeHttpUrl } from '../lib/ui';
+import { tagBadgesHtml, wireTagBadges } from '../lib/tag-badge';
 import { wrapSwipeActions } from '../lib/swipe-actions';
 import { openBulkEditModal, applyBulkEdit } from '../lib/bulk-edit';
 import { exportObservationsExcel } from '../lib/export-excel';
@@ -66,7 +67,7 @@ export function init(el: HTMLElement): void {
       <button type="button" class="btn btn-icon" id="j-sort-btn" title="היפוך סדר כרונולוגי" aria-label="היפוך סדר כרונולוגי">${icon('sortArrows')}</button>
       <button type="button" class="btn btn-icon" id="j-expand-all" title="פתיחת כל הקבוצות" aria-label="פתיחת כל הקבוצות">${icon('chevronsDown')}</button>
       <button type="button" class="btn btn-icon" id="j-collapse-all" title="סגירת כל הקבוצות" aria-label="סגירת כל הקבוצות">${icon('chevronsUp')}</button>
-      ${viewModeToggleHtml('j-view-mode')}
+      ${viewModeToggleHtml('j-view-mode', { includeTable: true })}
     </div>
     <div class="bulk-toolbar" id="j-bulk-toolbar" hidden>
       <span id="j-bulk-count"></span>
@@ -376,16 +377,99 @@ function render(): void {
   }
 }
 
-/** Renders `items` either as full cards (list mode) or into a tile grid (square/rect mode). */
+/** Renders `items` as full cards (list), a tile grid (square/rect), or a
+ * spreadsheet-style table (table mode). */
 function appendItems(feed: HTMLElement, items: Observation[]): void {
   if (displayMode === 'list') {
     for (const o of items) feed.appendChild(cardWithClick(o));
+    return;
+  }
+  if (displayMode === 'table') {
+    feed.appendChild(tableWithClick(items));
     return;
   }
   const grid = document.createElement('div');
   grid.className = `obs-tile-grid obs-tile-grid-${displayMode}`;
   for (const o of items) grid.appendChild(tileWithClick(o));
   feed.appendChild(grid);
+}
+
+/** One row per observation, all relevant columns, with a frozen (sticky)
+ * header — reuses table.ts's `.table-wrap`/`.obs-table` styling. The
+ * selection checkbox column feeds the same `selectedIds`/`selectionMode`
+ * bulk-edit toolbar the list view's long-press gesture uses. */
+function tableWithClick(items: Observation[]): HTMLElement {
+  const wrap = document.createElement('div');
+  wrap.className = 'table-wrap';
+  wrap.innerHTML = `
+    <table class="obs-table">
+      <thead>
+        <tr>
+          <th style="width:36px"><input type="checkbox" class="j-tbl-sel-all" title="בחירת כל המוצג"></th>
+          <th style="width:44px">#</th>
+          <th>תאריך ושעה</th>
+          <th>מין וכמות</th>
+          <th>מיקום</th>
+          <th>קואורדינטות</th>
+          <th>תגיות</th>
+          <th>צופים נוספים</th>
+          <th>מדיה</th>
+          <th>הערות</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>`;
+  const tbody = wrap.querySelector('tbody')!;
+  tbody.innerHTML = items.map(tableRowHtml).join('');
+  wireTagBadges(tbody);
+
+  const selAll = wrap.querySelector<HTMLInputElement>('.j-tbl-sel-all')!;
+  const selectedHere = items.filter((o) => selectedIds.has(o.id)).length;
+  selAll.checked = items.length > 0 && selectedHere === items.length;
+  selAll.indeterminate = selectedHere > 0 && selectedHere < items.length;
+  selAll.addEventListener('change', () => {
+    selectionMode = true;
+    items.forEach((o) => (selAll.checked ? selectedIds.add(o.id) : selectedIds.delete(o.id)));
+    if (!selectedIds.size) selectionMode = false;
+    render();
+  });
+
+  tbody.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    const tr = target.closest<HTMLElement>('tr[data-id]');
+    if (!tr) return;
+    const id = tr.dataset.id!;
+    if (target.classList.contains('row-sel')) {
+      selectionMode = true;
+      if ((target as HTMLInputElement).checked) selectedIds.add(id); else selectedIds.delete(id);
+      if (!selectedIds.size) selectionMode = false;
+      render();
+      return;
+    }
+    if (target.closest('.media-link-icon')) return;
+    navigate('detail', { viewId: id });
+  });
+  return wrap;
+}
+
+function tableRowHtml(o: Observation): string {
+  const hasPhotos = allImages(o).length > 0;
+  const mediaHref = o.mediaLink ? safeHttpUrl(o.mediaLink) : null;
+  const mediaCell = `${hasPhotos ? `<span class="media-indicator" title="כולל תמונות מצורפות">${icon('camera')}</span>` : ''}`
+    + `${mediaHref ? `<a href="${escapeHtml(mediaHref)}" target="_blank" rel="noopener" class="media-indicator media-link-icon" title="פתיחת התמונות/סרטונים בענן">${icon('link')}</a>` : ''}`;
+  return `
+    <tr data-id="${o.id}" class="${selectedIds.has(o.id) ? 'selected' : ''}">
+      <td><input type="checkbox" class="row-sel" ${selectedIds.has(o.id) ? 'checked' : ''}></td>
+      <td class="num">${o.seqNo ? `#${o.seqNo}` : ''}</td>
+      <td class="num">${fmtDateTime(o.dateTime)}</td>
+      <td><strong>${escapeHtml(speciesLabel(o))}</strong> <span class="species-qty">× ${totalQuantity(o)}</span></td>
+      <td>${escapeHtml(o.locationName || '')}</td>
+      <td class="num">${fmtCoords(o.lat, o.lng)}</td>
+      <td>${o.tags.length ? tagBadgesHtml(o.tags) : ''}</td>
+      <td>${o.observers?.length ? escapeHtml(o.observers.join(', ')) : ''}</td>
+      <td>${mediaCell}</td>
+      <td class="notes-cell" title="${escapeHtml(o.notes || '')}">${escapeHtml((o.notes || '').replace(/\s+/g, ' '))}</td>
+    </tr>`;
 }
 
 function cardWithClick(o: Observation): HTMLElement {
