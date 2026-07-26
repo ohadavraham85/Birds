@@ -43,6 +43,10 @@ export interface Observation {
   /** @deprecated observation-level images — migrated into entries[0].images. */
   images: ObservationImage[];
   notes: string;
+  /** Optional link to an external photo/video album for this observation
+   * (e.g. a shared Google Photos or Lightroom cloud album), since full media
+   * libraries are too large to store locally — just a pointer out to them. */
+  mediaLink?: string;
   /** Soft-delete tombstone — kept so the deletion propagates on sync. */
   deleted: boolean;
   /** Last local modification, ISO. Used for last-write-wins merging. */

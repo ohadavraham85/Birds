@@ -902,6 +902,11 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
 }
 .obs-card .sp-notes { margin-top: 8px; font-size: .9rem; color: var(--ink-soft); }
 .obs-card .sp-notes b { color: var(--accent-900); }
+.obs-card .media-link {
+  display: inline-flex; align-items: center; gap: 6px; margin-top: 10px;
+  color: var(--accent-700); font-weight: 600; font-size: .9rem; text-decoration: none;
+}
+.obs-card .media-link:hover { text-decoration: underline; }
 .obs-card .notes { margin-top: 10px; line-height: 1.55; }
 .obs-card .notes p { margin: 0 0 8px; }
 .obs-card .notes h4, .obs-card .notes h5, .obs-card .notes h6 { margin: 10px 0 4px; color: var(--accent-700); }
@@ -1491,6 +1496,8 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
 .pdf-report .rpt-sp-note { color: #5b6d62; font-size: 11px; }
 .pdf-report .rpt-sp-imgs { margin-top: 2px; }
 .pdf-report .rpt-track-legend { font-size: 11px; color: #5b6d62; margin-top: 4px; }
+.pdf-report .rpt-media-link { font-size: 12px; margin-top: 6px; word-break: break-all; }
+.pdf-report .rpt-media-link a { color: #2d6a4f; }
 .pdf-report .rpt-foot { border-top: 2px solid #2d6a4f; margin-top: 16px; padding-top: 8px; text-align: center; font-size: 11px; color: #5b6d62; }
 
 @media print {
