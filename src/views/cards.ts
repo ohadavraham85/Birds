@@ -8,7 +8,7 @@ import { renderObservationSummary } from '../lib/obs-card';
 import { renderObservationTile } from '../lib/tile-card';
 import { speciesNames, speciesLabel, totalQuantity, allImages } from '../lib/observation';
 import { escapeHtml } from '../lib/markdown';
-import { showModal, confirmDialog, toast, withBusyButton, fmtDateTime, fmtCoords, safeHttpUrl } from '../lib/ui';
+import { showModal, confirmDialog, toast, withBusyButton, fmtCoords, safeHttpUrl } from '../lib/ui';
 import { tagBadgesHtml, wireTagBadges } from '../lib/tag-badge';
 import { wrapSwipeActions } from '../lib/swipe-actions';
 import { openBulkEditModal, applyBulkEdit } from '../lib/bulk-edit';
@@ -485,6 +485,17 @@ function sortIndHtml(key: TableSortKey): string {
   return `<span class="sort-ind">${tableSortBy === key ? (tableSortDir === 'asc' ? ' ▲' : ' ▼') : ''}</span>`;
 }
 
+/** Short "weekday dd.mm hh:mm" (no year) — the table's own date/time cell is
+ * too narrow on a phone for the app-wide fmtDateTime's full "dd.mm.yyyy". */
+function fmtDateTimeCompact(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  const weekday = d.toLocaleDateString('he-IL', { weekday: 'narrow' });
+  const date = d.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit' });
+  const time = d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+  return `${weekday} ${date} ${time}`;
+}
+
 /** One row per observation, all relevant columns, with a frozen (sticky)
  * header — reuses table.ts's `.table-wrap`/`.obs-table` styling. Column
  * headers double as Excel-style sort/filter controls, on top of the
@@ -499,15 +510,15 @@ function tableWithClick(items: Observation[]): HTMLElement {
     <table class="obs-table obs-table-compact">
       <thead>
         <tr>
-          <th style="width:28px"><input type="checkbox" class="j-tbl-sel-all" title="בחירת כל המוצג"></th>
-          <th style="width:34px">#</th>
-          <th class="sortable" data-sort="dateTime">תאריך ושעה${sortIndHtml('dateTime')}</th>
+          <th style="width:24px"><input type="checkbox" class="j-tbl-sel-all" title="בחירת כל המוצג"></th>
+          <th class="col-seq" style="width:30px">#</th>
+          <th class="sortable" data-sort="dateTime">תאריך${sortIndHtml('dateTime')}</th>
           <th class="sortable" data-sort="species">מין וכמות${sortIndHtml('species')}${filterIconHtml('species')}</th>
           <th class="sortable" data-sort="locationName">מיקום${sortIndHtml('locationName')}${filterIconHtml('location')}</th>
           <th>תגיות${filterIconHtml('tag')}</th>
-          <th>צופים</th>
-          <th style="width:44px">מדיה</th>
-          <th>הערות</th>
+          <th class="col-observers">צופים</th>
+          <th class="col-media" style="width:40px">מדיה</th>
+          <th class="col-notes">הערות</th>
         </tr>
       </thead>
       <tbody></tbody>
@@ -573,14 +584,14 @@ function tableRowHtml(o: Observation): string {
   return `
     <tr data-id="${o.id}" class="${selectedIds.has(o.id) ? 'selected' : ''}">
       <td><input type="checkbox" class="row-sel" ${selectedIds.has(o.id) ? 'checked' : ''}></td>
-      <td class="num">${o.seqNo ? `#${o.seqNo}` : ''}</td>
-      <td class="num">${fmtDateTime(o.dateTime)}</td>
-      <td><strong>${escapeHtml(speciesLabel(o))}</strong> <span class="species-qty">× ${totalQuantity(o)}</span></td>
-      <td>${escapeHtml(o.locationName || '')}${coordInd}</td>
+      <td class="num col-seq">${o.seqNo ? `#${o.seqNo}` : ''}</td>
+      <td class="num">${fmtDateTimeCompact(o.dateTime)}</td>
+      <td class="species-cell"><strong>${escapeHtml(speciesLabel(o))}</strong> <span class="species-qty">× ${totalQuantity(o)}</span></td>
+      <td class="location-cell">${escapeHtml(o.locationName || '')}${coordInd}</td>
       <td>${o.tags.length ? tagBadgesHtml(o.tags) : ''}</td>
-      <td>${o.observers?.length ? escapeHtml(o.observers.join(', ')) : ''}</td>
-      <td>${mediaCell}</td>
-      <td class="notes-cell" title="${escapeHtml(o.notes || '')}">${escapeHtml((o.notes || '').replace(/\s+/g, ' '))}</td>
+      <td class="col-observers">${o.observers?.length ? escapeHtml(o.observers.join(', ')) : ''}</td>
+      <td class="col-media">${mediaCell}</td>
+      <td class="notes-cell col-notes" title="${escapeHtml(o.notes || '')}">${escapeHtml((o.notes || '').replace(/\s+/g, ' '))}</td>
     </tr>`;
 }
 
