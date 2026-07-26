@@ -70,6 +70,7 @@ export function init(el: HTMLElement): void {
         <thead>
           <tr id="obs-head">
             <th style="width:36px"><input type="checkbox" id="sel-all" title="בחירת כל המוצג"></th>
+            <th style="width:44px">#</th>
             <th class="sortable" data-sort="dateTime">תאריך ושעה<span class="sort-ind"></span></th>
             <th class="sortable" data-sort="species">מין הציפור<span class="sort-ind"></span></th>
             <th class="sortable" data-sort="quantity">כמות<span class="sort-ind"></span></th>
@@ -218,6 +219,7 @@ function rowHtml(o: Observation): string {
   return `
     <tr data-id="${o.id}" class="${selected.has(o.id) ? 'selected' : ''}">
       <td><input type="checkbox" class="row-sel" ${selected.has(o.id) ? 'checked' : ''}></td>
+      <td class="num">${o.seqNo ? `#${o.seqNo}` : ''}</td>
       <td class="num">${fmtDateTime(o.dateTime)}</td>
       <td><strong>${escapeHtml(speciesLabel(o))}</strong></td>
       <td>${totalQuantity(o)}</td>
@@ -273,7 +275,7 @@ function renderRows(): void {
       return `
         <tr class="group-head" data-group="${escapeHtml(k)}">
           <td><input type="checkbox" class="group-sel" ${allSel ? 'checked' : ''}></td>
-          <td colspan="8">
+          <td colspan="9">
             <span class="group-title">${escapeHtml(k)}</span>
             <span class="group-meta">${rows.length} תצפיות · ${totalQty} פרטים</span>
           </td>

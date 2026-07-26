@@ -56,7 +56,17 @@ function now(): string {
 
 /* ---------- observations ---------- */
 
+/** The next permanent display number to hand out — one past whatever's
+ * highest locally. Two devices assigning a number offline at the same time
+ * could in principle pick the same one; this is accepted as a rare cosmetic
+ * edge case rather than adding cross-device coordination for it. */
+async function nextObservationSeqNo(): Promise<number> {
+  const last = await db.observations.orderBy('seqNo').last();
+  return (last?.seqNo ?? 0) + 1;
+}
+
 export async function saveObservation(obs: Observation): Promise<Observation> {
+  if (obs.seqNo == null) obs.seqNo = await nextObservationSeqNo();
   obs.updatedAt = now();
   await db.observations.put(obs);
   emitChange();

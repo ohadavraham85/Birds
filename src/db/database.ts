@@ -97,6 +97,23 @@ export class BirdsDatabase extends Dexie {
         }
       });
     });
+    // v9: permanent sequential display number per observation — backfilled once
+    // here in earliest-dateTime-first order (ties broken by id) so existing
+    // observations get a stable, sensible numbering; every observation saved
+    // from now on is assigned the next number by repository.ts.
+    this.version(9).stores({
+      ...stores, locations: 'name, updatedAt', projects: 'name, updatedAt', tracks: 'id, updatedAt',
+      files: 'id, kind, createdAt', tags: 'name, updatedAt',
+      observations: 'id, dateTime, updatedAt, synced, deleted, seqNo',
+    }).upgrade(async (tx) => {
+      const rows = (await tx.table('observations').toArray() as Array<Record<string, unknown>>)
+        .sort((a, b) => {
+          const da = a.dateTime as string, db_ = b.dateTime as string;
+          return da < db_ ? -1 : da > db_ ? 1 : (a.id as string).localeCompare(b.id as string);
+        });
+      let n = 1;
+      for (const row of rows) await tx.table('observations').update(row.id as string, { seqNo: n++ });
+    });
   }
 }
 
