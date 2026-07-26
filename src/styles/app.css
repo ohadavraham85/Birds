@@ -808,10 +808,12 @@ table.obs-table-compact { font-size: .8rem; min-width: 640px; }
 .obs-table-compact .location-cell { max-width: 130px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* Smaller tag badges inside the compact table — the card/tile-sized badge
-   used elsewhere is too big for a dense spreadsheet row. */
-.obs-table-compact .tag-badge { padding: 1px 6px; font-size: .68rem; gap: 3px; }
-.obs-table-compact .tag-badge .icon { width: 10px; height: 10px; }
-.obs-table-compact .tag-badge-row { gap: 3px; }
+   used elsewhere is too big for a dense spreadsheet row. The icon is
+   dropped entirely here (color + text already identify the tag; there's
+   no room to spare in a table cell). */
+.obs-table-compact .tag-badge { padding: 0 5px; font-size: .62rem; line-height: 1.5; gap: 0; }
+.obs-table-compact .tag-badge .icon { display: none; }
+.obs-table-compact .tag-badge-row { gap: 2px; }
 
 /* On a phone there's no room for every column — hide the least essential
    ones and let min-width shrink to fit so the remaining columns lay out

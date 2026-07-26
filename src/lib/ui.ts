@@ -51,6 +51,20 @@ export function fmtDateTime(iso: string): string {
   });
 }
 
+/** Same as fmtDateTime but with the weekday name prefixed — used by the
+ * journal's own display modes (list/tiles/table) and the detail/calendar
+ * cards that share their renderer, not by unrelated screens (PDF export,
+ * settings, species/home stats) that already call fmtDateTime directly. */
+export function fmtDateTimeWithWeekday(iso: string): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  const weekday = d.toLocaleDateString('he-IL', { weekday: 'short' });
+  const date = d.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const time = d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+  return `${weekday}, ${date}, ${time}`;
+}
+
 export function fmtCoords(lat: number | null, lng: number | null): string {
   if (lat == null || lng == null) return '';
   return `${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}`;
