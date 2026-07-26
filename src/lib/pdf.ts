@@ -11,7 +11,7 @@ import { renderMarkdown, escapeHtml } from './markdown';
 import { getMedia, saveFile, getTrack } from '../db/repository';
 import { entriesOf, entryImages, totalQuantity } from './observation';
 import { fmtDistance } from './gps-track';
-import { TRACK_SEGMENT_COLOR } from './track-preview';
+import { TRACK_SEGMENT_COLOR, renderTrackMapImage } from './track-preview';
 import type { Observation } from '../types';
 
 const BIRDER = {
@@ -45,15 +45,21 @@ async function imgTag(localId: string | undefined): Promise<string> {
   return `<img src="${dataUrl}" style="width:150px;height:110px;object-fit:cover;border-radius:6px;margin:6px 0 0 6px;">`;
 }
 
-/** The route's schematic snapshot (walk/stop colors + reported-species pins),
- * already rendered and stored on the track — see lib/track-preview.ts. Using
- * this pre-rendered PNG instead of capturing the live Leaflet map keeps PDF
- * export fast and reliable (no tile loading / network dependency at export time). */
-function trackBlockHtml(track: Awaited<ReturnType<typeof getTrack>>): string {
-  if (!track?.previewImage) return '';
+/** The route's map snapshot (real satellite imagery + walk/stop colors +
+ * reported-species pins) — rendered fresh at export time via
+ * renderTrackMapImage() rather than reusing the flat, network-free
+ * `track.previewImage` shown live in the app, since PDF export can afford
+ * the network round-trip (it already shows its own loading state — see
+ * withBusyButton() at the call sites) and satellite context is worth it in
+ * a printed/shared report. Falls back to the stored flat preview if the
+ * satellite fetch fails outright (offline, blocked, etc). */
+async function trackBlockHtml(track: Awaited<ReturnType<typeof getTrack>>): Promise<string> {
+  if (!track) return '';
+  const image = (await renderTrackMapImage(track.segments, track.reportPins ?? [])) ?? track.previewImage;
+  if (!image) return '';
   return `
     <div class="rpt-track">
-      <img src="${track.previewImage}" style="width:100%;max-width:420px;border-radius:6px;border:1px solid #ccc;display:block;margin-top:8px;">
+      <img src="${image}" style="width:100%;max-width:420px;border-radius:6px;border:1px solid #ccc;display:block;margin-top:8px;">
       <div class="rpt-track-legend">
         <span style="color:${TRACK_SEGMENT_COLOR.walk}">■</span> הליכה
         <span style="color:${TRACK_SEGMENT_COLOR.stop};margin-inline-start:10px">■</span> עצירה
@@ -88,7 +94,7 @@ async function obsBlock(o: Observation): Promise<string> {
       <ol class="rpt-species">${entriesHtml.join('')}</ol>
       ${o.notes ? `<div class="rpt-notes">${renderMarkdown(o.notes)}</div>` : ''}
       ${o.mediaLink && safeHttpUrl(o.mediaLink) ? `<div class="rpt-media-link"><b>תמונות/סרטונים בענן:</b> <a href="${escapeHtml(o.mediaLink)}">${escapeHtml(o.mediaLink)}</a></div>` : ''}
-      ${trackBlockHtml(track)}
+      ${await trackBlockHtml(track)}
     </div>`;
 }
 
