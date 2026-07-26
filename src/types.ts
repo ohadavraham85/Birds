@@ -112,6 +112,18 @@ export interface TrackSegment {
   points: TrackPoint[];
 }
 
+/** One species reported while GPS recording was active — dropped at the
+ * exact live position when it happened: once when a species is first
+ * entered on a row ('new'), and again each time the "+" quantity stepper
+ * is pressed on an already-listed species ('add'). */
+export interface TrackReportPin {
+  lat: number;
+  lng: number;
+  species: string;
+  kind: 'new' | 'add';
+  t: number; // ms epoch
+}
+
 /** A GPS track recorded automatically while a NEW observation's form was
  * open, from the moment it was opened until it was saved. Keyed 1:1 by the
  * observation's id. Local-only for now — not yet part of Firebase sync. */
@@ -124,6 +136,8 @@ export interface ObservationTrack {
   durationMs: number;
   /** Total ground distance covered, summed leg-by-leg with the haversine formula. */
   distanceMeters: number;
+  /** Species reported live during this recording — see TrackReportPin. */
+  reportPins?: TrackReportPin[];
   /** A small schematic PNG (data URL) of the route, rendered once when the
    * track is saved, so the observation itself can show its route without
    * initializing a full Leaflet map per card. */

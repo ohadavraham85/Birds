@@ -335,6 +335,12 @@ label.notif-toggle-row.track-toggle-row input[type="checkbox"]:checked { backgro
 .track-arrow-icon { background: none; border: none; }
 .track-arrow-icon svg { width: 16px; height: 16px; display: block; }
 
+.track-report-pin-icon { background: none; border: none; }
+.track-report-pin-icon span {
+  display: block; width: 12px; height: 12px; border-radius: 50%;
+  border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .4);
+}
+
 /* ---------- observation detail (view mode) ---------- */
 
 .detail-actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
@@ -1478,6 +1484,7 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
 .pdf-report .rpt-species li { margin-bottom: 4px; }
 .pdf-report .rpt-sp-note { color: #5b6d62; font-size: 11px; }
 .pdf-report .rpt-sp-imgs { margin-top: 2px; }
+.pdf-report .rpt-track-legend { font-size: 11px; color: #5b6d62; margin-top: 4px; }
 .pdf-report .rpt-foot { border-top: 2px solid #2d6a4f; margin-top: 16px; padding-top: 8px; text-align: center; font-size: 11px; color: #5b6d62; }
 
 @media print {

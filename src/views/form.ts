@@ -12,7 +12,7 @@ import { getImageObjectUrl } from '../lib/media';
 import { pickLocation } from '../lib/location-picker';
 import { wireCombo } from '../lib/combo';
 import { entriesOf, entryImages, speciesNames } from '../lib/observation';
-import { startTracking, stopTracking, isTracking, elapsedMs, snapshot, seedFromDraft, distanceMetersSoFar, fmtDistance } from '../lib/gps-track';
+import { startTracking, stopTracking, isTracking, elapsedMs, snapshot, seedFromDraft, distanceMetersSoFar, fmtDistance, lastPoint } from '../lib/gps-track';
 import { isVoiceDictationSupported, startDictation, stopDictation, isDictating } from '../lib/voice-dictation';
 import { parseObservationVoice } from '../lib/voice-parse';
 import { renderTrackPreview } from '../lib/track-preview';
@@ -21,7 +21,7 @@ import { qs, input } from '../lib/dom';
 import { icon } from '../lib/icons';
 import { navigate, goBack } from '../main';
 import type { ViewParams } from './view';
-import type { Observation, ObservationImage, SpeciesEntry, LocationRow, ObservationTrack, TagRow } from '../types';
+import type { Observation, ObservationImage, SpeciesEntry, LocationRow, ObservationTrack, TagRow, TrackReportPin } from '../types';
 
 interface PendingImage { id: string; file: File; url: string }
 interface RowImages { pending: PendingImage[]; kept: ObservationImage[] }
@@ -52,7 +52,26 @@ let trackTimerHandle: ReturnType<typeof setInterval> | null = null;
  * appends onto the existing route instead of starting over. */
 let existingTrackForEdit: ObservationTrack | null = null;
 let seededFromExistingTrack = false;
+/** Species reported while GPS recording was active this session — dropped
+ * at the live position when a species row first gets a name, and again on
+ * each "+" quantity-stepper press. Seeded from any prior save when
+ * continuing an edit-session recording (see loadForEdit). */
+let reportPins: TrackReportPin[] = [];
+/** Rows that have already dropped their "new species" pin, so re-editing
+ * the same row's text (e.g. fixing a typo) doesn't drop a second one. */
+const pinnedSpeciesRows = new WeakSet<HTMLElement>();
 const rowImages = new WeakMap<HTMLElement, RowImages>();
+
+/** Drops a report pin at the current live GPS position — a no-op unless a
+ * recording is actively in progress (per the feature's own scope: pins are
+ * only meaningful while GPS is actually tracking "here, right now"). */
+function dropReportPin(species: string, kind: TrackReportPin['kind']): void {
+  const name = species.trim();
+  if (!name || !isTracking()) return;
+  const p = lastPoint();
+  if (!p) return;
+  reportPins.push({ lat: p.lat, lng: p.lng, species: name, kind, t: p.t });
+}
 
 export function init(el: HTMLElement): void {
   container = el;
@@ -262,6 +281,7 @@ function stopAndDiscardTrack(): void {
   stopTrackTimer();
   if (isTracking()) stopTracking();
   pendingTrack = null;
+  reportPins = [];
   const toggle = container.querySelector<HTMLInputElement>('#track-toggle');
   if (toggle) toggle.checked = false;
   stopDraftAutosave();
@@ -351,7 +371,8 @@ function buildTrack(result: { points: ObservationTrack['points']; segments: Obse
     endedAt: new Date(result.endedAt).toISOString(),
     durationMs: result.endedAt - result.startedAt,
     distanceMeters: result.distanceMeters,
-    previewImage: renderTrackPreview(result.segments) ?? undefined,
+    reportPins: reportPins.length ? reportPins : undefined,
+    previewImage: renderTrackPreview(result.segments, reportPins) ?? undefined,
   };
 }
 
@@ -435,6 +456,7 @@ function resetForm(locate = true): void {
   pendingTrack = null;
   existingTrackForEdit = null;
   seededFromExistingTrack = false;
+  reportPins = [];
   stopTrackTimer();
   qs<HTMLInputElement>(container, '#track-toggle').checked = false;
   qs(container, '#track-toggle-row').hidden = false;
@@ -448,6 +470,9 @@ async function loadForEdit(id: string): Promise<void> {
   pendingTrack = null;
   seededFromExistingTrack = false;
   existingTrackForEdit = (await getTrack(id)) ?? null;
+  // Continuing a recording on an existing track keeps its prior pins and
+  // just appends new ones from this session (see buildTrack()).
+  reportPins = existingTrackForEdit?.reportPins ? [...existingTrackForEdit.reportPins] : [];
   stopTrackTimer();
   qs<HTMLInputElement>(container, '#track-toggle').checked = false;
   qs(container, '#track-toggle-row').hidden = false;
@@ -595,19 +620,33 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
   `;
   rows.appendChild(row);
   rowImages.set(row, { pending: [], kept: entry.images ? [...entry.images] : [] });
+  // A row created with a species already filled in (editing, draft-restore,
+  // voice dictation) isn't a fresh live report — never let it drop a pin.
+  if (entry.species.trim()) pinnedSpeciesRows.add(row);
 
   const qtyInput = row.querySelector<HTMLInputElement>('.sp-qty')!;
+  const spInput = row.querySelector<HTMLInputElement>('.sp-input')!;
+  const maybeDropNewSpeciesPin = (): void => {
+    if (pinnedSpeciesRows.has(row)) return;
+    if (!spInput.value.trim()) return;
+    pinnedSpeciesRows.add(row);
+    dropReportPin(spInput.value, 'new');
+  };
   const step = (delta: number): void => {
     qtyInput.value = String(Math.max(1, (parseInt(qtyInput.value, 10) || 1) + delta));
   };
   row.querySelector('.qty-minus')!.addEventListener('click', () => step(-1));
-  row.querySelector('.qty-plus')!.addEventListener('click', () => step(1));
+  row.querySelector('.qty-plus')!.addEventListener('click', () => {
+    step(1);
+    dropReportPin(spInput.value, 'add');
+  });
+  spInput.addEventListener('change', maybeDropNewSpeciesPin);
 
   wireCombo(
-    row.querySelector<HTMLInputElement>('.sp-input')!,
+    spInput,
     row.querySelector<HTMLElement>('.sp-combo .combo-list')!,
     () => speciesCache,
-    { matchMode: 'prefix', getDefault: () => seenSpeciesCache },
+    { matchMode: 'prefix', getDefault: () => seenSpeciesCache, onSelect: () => maybeDropNewSpeciesPin() },
   );
 
   const fileInput = row.querySelector<HTMLInputElement>('.sp-file')!;
@@ -629,6 +668,7 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
       row.querySelector<HTMLInputElement>('.sp-note')!.value = '';
       qtyInput.value = '1';
       rowImages.set(row, { pending: [], kept: [] });
+      pinnedSpeciesRows.delete(row);
       void renderRowThumbs(row);
     }
   });

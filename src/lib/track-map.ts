@@ -9,7 +9,8 @@ import L from './leaflet-setup';
 import { createMapLayers } from './map-layers';
 import { TRACK_SEGMENT_COLOR } from './track-preview';
 import { haversineMeters, bearingDegrees } from './gps-track';
-import type { ObservationTrack, TrackSegment } from '../types';
+import { escapeHtml } from './markdown';
+import type { ObservationTrack, TrackSegment, TrackReportPin } from '../types';
 
 /** Minimum ground distance between consecutive direction arrows along a
  * walked segment — close enough to read the route's shape, far enough not
@@ -40,6 +41,27 @@ export function addDirectionArrows(target: L.Map | L.LayerGroup, seg: TrackSegme
   }
 }
 
+const REPORT_PIN_COLOR: Record<TrackReportPin['kind'], string> = { new: '#8e44ad', add: '#e67e22' };
+
+/** One marker per species reported live during recording (see form.ts),
+ * placed at the exact position it happened — a distinct color/label for a
+ * species' first report vs. a later "+1" on the same species. */
+export function addReportPins(target: L.Map | L.LayerGroup, pins: TrackReportPin[]): void {
+  for (const pin of pins) {
+    const color = REPORT_PIN_COLOR[pin.kind];
+    const label = pin.kind === 'add' ? `+1 ${pin.species}` : pin.species;
+    const icon = L.divIcon({
+      className: 'track-report-pin-icon',
+      html: `<span style="background:${color}"></span>`,
+      iconSize: [12, 12],
+      iconAnchor: [6, 6],
+    });
+    L.marker([pin.lat, pin.lng], { icon, keyboard: false })
+      .bindTooltip(escapeHtml(label), { direction: 'top', offset: [0, -6] })
+      .addTo(target);
+  }
+}
+
 export function renderTrackMap(container: HTMLElement, track: ObservationTrack): void {
   const map = L.map(container, {
     zoomControl: false,
@@ -60,6 +82,8 @@ export function renderTrackMap(container: HTMLElement, track: ObservationTrack):
     // segment is the observer standing still, with no direction to show.
     if (seg.kind === 'walk') addDirectionArrows(map, seg);
   }
+
+  if (track.reportPins?.length) addReportPins(map, track.reportPins);
 
   const allPoints = track.points.map((p): [number, number] => [p.lat, p.lng]);
   if (allPoints.length) map.fitBounds(L.latLngBounds(allPoints), { padding: [20, 20] });
