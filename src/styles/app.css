@@ -799,6 +799,26 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
 .obs-table .row-actions { white-space: nowrap; }
 .obs-table .row-actions button { margin-inline-start: 4px; }
 
+/* Denser "real spreadsheet" density for the journal's table view mode. */
+table.obs-table-compact { font-size: .8rem; min-width: 640px; }
+.obs-table-compact th, .obs-table-compact td { padding: 4px 8px; }
+.obs-table-compact .notes-cell { max-width: 180px; }
+.obs-table-compact .species-qty { color: var(--ink-soft); font-size: .95em; }
+
+/* Excel-style per-column filter button inside a header cell. */
+.th-filter-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; margin-inline-start: 2px; padding: 0;
+  border: 0; background: transparent; color: var(--accent-700); border-radius: 4px; cursor: pointer; vertical-align: middle;
+}
+.th-filter-btn .icon { width: 12px; height: 12px; }
+.th-filter-btn:hover { background: var(--accent-100); }
+.th-filter-btn.active { color: var(--accent-900); background: var(--accent-100); }
+
+/* Compact inline "has coordinates" indicator next to the location name. */
+.coord-ind { display: inline-flex; color: var(--ink-soft); vertical-align: middle; margin-inline-start: 4px; }
+.coord-ind .icon { width: 12px; height: 12px; }
+
 /* ---------- cards / journal view ---------- */
 
 .cards-feed { display: flex; flex-direction: column; gap: 14px; }

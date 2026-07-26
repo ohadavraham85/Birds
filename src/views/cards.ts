@@ -394,33 +394,126 @@ function appendItems(feed: HTMLElement, items: Observation[]): void {
   feed.appendChild(grid);
 }
 
+type TableSortKey = 'dateTime' | 'species' | 'quantity' | 'locationName' | 'tags';
+/** Excel-style per-column sort, independent of the toolbar's chronological
+ * sortDir — only used while displayMode === 'table'. */
+let tableSortBy: TableSortKey | null = null;
+let tableSortDir: SortDir = 'desc';
+
+function sortForTable(items: Observation[]): Observation[] {
+  if (!tableSortBy) return items;
+  const dir = tableSortDir === 'asc' ? 1 : -1;
+  const byDate = (a: Observation, b: Observation): number => (a.dateTime || '').localeCompare(b.dateTime || '');
+  const arr = [...items];
+  arr.sort((a, b) => {
+    let r: number;
+    switch (tableSortBy) {
+      case 'quantity': r = totalQuantity(a) - totalQuantity(b); break;
+      case 'species': r = speciesLabel(a).localeCompare(speciesLabel(b), 'he'); break;
+      case 'locationName': r = (a.locationName || '').localeCompare(b.locationName || '', 'he'); break;
+      case 'tags': r = (a.tags[0] || '').localeCompare(b.tags[0] || '', 'he'); break;
+      default: r = byDate(a, b); break;
+    }
+    if (r === 0) r = byDate(a, b);
+    return r * dir;
+  });
+  return arr;
+}
+
+/** Per-column "autofilter" kinds — each maps to one of the journal's own
+ * filter Sets, so a column filter icon and the advanced-filter modal always
+ * agree on what's currently applied. */
+type ColumnFilterKind = 'species' | 'location' | 'tag';
+
+function columnFilterSet(kind: ColumnFilterKind): Set<string> {
+  return kind === 'species' ? selectedSpecies : kind === 'location' ? selectedLocations : selectedTags;
+}
+
+function columnFilterValues(kind: ColumnFilterKind): string[] {
+  if (kind === 'species') return [...new Set(observations.flatMap(speciesNames))].sort((a, b) => a.localeCompare(b, 'he'));
+  if (kind === 'location') return [...new Set(observations.map((o) => o.locationName || '(ללא מיקום)'))].sort((a, b) => a.localeCompare(b, 'he'));
+  return [...new Set(observations.flatMap((o) => (o.tags.length ? o.tags : ['(ללא תגית)'])))].sort((a, b) => a.localeCompare(b, 'he'));
+}
+
+/** Excel-style column autofilter: a small checkbox-list dialog scoped to
+ * just one column, sharing state with the journal's combined advanced
+ * filter modal (openFilterModal) so the filter badge/count stay in sync. */
+function openColumnFilterModal(kind: ColumnFilterKind, title: string): void {
+  const values = columnFilterValues(kind);
+  const local = new Set(columnFilterSet(kind));
+  const wrap = document.createElement('div');
+  wrap.className = 'filter-modal';
+  wrap.innerHTML = `
+    <h3>סינון: ${escapeHtml(title)}</h3>
+    <div class="filter-modal-checks">
+      ${values.map((v) => `
+        <label class="filter-modal-check">
+          <input type="checkbox" value="${escapeHtml(v)}" ${local.has(v) ? 'checked' : ''}>
+          <span>${escapeHtml(v)}</span>
+        </label>`).join('') || '<p class="hint">אין ערכים</p>'}
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-primary" id="col-filter-apply">החלת סינון</button>
+      <button type="button" class="btn" id="col-filter-clear">נקה סינון</button>
+    </div>`;
+  const close = showModal(wrap);
+  wrap.querySelectorAll<HTMLInputElement>('input[type=checkbox]').forEach((cb) => {
+    cb.addEventListener('change', () => { if (cb.checked) local.add(cb.value); else local.delete(cb.value); });
+  });
+  wrap.querySelector('#col-filter-apply')!.addEventListener('click', () => {
+    if (kind === 'species') selectedSpecies = local;
+    else if (kind === 'location') selectedLocations = local;
+    else selectedTags = local;
+    close();
+    render();
+  });
+  wrap.querySelector('#col-filter-clear')!.addEventListener('click', () => {
+    if (kind === 'species') selectedSpecies = new Set();
+    else if (kind === 'location') selectedLocations = new Set();
+    else selectedTags = new Set();
+    close();
+    render();
+  });
+}
+
+function filterIconHtml(kind: ColumnFilterKind): string {
+  const active = columnFilterSet(kind).size > 0;
+  return `<button type="button" class="th-filter-btn${active ? ' active' : ''}" data-filter="${kind}" title="סינון" aria-label="סינון">${icon('filter')}</button>`;
+}
+
+function sortIndHtml(key: TableSortKey): string {
+  return `<span class="sort-ind">${tableSortBy === key ? (tableSortDir === 'asc' ? ' ▲' : ' ▼') : ''}</span>`;
+}
+
 /** One row per observation, all relevant columns, with a frozen (sticky)
- * header — reuses table.ts's `.table-wrap`/`.obs-table` styling. The
- * selection checkbox column feeds the same `selectedIds`/`selectionMode`
- * bulk-edit toolbar the list view's long-press gesture uses. */
+ * header — reuses table.ts's `.table-wrap`/`.obs-table` styling. Column
+ * headers double as Excel-style sort/filter controls, on top of the
+ * journal's own compact search/group toolbar. The selection checkbox
+ * column feeds the same `selectedIds`/`selectionMode` bulk-edit toolbar the
+ * list view's long-press gesture uses. */
 function tableWithClick(items: Observation[]): HTMLElement {
+  const sorted = sortForTable(items);
   const wrap = document.createElement('div');
   wrap.className = 'table-wrap';
   wrap.innerHTML = `
-    <table class="obs-table">
+    <table class="obs-table obs-table-compact">
       <thead>
         <tr>
-          <th style="width:36px"><input type="checkbox" class="j-tbl-sel-all" title="בחירת כל המוצג"></th>
-          <th style="width:44px">#</th>
-          <th>תאריך ושעה</th>
-          <th>מין וכמות</th>
-          <th>מיקום</th>
-          <th>קואורדינטות</th>
-          <th>תגיות</th>
-          <th>צופים נוספים</th>
-          <th>מדיה</th>
+          <th style="width:28px"><input type="checkbox" class="j-tbl-sel-all" title="בחירת כל המוצג"></th>
+          <th style="width:34px">#</th>
+          <th class="sortable" data-sort="dateTime">תאריך ושעה${sortIndHtml('dateTime')}</th>
+          <th class="sortable" data-sort="species">מין וכמות${sortIndHtml('species')}${filterIconHtml('species')}</th>
+          <th class="sortable" data-sort="locationName">מיקום${sortIndHtml('locationName')}${filterIconHtml('location')}</th>
+          <th>תגיות${filterIconHtml('tag')}</th>
+          <th>צופים</th>
+          <th style="width:44px">מדיה</th>
           <th>הערות</th>
         </tr>
       </thead>
       <tbody></tbody>
     </table>`;
   const tbody = wrap.querySelector('tbody')!;
-  tbody.innerHTML = items.map(tableRowHtml).join('');
+  tbody.innerHTML = sorted.map(tableRowHtml).join('');
   wireTagBadges(tbody);
 
   const selAll = wrap.querySelector<HTMLInputElement>('.j-tbl-sel-all')!;
@@ -431,6 +524,24 @@ function tableWithClick(items: Observation[]): HTMLElement {
     selectionMode = true;
     items.forEach((o) => (selAll.checked ? selectedIds.add(o.id) : selectedIds.delete(o.id)));
     if (!selectedIds.size) selectionMode = false;
+    render();
+  });
+
+  wrap.querySelector('thead')!.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    const filterBtn = target.closest<HTMLButtonElement>('.th-filter-btn');
+    if (filterBtn) {
+      e.stopPropagation();
+      const kind = filterBtn.dataset.filter as ColumnFilterKind;
+      const title = kind === 'species' ? 'מין' : kind === 'location' ? 'מיקום' : 'תגיות';
+      openColumnFilterModal(kind, title);
+      return;
+    }
+    const th = target.closest<HTMLElement>('th.sortable');
+    if (!th) return;
+    const key = th.dataset.sort as TableSortKey;
+    if (tableSortBy === key) tableSortDir = tableSortDir === 'asc' ? 'desc' : 'asc';
+    else { tableSortBy = key; tableSortDir = key === 'dateTime' ? 'desc' : 'asc'; }
     render();
   });
 
@@ -455,6 +566,8 @@ function tableWithClick(items: Observation[]): HTMLElement {
 function tableRowHtml(o: Observation): string {
   const hasPhotos = allImages(o).length > 0;
   const mediaHref = o.mediaLink ? safeHttpUrl(o.mediaLink) : null;
+  const hasCoords = o.lat != null && o.lng != null;
+  const coordInd = hasCoords ? ` <span class="coord-ind" title="${escapeHtml(fmtCoords(o.lat, o.lng))}">${icon('compass')}</span>` : '';
   const mediaCell = `${hasPhotos ? `<span class="media-indicator" title="כולל תמונות מצורפות">${icon('camera')}</span>` : ''}`
     + `${mediaHref ? `<a href="${escapeHtml(mediaHref)}" target="_blank" rel="noopener" class="media-indicator media-link-icon" title="פתיחת התמונות/סרטונים בענן">${icon('link')}</a>` : ''}`;
   return `
@@ -463,8 +576,7 @@ function tableRowHtml(o: Observation): string {
       <td class="num">${o.seqNo ? `#${o.seqNo}` : ''}</td>
       <td class="num">${fmtDateTime(o.dateTime)}</td>
       <td><strong>${escapeHtml(speciesLabel(o))}</strong> <span class="species-qty">× ${totalQuantity(o)}</span></td>
-      <td>${escapeHtml(o.locationName || '')}</td>
-      <td class="num">${fmtCoords(o.lat, o.lng)}</td>
+      <td>${escapeHtml(o.locationName || '')}${coordInd}</td>
       <td>${o.tags.length ? tagBadgesHtml(o.tags) : ''}</td>
       <td>${o.observers?.length ? escapeHtml(o.observers.join(', ')) : ''}</td>
       <td>${mediaCell}</td>
