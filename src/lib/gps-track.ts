@@ -74,6 +74,12 @@ export function distanceMetersSoFar(): number {
   return totalDistanceMeters(points);
 }
 
+/** The most recent fix captured so far, or null if nothing's been recorded
+ * yet — used to place a report pin at "here, right now" while recording. */
+export function lastPoint(): TrackPoint | null {
+  return points.length ? points[points.length - 1]! : null;
+}
+
 /** A read-only peek at what's been captured so far, without stopping the
  * recording — used to auto-save a resumable draft (see lib/draft.ts).
  * Returns null if no session is in progress. */

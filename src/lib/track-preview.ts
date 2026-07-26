@@ -4,7 +4,7 @@
  * Leaflet map per card. Shares its segment colors with the map view's
  * "מסלולי צפרות" layer so the two stay visually consistent. */
 
-import type { TrackSegment } from '../types';
+import type { TrackSegment, TrackReportPin } from '../types';
 
 export const TRACK_SEGMENT_COLOR: Record<'walk' | 'stop', string> = { walk: '#2f7dff', stop: '#ff8a00' };
 
@@ -12,7 +12,7 @@ const WIDTH = 320;
 const HEIGHT = 160;
 const PAD = 16;
 
-export function renderTrackPreview(segments: TrackSegment[]): string | null {
+export function renderTrackPreview(segments: TrackSegment[], reportPins: TrackReportPin[] = []): string | null {
   const points = segments.flatMap((s) => s.points);
   if (points.length < 2) return null;
 
@@ -59,6 +59,21 @@ export function renderTrackPreview(segments: TrackSegment[]): string | null {
   ctx.beginPath(); ctx.arc(sx, sy, 4, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = '#c0392b';
   ctx.beginPath(); ctx.arc(ex, ey, 4, 0, Math.PI * 2); ctx.fill();
+
+  ctx.font = '10px sans-serif';
+  ctx.textBaseline = 'middle';
+  for (const pin of reportPins) {
+    const [x, y] = toXY(
+      Math.min(Math.max(pin.lat, minLat), maxLat),
+      Math.min(Math.max(pin.lng, minLng), maxLng),
+    );
+    ctx.fillStyle = pin.kind === 'new' ? '#8e44ad' : '#e67e22';
+    ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.stroke();
+    const label = pin.kind === 'add' ? `+1 ${pin.species}` : pin.species;
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillText(label, Math.min(x + 6, WIDTH - 4 - label.length * 5), y);
+  }
 
   return canvas.toDataURL('image/png');
 }

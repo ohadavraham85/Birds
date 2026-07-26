@@ -8,8 +8,10 @@ import html2pdf from 'html2pdf.js';
 
 import { fmtDateTime, fmtCoords, toast } from './ui';
 import { renderMarkdown, escapeHtml } from './markdown';
-import { getMedia, saveFile } from '../db/repository';
+import { getMedia, saveFile, getTrack } from '../db/repository';
 import { entriesOf, entryImages, totalQuantity } from './observation';
+import { fmtDistance } from './gps-track';
+import { TRACK_SEGMENT_COLOR } from './track-preview';
 import type { Observation } from '../types';
 
 const BIRDER = {
@@ -43,6 +45,24 @@ async function imgTag(localId: string | undefined): Promise<string> {
   return `<img src="${dataUrl}" style="width:150px;height:110px;object-fit:cover;border-radius:6px;margin:6px 0 0 6px;">`;
 }
 
+/** The route's schematic snapshot (walk/stop colors + reported-species pins),
+ * already rendered and stored on the track — see lib/track-preview.ts. Using
+ * this pre-rendered PNG instead of capturing the live Leaflet map keeps PDF
+ * export fast and reliable (no tile loading / network dependency at export time). */
+function trackBlockHtml(track: Awaited<ReturnType<typeof getTrack>>): string {
+  if (!track?.previewImage) return '';
+  return `
+    <div class="rpt-track">
+      <img src="${track.previewImage}" style="width:100%;max-width:420px;border-radius:6px;border:1px solid #ccc;display:block;margin-top:8px;">
+      <div class="rpt-track-legend">
+        <span style="color:${TRACK_SEGMENT_COLOR.walk}">■</span> הליכה
+        <span style="color:${TRACK_SEGMENT_COLOR.stop};margin-inline-start:10px">■</span> עצירה
+        ${track.distanceMeters ? ` · מרחק: ${fmtDistance(track.distanceMeters)}` : ''}
+        ${track.reportPins?.length ? ` · <span style="color:#8e44ad">●</span> דיווח מין <span style="color:#e67e22">●</span> תוספת (+1)` : ''}
+      </div>
+    </div>`;
+}
+
 async function obsBlock(o: Observation): Promise<string> {
   const entries = entriesOf(o);
   const entriesHtml: string[] = [];
@@ -55,6 +75,7 @@ async function obsBlock(o: Observation): Promise<string> {
         ${imgs ? `<div class="rpt-sp-imgs">${imgs}</div>` : ''}
       </li>`);
   }
+  const track = await getTrack(o.id);
   return `
     <div class="rpt-obs">
       <h2>${escapeHtml(o.locationName || 'תצפית')}${totalQuantity(o) ? ` — ${totalQuantity(o)} פרטים` : ''}</h2>
@@ -66,6 +87,7 @@ async function obsBlock(o: Observation): Promise<string> {
       </div>
       <ol class="rpt-species">${entriesHtml.join('')}</ol>
       ${o.notes ? `<div class="rpt-notes">${renderMarkdown(o.notes)}</div>` : ''}
+      ${trackBlockHtml(track)}
     </div>`;
 }
 
