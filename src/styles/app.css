@@ -340,6 +340,12 @@ label.notif-toggle-row.track-toggle-row input[type="checkbox"]:checked { backgro
   display: block; width: 12px; height: 12px; border-radius: 50%;
   border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .4);
 }
+.track-report-pin-label.leaflet-tooltip {
+  background: rgba(255, 255, 255, .92); color: #222; border: none;
+  border-radius: 5px; padding: 1px 6px; font-size: .72rem; font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .35); white-space: nowrap;
+}
+.track-report-pin-label.leaflet-tooltip::before { border-top-color: rgba(255, 255, 255, .92); }
 
 /* ---------- observation detail (view mode) ---------- */
 

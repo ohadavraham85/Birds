@@ -17,7 +17,7 @@ import { qs } from '../lib/dom';
 import { navigate } from '../main';
 import { createMapLayers, loadMapLayerState, setMapLayerPref, applyMapLayerState, type MapLayerState, type MapLayers } from '../lib/map-layers';
 import { TRACK_SEGMENT_COLOR } from '../lib/track-preview';
-import { addDirectionArrows } from '../lib/track-map';
+import { addDirectionArrows, addReportPins } from '../lib/track-map';
 import type { Observation, ObservationTrack } from '../types';
 
 let container: HTMLElement;
@@ -123,6 +123,7 @@ function drawTrack(t: ObservationTrack): void {
     }).addTo(tracksLayer!);
     if (seg.kind === 'walk') addDirectionArrows(tracksLayer!, seg);
   }
+  if (t.reportPins?.length) addReportPins(tracksLayer!, t.reportPins);
 }
 
 /** Fixed default extent covering all of Israel's territory — the map always

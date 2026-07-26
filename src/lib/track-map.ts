@@ -57,7 +57,7 @@ export function addReportPins(target: L.Map | L.LayerGroup, pins: TrackReportPin
       iconAnchor: [6, 6],
     });
     L.marker([pin.lat, pin.lng], { icon, keyboard: false })
-      .bindTooltip(escapeHtml(label), { direction: 'top', offset: [0, -6] })
+      .bindTooltip(escapeHtml(label), { direction: 'top', offset: [0, -6], permanent: true, className: 'track-report-pin-label' })
       .addTo(target);
   }
 }
