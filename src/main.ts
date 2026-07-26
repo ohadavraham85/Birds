@@ -110,13 +110,12 @@ async function showView(name: string, params?: ViewParams, mode: 'push' | 'repla
   }
 }
 
-/** Top-bar action button (⋯ overflow menu / ← back) and the FAB visibility. */
+/** Top-bar action button (gear → settings / ← back) and the FAB visibility. */
 function updateChrome(name: string): void {
   const isTab = TAB_VIEWS.includes(name);
   const action = document.getElementById('nav-action')!;
-  action.textContent = isTab ? '⋯' : '→';
-  action.title = isTab ? 'תפריט' : 'חזרה';
-  if (!isTab) document.getElementById('topbar-menu-list')!.hidden = true;
+  action.innerHTML = isTab ? icon('gear', 'icon-lg') : '→';
+  action.title = isTab ? 'הגדרות' : 'חזרה';
   const fab = document.getElementById('fab') as HTMLElement;
   fab.hidden = name !== 'cards' && name !== HOME_VIEW;
 }
@@ -140,16 +139,9 @@ function setupNav(): void {
     tab.addEventListener('click', () => navigate(tab.dataset.view!));
   });
 
-  const menuList = document.getElementById('topbar-menu-list')!;
   document.getElementById('nav-action')!.addEventListener('click', () => {
-    if (TAB_VIEWS.includes(currentView || '')) { menuList.hidden = !menuList.hidden; }
+    if (TAB_VIEWS.includes(currentView || '')) navigate('settings');
     else goBack();
-  });
-  menuList.querySelectorAll<HTMLElement>('button[data-view]').forEach((btn) => {
-    btn.addEventListener('click', () => { menuList.hidden = true; navigate(btn.dataset.view!); });
-  });
-  document.addEventListener('click', (e) => {
-    if (!(e.target as HTMLElement).closest('.topbar-menu')) menuList.hidden = true;
   });
 
   document.getElementById('fab')!.addEventListener('click', () => navigate('form'));
