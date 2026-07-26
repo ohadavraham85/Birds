@@ -887,6 +887,7 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
 .obs-card .qty { color: var(--accent-700); font-weight: 600; font-size: .9rem; }
 .obs-card .meta { color: var(--ink-soft); font-size: .85rem; margin-top: 3px; display: flex; gap: 12px; flex-wrap: wrap; }
 .obs-seq { font-weight: 700; color: var(--accent-700); }
+.media-indicator { display: inline-flex; color: var(--accent-600); }
 
 .species-ol { margin: 10px 0 0; padding-inline-start: 22px; }
 .species-li { margin-bottom: 8px; }
