@@ -6,7 +6,7 @@
 // @ts-expect-error - no bundled type declarations
 import html2pdf from 'html2pdf.js';
 
-import { fmtDateTime, fmtCoords, toast } from './ui';
+import { fmtDateTime, fmtCoords, toast, safeHttpUrl } from './ui';
 import { renderMarkdown, escapeHtml } from './markdown';
 import { getMedia, saveFile, getTrack } from '../db/repository';
 import { entriesOf, entryImages, totalQuantity } from './observation';
@@ -87,6 +87,7 @@ async function obsBlock(o: Observation): Promise<string> {
       </div>
       <ol class="rpt-species">${entriesHtml.join('')}</ol>
       ${o.notes ? `<div class="rpt-notes">${renderMarkdown(o.notes)}</div>` : ''}
+      ${o.mediaLink && safeHttpUrl(o.mediaLink) ? `<div class="rpt-media-link"><b>תמונות/סרטונים בענן:</b> <a href="${escapeHtml(o.mediaLink)}">${escapeHtml(o.mediaLink)}</a></div>` : ''}
       ${trackBlockHtml(track)}
     </div>`;
 }

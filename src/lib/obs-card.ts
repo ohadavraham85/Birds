@@ -5,7 +5,7 @@
  * compact summary (place/time/tags/coordinates only, no species or
  * notes) for the journal's "list" display mode. */
 
-import { fmtDateTime, fmtCoords, showImageModal, confirmDialog, toast } from './ui';
+import { fmtDateTime, fmtCoords, showImageModal, confirmDialog, toast, safeHttpUrl } from './ui';
 import { renderMarkdown, escapeHtml } from './markdown';
 import { getImageObjectUrl } from './media';
 import { entriesOf, entryImages } from './observation';
@@ -80,11 +80,13 @@ export function renderObservationSummary(o: Observation): HTMLElement {
 export function renderObservationCard(o: Observation): HTMLElement {
   const card = document.createElement('article');
   card.className = 'obs-card';
+  const mediaHref = o.mediaLink ? safeHttpUrl(o.mediaLink) : null;
   card.innerHTML = `
     ${headMetaHtml(o)}
     <ol class="species-ol"></ol>
     <div class="track-preview" data-track-preview hidden></div>
     ${o.notes ? `<div class="notes">${renderMarkdown(o.notes)}</div>` : ''}
+    ${mediaHref ? `<a href="${escapeHtml(mediaHref)}" target="_blank" rel="noopener" class="media-link">${icon('link')} תמונות/סרטונים בענן</a>` : ''}
   `;
   wireStarButton(card);
   wireTagBadges(card);

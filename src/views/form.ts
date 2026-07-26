@@ -6,7 +6,7 @@ import {
   saveObservation, getObservation, listObservations, listSpecies,
   saveMedia, mediaForObservation, deleteMedia, listLocationRows, listTagRows, addTag, saveTrack, getTrack,
 } from '../db/repository';
-import { toast, toLocalInputValue, fromLocalInputValue } from '../lib/ui';
+import { toast, toLocalInputValue, fromLocalInputValue, safeHttpUrl } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
 import { getImageObjectUrl } from '../lib/media';
 import { pickLocation } from '../lib/location-picker';
@@ -134,6 +134,11 @@ export function init(el: HTMLElement): void {
       <div class="field">
         <label for="f-notes">הערות כלליות <span class="hint">(פסקאות וירידות שורה נשמרות; אפשר Markdown)</span></label>
         <textarea id="f-notes" placeholder="סיכום שטח מפורט..."></textarea>
+      </div>
+
+      <div class="field">
+        <label for="f-media-link">קישור לתמונות/סרטונים בענן <span class="hint">(Google Photos, Lightroom וכו')</span></label>
+        <input type="url" id="f-media-link" placeholder="https://photos.app.goo.gl/...">
       </div>
 
       <button type="submit" class="btn btn-primary btn-block" id="save-btn">${icon('save')} שמירת התצפית</button>
@@ -320,6 +325,7 @@ function persistDraft(): void {
       lng: currentLng,
       coordsLocked,
       notes: qs<HTMLTextAreaElement>(container, '#f-notes').value,
+      mediaLink: input(container, '#f-media-link').value,
       entries: collectDraftEntries(),
     },
     track,
@@ -352,6 +358,7 @@ function resumeFromDraft(): void {
   coordsLocked = draft.fields.coordsLocked;
   updateLocationPinUI();
   qs<HTMLTextAreaElement>(container, '#f-notes').value = draft.fields.notes;
+  input(container, '#f-media-link').value = draft.fields.mediaLink ?? '';
   setEntries(draft.fields.entries.length ? draft.fields.entries : [{ species: '', quantity: 1 }]);
   if (draft.track && draft.track.points.length) {
     seedFromDraft(draft.track.points, draft.track.startedAt);
@@ -492,6 +499,7 @@ async function loadForEdit(id: string): Promise<void> {
     i === 0 && obs.images?.length ? { ...e, images: [...entryImages(e), ...obs.images] } : e);
   setEntries(withLegacy.length ? withLegacy : [{ species: '', quantity: 1 }]);
   qs<HTMLTextAreaElement>(container, '#f-notes').value = obs.notes || '';
+  input(container, '#f-media-link').value = obs.mediaLink || '';
 }
 
 /* ---------- tags (multi-select chip picker; replaces the old single project field) ---------- */
@@ -721,6 +729,11 @@ async function onSave(e: Event): Promise<void> {
   const rowEls = Array.from(container.querySelectorAll<HTMLElement>('#species-rows .sp-entry'));
   const iso = fromLocalInputValue(input(container, '#f-datetime').value);
   if (!iso) { toast('תאריך לא תקין', true); return; }
+  const mediaLink = input(container, '#f-media-link').value.trim();
+  if (mediaLink && !safeHttpUrl(mediaLink)) {
+    toast('קישור התמונות/סרטונים אינו תקין — יש להזין כתובת מלאה שמתחילה ב-https://', true, 5000);
+    return;
+  }
 
   const entries: SpeciesEntry[] = [];
   const keptIds = new Set<string>();
@@ -770,6 +783,7 @@ async function onSave(e: Event): Promise<void> {
     entries,
     images: [], // per-species now; keep empty for legacy field
     notes: qs<HTMLTextAreaElement>(container, '#f-notes').value,
+    mediaLink,
     deleted: false,
     updatedAt: '',
   };

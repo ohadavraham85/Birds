@@ -4,6 +4,18 @@ import { icon } from './icons';
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
 
+/** Only http(s) links are ever rendered as clickable `href`s from
+ * user-entered text (e.g. an observation's external media link) — guards
+ * against a `javascript:`-scheme value (typed directly or synced in from
+ * another household member) executing when clicked. Returns null for
+ * anything else, so callers can fall back to plain, non-clickable text. */
+export function safeHttpUrl(value: string): string | null {
+  try {
+    const u = new URL(value);
+    return u.protocol === 'http:' || u.protocol === 'https:' ? value : null;
+  } catch { return null; }
+}
+
 export function toast(msg: string, isError = false, ms = 3000): void {
   const t = document.getElementById('toast')!;
   t.textContent = msg;

@@ -24,6 +24,7 @@ export interface ObservationDraft {
     lng: number | null;
     coordsLocked: boolean;
     notes: string;
+    mediaLink: string;
     entries: { species: string; quantity: number; note?: string }[];
   };
   track: { points: TrackPoint[]; startedAt: number } | null;
