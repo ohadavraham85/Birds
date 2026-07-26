@@ -50,16 +50,16 @@ const PATHS = {
   star: '<path d="M12 3.5 14.6 9l6 .9-4.3 4.2 1 6-5.3-2.8-5.3 2.8 1-6L3.4 9.9l6-.9L12 3.5Z"/>',
 
   /* ---- tag icons: bird-family pictograms for the tag color/icon picker ---- */
-  tagRaptor: '<path d="M12 6c-3.5 1-7 4-9.5 3.3C4 11 7 12 9.5 11.8L12 15l2.5-3.2c2.5.2 5.5-.8 7-2.5C19 10 15.5 7 12 6Z"/><path d="M12 15v3.5"/><path d="m9.5 21 2.5-2 2.5 2"/>',
-  tagOwl: '<path d="M6 10c0-3.5 2.7-6 6-6s6 2.5 6 6-1.5 8-6 8-6-4.5-6-8Z"/><circle cx="9.3" cy="10" r="1.6"/><circle cx="14.7" cy="10" r="1.6"/><path d="M12 12.5 11 14h2l-1 1.5"/><path d="M4 8c1-1.5 2.3-2 3.3-1.8M20 8c-1-1.5-2.3-2-3.3-1.8"/>',
-  tagHeron: '<path d="M7 20c0-3 .5-5 2-6.5"/><path d="M10.5 20c0-3.5.5-6 2-7.5"/><path d="M17 4c-2.5 0-5 2-5 5 0 2 1 3 1 3l-3.5 1.2L12 15l3-1.3c2.5-.7 4-2.7 4-5.2 0-2-.8-3.3-2-4.5Z"/><circle cx="16.3" cy="6.2" r=".9" fill="currentColor" stroke="none"/>',
-  tagDuck: '<path d="M4 15c0-4 3-7 7-7 3.5 0 6 2 7 5h1.5c1 0 1.5.6 1.5 1.3 0 .8-.6 1.4-1.5 1.4H18c-1 2-3 3.3-6 3.3-4.5 0-8-1.5-8-4Z"/><circle cx="9" cy="10.3" r=".9" fill="currentColor" stroke="none"/><path d="M4 15c-1 0-2-.5-2-1.5"/>',
-  tagSongbird: '<path d="M6 14c0-3.5 3-6.5 7-6.5 3.8 0 6.5 2 6.5 4.7 0 2.5-2.3 4.3-5.5 4.3-.7 1.6-2.3 2.5-4 2.5-1 0-1.7-.3-1.7-.3"/><circle cx="16.3" cy="9.8" r=".9" fill="currentColor" stroke="none"/><path d="M6 14c-1.3 0-2.5-.6-3-1.8"/><path d="M9 20v-3M13 20v-2.5"/>',
+  tagRaptor: '<path d="M2 11c3-2.5 6.5-2 9 .8"/><path d="M22 11c-3-2.5-6.5-2-9 .8"/><circle cx="12" cy="12.3" r="1.6"/><path d="M12 13.9v6"/><path d="M9 20.2c1-.9 2-1.3 3-1.3s2 .4 3 1.3"/>',
+  tagOwl: '<path d="M6.5 9.5c0-3.6 2.5-6 5.5-6s5.5 2.4 5.5 6c0 4-2 7.5-5.5 7.5s-5.5-3.5-5.5-7.5Z"/><circle cx="9.3" cy="9.5" r="2"/><circle cx="14.7" cy="9.5" r="2"/><circle cx="9.3" cy="9.5" r=".7" fill="currentColor" stroke="none"/><circle cx="14.7" cy="9.5" r=".7" fill="currentColor" stroke="none"/><path d="M12 11.5l-1 1.8h2l-1 1.8"/><path d="M8 4.5 6.5 3M16 4.5 17.5 3"/>',
+  tagHeron: '<path d="M9 21v-6.5c0-1 .3-1.6 1-2.3l1.5-1.5"/><path d="M11.5 10.7c-1.2-1.2-1.2-3 0-4.2 1.2-1.2 3-1.2 3.5 0 .4 1-.3 2-1.3 2.2"/><path d="M13.7 8.7 17 7.5"/><circle cx="12.3" cy="7.6" r=".5" fill="currentColor" stroke="none"/><path d="M9 21v-3.5"/>',
+  tagDuck: '<path d="M4 14.5c0-3 2.5-5.5 6-5.5 3 0 5.5 1.7 6.3 4.3h1.2c.9 0 1.5.5 1.5 1.2s-.6 1.2-1.5 1.2h-.7c-.8 1.8-2.7 3-5.3 3-3.8 0-6.5-1.5-6.5-3.5"/><circle cx="8.5" cy="11.3" r=".6" fill="currentColor" stroke="none"/><path d="M3 19c1.3-1 2.7-1 4 0s2.7 1 4 0 2.7-1 4 0 2.7 1 4 0"/>',
+  tagSongbird: '<ellipse cx="12" cy="12.5" rx="5.5" ry="4"/><circle cx="16.5" cy="8.5" r="2.6"/><path d="M18.7 8.1 21 8.7 18.7 9.3Z" fill="currentColor" stroke="none"/><circle cx="17.2" cy="7.9" r=".5" fill="currentColor" stroke="none"/><path d="M7 14.3c-1.3.2-2.5.9-3.2 2"/><path d="M9 17v2M14 17v2"/><path d="M4 20.5h16"/>',
   tagGull: '<path d="M2.5 12c2.5-3 5-3.3 7-1 1.3-2.6 3.7-2.6 5 0 2-2.3 4.5-2 7 1-2.5-1-4.3-.6-5.7 1-1-1.7-2.6-1.7-3.6 0-1.7-2-4-1.7-6.3 0-1.4-1.6-3.2-2-4.4-1Z"/>',
-  tagWoodpecker: '<path d="M9 21V9"/><path d="M13.5 6.5c2.3 0 4.2 1 5.5 2.7-1.7.6-3-.2-3.6-1-1 1.3-2.7 1.8-4.4 1.2-1-2 .3-3.7 2.5-2.9Z"/><path d="M11 10c-1.7 0-3-.6-3.7-1.8"/><path d="m15.5 9 2 1.3"/>',
-  tagDove: '<path d="M5 13.5c0-3 2.7-5.5 6.5-5.5 4 0 6.5 2.2 6.5 4.8 0 2.4-2.2 4-5 4.2-.6 1.3-2 2-3.5 2-2.6 0-4.5-1-4.5-2.6 0-1 .8-1.7 1.7-1.9"/><circle cx="15.2" cy="9.8" r=".8" fill="currentColor" stroke="none"/>',
-  tagShorebird: '<path d="M6 20v-5.5c0-1 .3-1.6 1-2.2L9.5 10"/><path d="M9.5 10c1.7-1.7 3.6-1.7 4.5 0"/><ellipse cx="12" cy="10.5" rx="4" ry="2.7"/><path d="M16 10.2 19 9"/><path d="M9 20v-3.5"/>',
-  tagGeneric: '<path d="M4 4h7l9 9-7 7-9-9V4Z"/><circle cx="8.3" cy="8.3" r="1.3"/>',
+  tagWoodpecker: '<path d="M6 21V3"/><circle cx="12" cy="9" r="3"/><path d="M9.4 8.3 6.2 9Z" fill="currentColor" stroke="none"/><path d="M12 12c-1 2-1 5.5 0 8"/><circle cx="13" cy="8" r=".5" fill="currentColor" stroke="none"/><path d="M10 5.7c.4-1 1.4-1.6 2.5-1.5"/>',
+  tagDove: '<ellipse cx="11" cy="14" rx="7" ry="5"/><circle cx="17" cy="9" r="2.7"/><path d="M19.3 8.6 22 9.2 19.3 9.8Z" fill="currentColor" stroke="none"/><circle cx="17.6" cy="8.4" r=".5" fill="currentColor" stroke="none"/><path d="M7 12c-1.5.3-2.7 1.2-3.3 2.5"/>',
+  tagShorebird: '<ellipse cx="12" cy="12" rx="4.5" ry="3.5"/><path d="M16 11 19.5 9.5"/><circle cx="14.5" cy="10.7" r=".5" fill="currentColor" stroke="none"/><path d="M9.5 15.3 8.5 20M13 15.3 12.5 20"/>',
+  tagGeneric: '<ellipse cx="10" cy="15" rx="6.5" ry="4.5"/><circle cx="16" cy="9.5" r="3.2"/><path d="M18.8 9 22 9.8 18.8 10.6Z" fill="currentColor" stroke="none"/><circle cx="16.8" cy="8.7" r=".6" fill="currentColor" stroke="none"/><path d="M4 13.5 2.5 10.5"/><path d="M8 19.3V22M12 19.3V22"/>',
 } as const;
 
 export type IconName = keyof typeof PATHS;
