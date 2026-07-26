@@ -66,9 +66,9 @@ function headMetaHtml(o: Observation): string {
       ${fmtCoords(o.lat, o.lng) ? `<span dir="ltr">${icon('compass')} ${fmtCoords(o.lat, o.lng)}</span>` : ''}
       ${hasPhotos ? `<span class="media-indicator" title="כולל תמונות מצורפות">${icon('camera')}</span>` : ''}
       ${mediaHref ? `<a href="${escapeHtml(mediaHref)}" target="_blank" rel="noopener" class="media-indicator media-link-icon" title="פתיחת התמונות/סרטונים בענן">${icon('link')}</a>` : ''}
-      ${o.observers?.length ? `<span title="צופים נוספים">${icon('users')} ${escapeHtml(o.observers.join(', '))}</span>` : ''}
     </div>
-    ${o.tags?.length ? `<div class="tag-badge-row">${tagBadgesHtml(o.tags)}</div>` : ''}`;
+    ${o.tags?.length ? `<div class="tag-badge-row">${tagBadgesHtml(o.tags)}</div>` : ''}
+    ${o.observers?.length ? `<div class="observer-row" title="צופים נוספים">${icon('users')} ${escapeHtml(o.observers.join(', '))}</div>` : ''}`;
 }
 
 /** Compact row: location, time, tags and coordinates only — no species

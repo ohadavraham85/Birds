@@ -945,6 +945,7 @@ a.media-link-icon:hover { color: var(--accent-700); }
 }
 .tag-badge .icon { width: 13px; height: 13px; stroke: #fff; }
 .tag-badge-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.observer-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; color: var(--ink-soft); font-size: .85rem; }
 .obs-tile-badge { align-self: flex-start; font-size: .68rem; padding: 1px 8px; margin-top: 0; }
 
 /* ---------- observer picker (observation form) — same pattern as tag-picker, single accent color ---------- */
