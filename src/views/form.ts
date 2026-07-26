@@ -39,6 +39,9 @@ let prefillSpecies: string | null = null;
 let prefillCoords: { lat: number; lng: number } | null = null;
 let prefillLocationName: string | null = null;
 let prefillDate: string | null = null;
+let prefillEntries: { species: string; quantity: number; note?: string }[] | null = null;
+let prefillTags: string[] | null = null;
+let prefillNotes: string | null = null;
 let resumeDraftRequested = false;
 let draftInterval: ReturnType<typeof setInterval> | null = null;
 let obsId = '';
@@ -400,6 +403,9 @@ export function setParams(params: ViewParams): void {
   prefillCoords = (params?.lat != null && params?.lng != null) ? { lat: params.lat, lng: params.lng } : null;
   prefillLocationName = params?.locationName || null;
   prefillDate = params?.date || null;
+  prefillEntries = params?.prefillEntries?.length ? params.prefillEntries : null;
+  prefillTags = params?.prefillTags?.length ? params.prefillTags : null;
+  prefillNotes = params?.prefillNotes || null;
   resumeDraftRequested = params?.resumeDraft || false;
 }
 
@@ -423,7 +429,8 @@ export async function activate(): Promise<void> {
   }
 
   resetForm(!prefillCoords);
-  if (prefillSpecies) setEntries([{ species: prefillSpecies, quantity: 1 }]);
+  if (prefillEntries) setEntries(prefillEntries);
+  else if (prefillSpecies) setEntries([{ species: prefillSpecies, quantity: 1 }]);
   if (prefillCoords) {
     currentLat = prefillCoords.lat;
     currentLng = prefillCoords.lng;
@@ -436,10 +443,19 @@ export async function activate(): Promise<void> {
     const now = new Date();
     input(container, '#f-datetime').value = toLocalInputValue(new Date(y!, m! - 1, d!, now.getHours(), now.getMinutes()));
   }
+  if (prefillTags) {
+    const known = new Set(availableTags.map((t) => t.name));
+    selectedTags = new Set(prefillTags.filter((t) => known.has(t)));
+    renderTagPicker();
+  }
+  if (prefillNotes) qs<HTMLTextAreaElement>(container, '#f-notes').value = prefillNotes;
   prefillSpecies = null;
   prefillCoords = null;
   prefillLocationName = null;
   prefillDate = null;
+  prefillEntries = null;
+  prefillTags = null;
+  prefillNotes = null;
 
   if (resumeDraftRequested) resumeFromDraft();
   resumeDraftRequested = false;

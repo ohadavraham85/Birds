@@ -26,6 +26,15 @@ export interface ViewParams {
   /** From the home screen's draft-recovery banner: restore an auto-saved
    * in-progress new observation (fields + GPS track captured so far). */
   resumeDraft?: boolean;
+  /** From the home screen's AI smart-voice observation flow: pre-fills
+   * multiple species entries (each with its own quantity/note), replacing
+   * the single-species `species` field above when present. */
+  prefillEntries?: { species: string; quantity: number; note?: string }[];
+  /** From the AI smart-voice flow: pre-selects these tag names (must already
+   * exist — the form's tag picker doesn't auto-create from a prefill). */
+  prefillTags?: string[];
+  /** From the AI smart-voice flow: pre-fills the general notes field. */
+  prefillNotes?: string;
 }
 
 export interface View {

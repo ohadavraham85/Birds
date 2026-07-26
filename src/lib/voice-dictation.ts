@@ -49,17 +49,22 @@ export interface DictationHandlers {
   onEnd: () => void;
 }
 
-/** Starts listening for a single utterance; safely no-ops if already listening
- * or if the browser doesn't support the API (call isVoiceDictationSupported()
- * first to decide whether to show the mic button's active state at all). */
-export function startDictation(handlers: DictationHandlers): void {
+/** Starts listening; safely no-ops if already listening or if the browser
+ * doesn't support the API (call isVoiceDictationSupported() first to decide
+ * whether to show the mic button's active state at all).
+ *
+ * `continuous: true` keeps the recognizer listening across pauses between
+ * sentences instead of stopping after the first one — used by the home
+ * screen's whole-observation dictation, where the birder describes several
+ * species/location/notes in one go rather than a single short phrase. */
+export function startDictation(handlers: DictationHandlers, options: { continuous?: boolean } = {}): void {
   if (active) return;
   const Ctor = getCtor();
   if (!Ctor) { handlers.onError('דפדפן זה אינו תומך בהכתבה קולית'); return; }
 
   const rec = new Ctor();
   rec.lang = 'he-IL';
-  rec.continuous = false;
+  rec.continuous = options.continuous ?? false;
   rec.interimResults = true;
 
   rec.onresult = (e) => {

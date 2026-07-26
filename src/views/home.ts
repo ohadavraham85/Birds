@@ -14,6 +14,7 @@ import { escapeHtml } from '../lib/markdown';
 import { fmtDateTime } from '../lib/ui';
 import { icon } from '../lib/icons';
 import { loadDraft, clearDraft } from '../lib/draft';
+import { openSmartVoiceModal } from '../lib/voice-observation-modal';
 import { qs } from '../lib/dom';
 import { navigate } from '../main';
 import type { Observation, ObservationImage } from '../types';
@@ -710,14 +711,20 @@ function draftBannerHtml(): string {
     </div>`;
 }
 
+function smartVoiceButtonHtml(): string {
+  return `<button type="button" class="btn btn-block voice-ai-btn" id="smart-voice-btn">${icon('sparkles')} תצפית קולית חכמה</button>`;
+}
+
 function render(): void {
-  qs(container, '#home-body').innerHTML = draftBannerHtml() + birdOfDayHtml() + onThisDayHtml() + rangeBarHtml() + statsHtml(filteredObservations());
+  qs(container, '#home-body').innerHTML = draftBannerHtml() + smartVoiceButtonHtml() + birdOfDayHtml() + onThisDayHtml() + rangeBarHtml() + statsHtml(filteredObservations());
   renderBirdOfDayPhoto();
   renderOnThisDayPhoto();
 }
 
 function onClick(e: Event): void {
   const target = e.target as HTMLElement;
+
+  if (target.closest('#smart-voice-btn')) { openSmartVoiceModal(); return; }
 
   const draftAction = target.closest<HTMLElement>('[data-draft-action]');
   if (draftAction) {
