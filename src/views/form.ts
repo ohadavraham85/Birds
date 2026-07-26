@@ -4,7 +4,7 @@
 
 import {
   saveObservation, getObservation, listObservations, listSpecies,
-  saveMedia, mediaForObservation, deleteMedia, listLocationRows, listTagRows, addTag, saveTrack, getTrack,
+  saveMedia, mediaForObservation, deleteMedia, listLocationRows, listTagRows, addTag, listObserverRows, addObserver, saveTrack, getTrack,
 } from '../db/repository';
 import { toast, toLocalInputValue, fromLocalInputValue, safeHttpUrl } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
@@ -21,7 +21,7 @@ import { qs, input } from '../lib/dom';
 import { icon } from '../lib/icons';
 import { navigate, goBack } from '../main';
 import type { ViewParams } from './view';
-import type { Observation, ObservationImage, SpeciesEntry, LocationRow, ObservationTrack, TagRow, TrackReportPin } from '../types';
+import type { Observation, ObservationImage, SpeciesEntry, LocationRow, ObservationTrack, TagRow, ObserverRow, TrackReportPin } from '../types';
 
 interface PendingImage { id: string; file: File; url: string }
 interface RowImages { pending: PendingImage[]; kept: ObservationImage[] }
@@ -33,6 +33,8 @@ let speciesCache: string[] = [];
 let seenSpeciesCache: string[] = [];
 let availableTags: TagRow[] = [];
 let selectedTags = new Set<string>();
+let availableObservers: ObserverRow[] = [];
+let selectedObservers = new Set<string>();
 let locationSuggestions: string[] = [];
 let editId: string | null = null;
 let prefillSpecies: string | null = null;
@@ -112,6 +114,15 @@ export function init(el: HTMLElement): void {
       </div>
 
       <div class="field">
+        <label>צופים נוספים <span class="hint">(בחירה מרובה; אפשר גם להוסיף צופה חדש)</span></label>
+        <div class="observer-picker" id="observer-picker"></div>
+        <div class="tag-quick-add">
+          <input type="text" id="f-observer-new" placeholder="הוספת צופה חדש...">
+          <button type="button" class="btn btn-sm" id="f-observer-add">${icon('plus')} הוספה</button>
+        </div>
+      </div>
+
+      <div class="field">
         <label for="f-location">מיקום <span class="hint">(בחירה מרשימה או יצירת חדש)</span></label>
         <div class="combo with-arrow">
           <input type="text" id="f-location" placeholder='למשל: "בריכות דגים", "נחל שחל"'>
@@ -151,6 +162,9 @@ export function init(el: HTMLElement): void {
   qs(container, '#tag-picker').addEventListener('click', (e) => onTagChipClick(e));
   qs(container, '#f-tag-add').addEventListener('click', () => void onQuickAddTag());
   input(container, '#f-tag-new').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); void onQuickAddTag(); } });
+  qs(container, '#observer-picker').addEventListener('click', (e) => onObserverChipClick(e));
+  qs(container, '#f-observer-add').addEventListener('click', () => void onQuickAddObserver());
+  input(container, '#f-observer-new').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); void onQuickAddObserver(); } });
   wireCombo(input(container, '#f-location'), qs(container, '#location-list'), () => locationSuggestions, {
     onSelect: (name) => applyLocationName(name),
   });
@@ -323,6 +337,7 @@ function persistDraft(): void {
     fields: {
       dateTime: input(container, '#f-datetime').value,
       tags: [...selectedTags],
+      observers: [...selectedObservers],
       location: input(container, '#f-location').value,
       lat: currentLat,
       lng: currentLng,
@@ -355,6 +370,8 @@ function resumeFromDraft(): void {
   input(container, '#f-datetime').value = draft.fields.dateTime;
   selectedTags = new Set(draft.fields.tags ?? []);
   renderTagPicker();
+  selectedObservers = new Set(draft.fields.observers ?? []);
+  renderObserverPicker();
   input(container, '#f-location').value = draft.fields.location;
   currentLat = draft.fields.lat;
   currentLng = draft.fields.lng;
@@ -416,6 +433,7 @@ export async function activate(): Promise<void> {
   for (const o of all) for (const name of speciesNames(o)) seen.add(name);
   seenSpeciesCache = speciesCache.filter((s) => seen.has(s));
   availableTags = await listTagRows();
+  availableObservers = await listObserverRows();
   const savedLocationRows = await listLocationRows();
   savedLocations = new Map(savedLocationRows.map((l) => [l.name, l]));
   locationSuggestions = [...new Set([...all.map((o) => o.locationName), ...savedLocationRows.map((l) => l.name)].filter(Boolean))]
@@ -471,6 +489,8 @@ function resetForm(locate = true): void {
   qs(container, '#save-btn').innerHTML = `${icon('save')} שמירת התצפית`;
   selectedTags = new Set();
   renderTagPicker();
+  selectedObservers = new Set();
+  renderObserverPicker();
   currentLat = null;
   currentLng = null;
   coordsLocked = false;
@@ -516,6 +536,8 @@ async function loadForEdit(id: string): Promise<void> {
   setEntries(withLegacy.length ? withLegacy : [{ species: '', quantity: 1 }]);
   qs<HTMLTextAreaElement>(container, '#f-notes').value = obs.notes || '';
   input(container, '#f-media-link').value = obs.mediaLink || '';
+  selectedObservers = new Set(obs.observers ?? []);
+  renderObserverPicker();
 }
 
 /* ---------- tags (multi-select chip picker; replaces the old single project field) ---------- */
@@ -536,6 +558,39 @@ function onTagChipClick(e: Event): void {
   const name = btn.dataset.name!;
   if (selectedTags.has(name)) selectedTags.delete(name); else selectedTags.add(name);
   btn.classList.toggle('selected', selectedTags.has(name));
+}
+
+/* ---------- observers (multi-select chip picker, same pattern as tags) ---------- */
+
+function renderObserverPicker(): void {
+  const el = qs(container, '#observer-picker');
+  el.innerHTML = availableObservers.length
+    ? availableObservers.map((o) => `
+      <button type="button" class="observer-chip${selectedObservers.has(o.name) ? ' selected' : ''}" data-name="${escapeHtml(o.name)}">
+        ${escapeHtml(o.name)}
+      </button>`).join('')
+    : '<p class="hint" style="padding:2px 0">אין עדיין צופים שמורים — אפשר להוסיף אחד למטה.</p>';
+}
+
+function onObserverChipClick(e: Event): void {
+  const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('.observer-chip');
+  if (!btn) return;
+  const name = btn.dataset.name!;
+  if (selectedObservers.has(name)) selectedObservers.delete(name); else selectedObservers.add(name);
+  btn.classList.toggle('selected', selectedObservers.has(name));
+}
+
+async function onQuickAddObserver(): Promise<void> {
+  const inp = input(container, '#f-observer-new');
+  const name = inp.value.trim();
+  if (!name) return;
+  if (!availableObservers.some((o) => o.name === name)) {
+    await addObserver(name);
+    availableObservers = await listObserverRows();
+  }
+  selectedObservers.add(name);
+  inp.value = '';
+  renderObserverPicker();
 }
 
 async function onQuickAddTag(): Promise<void> {
@@ -800,6 +855,7 @@ async function onSave(e: Event): Promise<void> {
     images: [], // per-species now; keep empty for legacy field
     notes: qs<HTMLTextAreaElement>(container, '#f-notes').value,
     mediaLink,
+    observers: [...selectedObservers],
     deleted: false,
     updatedAt: '',
   };

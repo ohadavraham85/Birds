@@ -7,6 +7,7 @@ import type {
   LocationRow,
   ProjectRow,
   TagRow,
+  ObserverRow,
   MediaRecord,
   SettingRow,
   OutboxEntry,
@@ -23,6 +24,7 @@ export class BirdsDatabase extends Dexie {
   locations!: EntityTable<LocationRow, 'name'>;
   projects!: EntityTable<ProjectRow, 'name'>;
   tags!: EntityTable<TagRow, 'name'>;
+  observers!: EntityTable<ObserverRow, 'name'>;
   media!: EntityTable<MediaRecord, 'id'>;
   settings!: EntityTable<SettingRow, 'key'>;
   outbox!: EntityTable<OutboxEntry, 'id'>;
@@ -113,6 +115,14 @@ export class BirdsDatabase extends Dexie {
         });
       let n = 1;
       for (const row of rows) await tx.table('observations').update(row.id as string, { seqNo: n++ });
+    });
+    // v10: observers master list (name only), managed in Settings — lets an
+    // observation record other people present, multi-selected like tags.
+    this.version(10).stores({
+      ...stores, locations: 'name, updatedAt', projects: 'name, updatedAt', tracks: 'id, updatedAt',
+      files: 'id, kind, createdAt', tags: 'name, updatedAt',
+      observations: 'id, dateTime, updatedAt, synced, deleted, seqNo',
+      observers: 'name, updatedAt',
     });
   }
 }

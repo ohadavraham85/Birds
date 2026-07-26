@@ -15,6 +15,7 @@ import type {
   ProjectRow,
   TagRow,
   TagIconName,
+  ObserverRow,
   MediaRecord,
   ObservationTrack,
   StoredFile,
@@ -37,7 +38,7 @@ function emitChange(): void {
  * "something changed, re-render"). Sync backends that need to know exactly
  * which record changed (e.g. the Firebase sync engine) subscribe here
  * instead of re-scanning the whole database on every change. */
-export type MutationEntity = 'observation' | 'species' | 'location' | 'project' | 'file' | 'tag';
+export type MutationEntity = 'observation' | 'species' | 'location' | 'project' | 'file' | 'tag' | 'observer';
 export type MutationOp = 'upsert' | 'delete';
 type MutationListener = (entity: MutationEntity, id: string, op: MutationOp, payload: unknown) => void;
 const mutationListeners = new Set<MutationListener>();
@@ -410,6 +411,43 @@ export async function seedProjectsFromObservations(): Promise<number> {
   const ts = now();
   await db.projects.bulkPut([...toAdd].map((name) => ({ name, updatedAt: ts, deleted: false })));
   return toAdd.size;
+}
+
+/* ---------- observers (local master list, synced like species/locations) ---------- */
+
+/** All non-deleted saved observers, name-sorted. */
+export async function listObserverRows(): Promise<ObserverRow[]> {
+  const all = await db.observers.toArray();
+  return all.filter((o) => !o.deleted).sort((a, b) => a.name.localeCompare(b.name, 'he'));
+}
+
+/** Raw fetch including tombstones — for last-write-wins comparisons. */
+export function getObserverRaw(name: string): Promise<ObserverRow | undefined> {
+  return db.observers.get(name);
+}
+
+export async function addObserver(name: string): Promise<boolean> {
+  name = String(name || '').trim();
+  if (!name) return false;
+  const row: ObserverRow = { name, updatedAt: now(), deleted: false };
+  await db.observers.put(row);
+  emitMutation('observer', name, 'upsert', row);
+  return true;
+}
+
+export async function deleteObserver(name: string): Promise<void> {
+  const row = await db.observers.get(name);
+  if (!row) return;
+  row.deleted = true;
+  row.updatedAt = now();
+  await db.observers.put(row);
+  emitMutation('observer', name, 'delete', row);
+}
+
+export async function putObserverRaw(row: ObserverRow): Promise<void> {
+  await db.observers.put(row);
+  emitChange();
+  emitMutation('observer', row.name, row.deleted ? 'delete' : 'upsert', row);
 }
 
 /* ---------- tags (multi-valued, colored+iconed — replaces the old single

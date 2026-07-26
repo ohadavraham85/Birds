@@ -50,6 +50,7 @@ const PATHS = {
   star: '<path d="M12 3.5 14.6 9l6 .9-4.3 4.2 1 6-5.3-2.8-5.3 2.8 1-6L3.4 9.9l6-.9L12 3.5Z"/>',
   link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
   sparkles: '<path d="M10 2.5c.9 4.3 1.3 4.7 5.5 5.5-4.2.8-4.6 1.2-5.5 5.5-.9-4.3-1.3-4.7-5.5-5.5 4.2-.8 4.6-1.2 5.5-5.5Z" fill="currentColor" stroke="none"/><path d="M18 13c.5 2.2.7 2.4 2.8 2.8-2.1.4-2.3.6-2.8 2.8-.5-2.2-.7-2.4-2.8-2.8 2.1-.4 2.3-.6 2.8-2.8Z" fill="currentColor" stroke="none"/>',
+  users: '<circle cx="9" cy="8.2" r="3.2"/><path d="M3 19.3c0-3.4 2.7-5.6 6-5.6s6 2.2 6 5.6"/><circle cx="16.7" cy="9" r="2.6"/><path d="M15 13.8c2.6.5 4.3 2.4 4.5 5.4"/>',
 
   /* ---- tag icons: bird-family pictograms for the tag color/icon picker ---- */
   tagRaptor: '<path d="M2 11c3-2.5 6.5-2 9 .8"/><path d="M22 11c-3-2.5-6.5-2-9 .8"/><circle cx="12" cy="12.3" r="1.6"/><path d="M12 13.9v6"/><path d="M9 20.2c1-.9 2-1.3 3-1.3s2 .4 3 1.3"/>',

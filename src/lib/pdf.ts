@@ -90,6 +90,7 @@ async function obsBlock(o: Observation): Promise<string> {
         <div><b>מיקום:</b> ${escapeHtml(o.locationName || '—')}</div>
         <div><b>קואורדינטות:</b> <span dir="ltr">${fmtCoords(o.lat, o.lng) || '—'}</span></div>
         <div><b>תגיות:</b> ${o.tags.length ? o.tags.map(escapeHtml).join(', ') : '—'}</div>
+        ${o.observers?.length ? `<div><b>צופים נוספים:</b> ${o.observers.map(escapeHtml).join(', ')}</div>` : ''}
       </div>
       <ol class="rpt-species">${entriesHtml.join('')}</ol>
       ${o.notes ? `<div class="rpt-notes">${renderMarkdown(o.notes)}</div>` : ''}
