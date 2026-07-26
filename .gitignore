@@ -7,3 +7,6 @@ server/data.json
 .DS_Store
 worker/node_modules/
 worker/.wrangler/
+functions/lib/
+firebase-debug.log
+.firebase/

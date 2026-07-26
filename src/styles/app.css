@@ -1272,6 +1272,22 @@ a.media-link-icon:hover { color: var(--accent-700); }
 .modal .modal-actions { display: flex; gap: 10px; justify-content: flex-start; margin-top: 18px; }
 .modal img.full { max-width: 100%; border-radius: 10px; }
 
+/* ---------- smart voice observation (home + modal) ---------- */
+
+.voice-ai-btn {
+  margin-bottom: 14px; background: linear-gradient(135deg, var(--accent-700), var(--accent-600));
+  border-color: var(--accent-700); color: #fff;
+}
+.voice-ai-modal h3 { display: flex; align-items: center; gap: 8px; }
+.voice-ai-modal .hint { margin-top: 0; }
+.voice-ai-transcript {
+  min-height: 70px; max-height: 220px; overflow-y: auto;
+  background: var(--accent-50); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 10px 12px; margin-bottom: 10px; font-size: .92rem; line-height: 1.5; white-space: pre-wrap;
+}
+.voice-ai-transcript:empty::before { content: 'התמלול יופיע כאן...'; color: var(--ink-soft); }
+.voice-ai-interim { color: var(--ink-soft); }
+
 /* leaflet popup RTL */
 .leaflet-popup-content { direction: rtl; text-align: right; font-family: inherit; }
 

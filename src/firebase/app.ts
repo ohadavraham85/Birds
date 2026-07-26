@@ -8,6 +8,7 @@
 import { initializeApp, type FirebaseApp } from 'firebase/app';
 import { initializeFirestore, persistentLocalCache, persistentSingleTabManager, type Firestore } from 'firebase/firestore';
 import { getStorage, type FirebaseStorage } from 'firebase/storage';
+import { getFunctions, type Functions } from 'firebase/functions';
 
 const firebaseConfig = {
   apiKey: 'AIzaSyAPQuB8HSAaLnIWptriLCtLnpuqyDg4VFI',
@@ -21,6 +22,7 @@ const firebaseConfig = {
 let app: FirebaseApp | undefined;
 let db: Firestore | undefined;
 let storage: FirebaseStorage | undefined;
+let functions: Functions | undefined;
 
 function getApp(): FirebaseApp {
   if (!app) app = initializeApp(firebaseConfig);
@@ -48,4 +50,11 @@ export function firebaseDb(): Firestore {
 export function firebaseStorage(): FirebaseStorage {
   if (!storage) storage = getStorage(getApp());
   return storage;
+}
+
+/** Region must match wherever functions/src/index.ts is deployed
+ * (see the `region` option on parseVoiceObservation). */
+export function firebaseFunctions(): Functions {
+  if (!functions) functions = getFunctions(getApp(), 'us-central1');
+  return functions;
 }
