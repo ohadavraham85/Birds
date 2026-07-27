@@ -682,9 +682,10 @@ textarea { min-height: 130px; resize: vertical; white-space: pre-wrap; line-heig
 
 /* ---------- bulk-edit modal (table view) ---------- */
 
-.bulk-edit-modal { width: min(92vw, 440px); }
+.bulk-edit-modal { width: min(92vw, 440px); max-height: 85vh; overflow-y: auto; }
 .bulk-edit-modal .field { margin: 10px 0 14px; }
 .bulk-edit-modal .field.combo { margin-top: 6px; }
+.bulk-edit-modal textarea { min-height: 60px; }
 
 /* ---------- image previews ---------- */
 
@@ -917,7 +918,7 @@ table.obs-table-compact { font-size: .8rem; min-width: 640px; }
 }
 .bulk-toolbar[hidden] { display: none; }
 .bulk-toolbar .spacer { flex: 1; }
-#j-bulk-count { color: var(--ink-soft); font-size: .9rem; }
+#j-bulk-count { color: var(--ink); font-weight: 700; font-size: .95rem; white-space: nowrap; }
 
 .select-item { position: relative; cursor: pointer; }
 .select-item .obs-card { padding-inline-start: 44px; }
