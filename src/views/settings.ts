@@ -23,6 +23,7 @@ import {
 import { pickLocation, type LatLng } from '../lib/location-picker';
 import { toast, confirmDialog, fmtDateTime } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
+import { parseCsv, mapHeaders, parseCoordinates, parseDateTime, type HeaderMap, type CsvField } from '../lib/csv';
 import { qs, input } from '../lib/dom';
 import { icon, type IconName } from '../lib/icons';
 import { readExifDate } from '../lib/exif';
@@ -279,6 +280,17 @@ function syncHtml(fbCode: string): string {
         </label>
       </div>
     </div>
+
+    <div class="settings-card">
+      <h3>${icon('upload')} ייבוא תצפיות מ-CSV</h3>
+      <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
+        קובץ CSV עם עמודות כמו מין / תאריך ושעה / מיקום / כמות / תגיות / הערות —
+        כל שורה הופכת לתצפית חדשה. מינים חדשים נוספים אוטומטית לרשימת המינים.
+      </p>
+      <label class="btn" style="cursor:pointer">${icon('upload')} בחירת קובץ CSV
+        <input type="file" id="s-csv-import" accept=".csv,text/csv" hidden>
+      </label>
+    </div>
   `;
 }
 
@@ -286,6 +298,7 @@ function wireSync(): void {
   qs(container, '#s-fb-save').addEventListener('click', () => void onSaveFirebaseSync());
   qs(container, '#s-backup').addEventListener('click', () => void onBackup());
   input(container, '#s-restore').addEventListener('change', (e) => void onRestore(e));
+  input(container, '#s-csv-import').addEventListener('change', (e) => void onImportCsv(e));
   container.querySelector('#s-fb-resync')?.addEventListener('click', () => void onForceResync());
 
   unsubStatus = onFirebaseSyncStatus((s) => {
@@ -1266,6 +1279,57 @@ async function onRestore(e: Event): Promise<void> {
     await saveMedia({ id: m.id, obsId: m.obsId, name: m.name, mime: m.mime, blob: await dataUrlToBlob(m.data) });
   }
   toast('השחזור הושלם ✓');
+  await activate();
+}
+
+/* ---------- CSV import (bulk-create observations from a spreadsheet) ---------- */
+
+async function onImportCsv(e: Event): Promise<void> {
+  const fileInput = e.target as HTMLInputElement;
+  const file = fileInput.files?.[0];
+  fileInput.value = '';
+  if (!file) return;
+  let rows: string[][];
+  try { rows = parseCsv(await file.text()); }
+  catch { toast('קריאת הקובץ נכשלה — ודאו שזהו קובץ CSV תקין', true); return; }
+  if (rows.length < 2) { toast('הקובץ ריק או חסרה שורת כותרות', true); return; }
+
+  const map: HeaderMap = mapHeaders(rows[0]!);
+  if (!('species' in map)) { toast('לא נמצאה עמודת "מין הציפור" בקובץ (species / מין)', true, 5000); return; }
+
+  const known = new Set(await listSpecies());
+  let imported = 0;
+  let newSpecies = 0;
+  const val = (r: string[], f: CsvField): string => (map[f] != null ? String(r[map[f]!] ?? '').trim() : '');
+
+  for (const r of rows.slice(1)) {
+    const species = val(r, 'species');
+    if (!species) continue;
+    if (!known.has(species)) { await addSpecies(species); known.add(species); newSpecies++; }
+    let lat: number | null = null;
+    let lng: number | null = null;
+    if (map.coordinates != null) ({ lat, lng } = parseCoordinates(val(r, 'coordinates')));
+    if (map.lat != null && val(r, 'lat') !== '') lat = parseFloat(val(r, 'lat'));
+    if (map.lng != null && val(r, 'lng') !== '') lng = parseFloat(val(r, 'lng'));
+    const tags = val(r, 'tags').split(',').map((t) => t.trim()).filter(Boolean);
+
+    await saveObservation({
+      id: crypto.randomUUID(),
+      dateTime: parseDateTime(val(r, 'dateTime')) || new Date().toISOString(),
+      locationName: val(r, 'locationName'),
+      lat: Number.isFinite(lat) ? lat : null,
+      lng: Number.isFinite(lng) ? lng : null,
+      project: tags[0] || '',
+      tags,
+      entries: [{ species, quantity: Math.max(1, parseInt(val(r, 'quantity'), 10) || 1) }],
+      images: [],
+      notes: map.notes != null ? String(r[map.notes] ?? '') : '',
+      deleted: false,
+      updatedAt: '',
+    });
+    imported++;
+  }
+  toast(`יובאו ${imported} תצפיות` + (newSpecies ? ` (נוספו ${newSpecies} מינים חדשים לרשימת המאסטר)` : ''), false, 5000);
   await activate();
 }
 
