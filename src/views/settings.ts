@@ -53,6 +53,7 @@ let renamingTag: string | null = null;
 let selectedSpeciesNames = new Set<string>();
 let selectedLocationNames = new Set<string>();
 let newLocationCoords: LatLng | null = null;
+let locationSearchQuery = '';
 
 interface PhotoImportRow {
   file: File;
@@ -535,6 +536,7 @@ function listsHtml(): string {
         <button type="button" class="btn btn-sm btn-primary" id="s-loc-merge-all" hidden>${icon('layers')} מיזוג הכל</button>
         <button type="button" class="btn btn-sm btn-primary" id="s-loc-merge-selected" hidden>${icon('layers')} מיזוג הנבחרים (<span id="s-loc-sel-count">0</span>)</button>
       </div>
+      <input type="search" id="s-loc-search" class="filter-search" style="width:100%;margin-bottom:8px" placeholder="חיפוש חופשי ברשימת המיקומים...">
       <div class="dupe-list" id="s-location-dupes"></div>
       <div class="species-list" id="s-location-list"></div>
       <button class="btn btn-sm" id="s-loc-seed" style="margin-top:10px">${icon('refresh')} ייבוא מיקומים מהתצפיות הקיימות</button>
@@ -614,11 +616,16 @@ function wireLists(): void {
   qs(container, '#s-species-dupes').addEventListener('click', (e) => void onSpeciesDupesClick(e));
 
   newLocationCoords = null;
+  locationSearchQuery = '';
   qs(container, '#s-loc-add').addEventListener('click', () => void onAddLocationManaged());
   qs(container, '#s-loc-pick').addEventListener('click', () => void onPickLocationForAdd());
   qs(container, '#s-loc-seed').addEventListener('click', () => void onSeedLocations());
   qs(container, '#s-location-list').addEventListener('click', (e) => void onLocationListClick(e));
   qs(container, '#s-location-list').addEventListener('change', (e) => onLocationListSelChange(e));
+  input(container, '#s-loc-search').addEventListener('input', (e) => {
+    locationSearchQuery = (e.target as HTMLInputElement).value;
+    void renderLocationManageList();
+  });
   void renderLocationManageList();
 
   locationDupeGroups = [];
@@ -831,7 +838,9 @@ async function onMergeSelectedSpecies(): Promise<void> {
 /* ---------- locations list management ---------- */
 
 async function renderLocationManageList(): Promise<void> {
-  const rows = await listLocationRows();
+  const allRows = await listLocationRows();
+  const q = locationSearchQuery.trim().toLowerCase();
+  const rows = q ? allRows.filter((r) => r.name.toLowerCase().includes(q)) : allRows;
   const el = container.querySelector<HTMLElement>('#s-location-list');
   if (!el) return;
   el.innerHTML = rows.length
@@ -854,7 +863,7 @@ async function renderLocationManageList(): Promise<void> {
         <button type="button" class="del" data-name="${escapeHtml(r.name)}" title="מחיקה" aria-label="מחיקה">${icon('trash')}</button>
       </div>`;
     }).join('')
-    : '<p class="hint" style="padding:10px 12px">אין מיקומים שמורים.</p>';
+    : `<p class="hint" style="padding:10px 12px">${q ? 'אין מיקום התואם את החיפוש.' : 'אין מיקומים שמורים.'}</p>`;
   if (renamingLocation) el.querySelector<HTMLInputElement>('.rename-input')?.focus();
   updateLocationSelToolbar();
 }
