@@ -381,7 +381,11 @@ function render(): void {
  * spreadsheet-style table (table mode). */
 function appendItems(feed: HTMLElement, items: Observation[]): void {
   if (displayMode === 'list') {
-    for (const o of items) feed.appendChild(cardWithClick(o));
+    items.forEach((o, i) => {
+      const el = cardWithClick(o);
+      if (i % 2 === 1) el.classList.add('row-alt');
+      feed.appendChild(el);
+    });
     return;
   }
   if (displayMode === 'table') {
