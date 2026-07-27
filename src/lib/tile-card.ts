@@ -7,15 +7,19 @@
 import { fmtDateTimeWithWeekday, fmtCoords } from './ui';
 import { escapeHtml } from './markdown';
 import { getImageObjectUrl } from './media';
-import { entriesOf, entryImages } from './observation';
+import { entriesOf, entryImages, primarySpecies } from './observation';
 import { icon } from './icons';
 import { starButtonHtml, wireStarButton } from './obs-card';
 import { tagBadgesHtml, wireTagBadges } from './tag-badge';
+import { familyColor } from './family-color';
+import { SPECIES_DETAILS } from '../data/species-data';
 import type { Observation } from '../types';
 
 export function renderObservationTile(o: Observation, mode: 'square' | 'rect'): HTMLElement {
   const tile = document.createElement('article');
   tile.className = `obs-tile obs-tile-${mode}`;
+  const familyAccent = familyColor(SPECIES_DETAILS[primarySpecies(o)]?.family || '');
+  if (familyAccent) tile.style.setProperty('--family-color', familyAccent);
   const coords = fmtCoords(o.lat, o.lng);
   tile.innerHTML = `
     <div class="obs-tile-media">${icon('bird', 'obs-tile-fallback-icon')}</div>

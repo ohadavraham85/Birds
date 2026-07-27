@@ -8,13 +8,24 @@
 import { fmtDateTimeWithWeekday, fmtCoords, showImageModal, confirmDialog, toast, safeHttpUrl } from './ui';
 import { renderMarkdown, escapeHtml } from './markdown';
 import { getImageObjectUrl } from './media';
-import { entriesOf, entryImages, allImages } from './observation';
+import { entriesOf, entryImages, allImages, primarySpecies } from './observation';
 import { icon } from './icons';
 import { renderTrackMap } from './track-map';
 import { fmtDistance } from './gps-track';
 import { getTrack, deleteTrack, toggleStarred } from '../db/repository';
 import { tagBadgesHtml, wireTagBadges } from './tag-badge';
+import { familyColor } from './family-color';
+import { SPECIES_DETAILS } from '../data/species-data';
 import type { Observation } from '../types';
+
+/** Sets the --family-color custom property (read by .obs-card's left
+ * accent border in CSS) from the primary species' family, so the journal
+ * feed gets a bit of species-driven color variety at a glance. */
+function applyFamilyAccent(card: HTMLElement, o: Observation): void {
+  const family = SPECIES_DETAILS[primarySpecies(o)]?.family || '';
+  const color = familyColor(family);
+  if (color) card.style.setProperty('--family-color', color);
+}
 
 function mapsUrl(o: Observation): string | null {
   if (o.lat != null && o.lng != null) return `https://www.google.com/maps/search/?api=1&query=${o.lat},${o.lng}`;
@@ -77,6 +88,7 @@ export function renderObservationSummary(o: Observation): HTMLElement {
   const card = document.createElement('article');
   card.className = 'obs-card obs-card-compact';
   card.innerHTML = headMetaHtml(o);
+  applyFamilyAccent(card, o);
   wireStarButton(card);
   wireTagBadges(card);
   return card;
@@ -85,6 +97,7 @@ export function renderObservationSummary(o: Observation): HTMLElement {
 export function renderObservationCard(o: Observation): HTMLElement {
   const card = document.createElement('article');
   card.className = 'obs-card';
+  applyFamilyAccent(card, o);
   const mediaHref = o.mediaLink ? safeHttpUrl(o.mediaLink) : null;
   card.innerHTML = `
     ${headMetaHtml(o)}
