@@ -792,7 +792,8 @@ table.obs-table { border-collapse: collapse; width: 100%; min-width: 720px; font
 .obs-table th.sortable:hover { background: var(--accent-100); }
 .obs-table th.sorted { background: var(--accent-100); }
 .obs-table th .sort-ind { font-size: .8em; color: var(--accent-700); }
-.obs-table tbody tr:hover { background: var(--accent-50); }
+.obs-table tbody tr:nth-child(even) { background: var(--accent-50); }
+.obs-table tbody tr:hover { background: var(--accent-100); }
 .obs-table tr.selected { background: var(--accent-100); }
 .obs-table .num { direction: ltr; text-align: left; white-space: nowrap; }
 .obs-table .notes-cell { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -848,6 +849,11 @@ table.obs-table-compact { font-size: .8rem; min-width: 640px; }
 /* ---------- cards / journal view ---------- */
 
 .cards-feed { display: flex; flex-direction: column; gap: 14px; }
+/* Zebra striping for the journal's list mode. `.row-alt` is set in JS
+   (not CSS :nth-child) so striping resets cleanly at each group's start
+   instead of drifting whenever group-header buttons are interspersed
+   as flat siblings alongside the cards. */
+.row-alt .obs-card { background: var(--accent-50); }
 
 /* ---------- swipe-to-reveal row actions (journal list mode) ---------- */
 
