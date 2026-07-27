@@ -9,7 +9,7 @@ import { escapeHtml } from '../lib/markdown';
 import { parseCsv, mapHeaders, parseCoordinates, parseDateTime, type HeaderMap, type CsvField } from '../lib/csv';
 import { exportObservationsPdf } from '../lib/pdf';
 import { exportObservationsExcel } from '../lib/export-excel';
-import { openBulkEditModal, applyBulkEdit } from '../lib/bulk-edit';
+import { openBulkEditModal, applyBulkEdit, summarizeBulkEdit } from '../lib/bulk-edit';
 import { qs, input, select } from '../lib/dom';
 import { icon } from '../lib/icons';
 import { renderObservationTile } from '../lib/tile-card';
@@ -350,9 +350,7 @@ async function onBulkEdit(): Promise<void> {
   const result = await openBulkEditModal(selected.size, observations);
   if (!result) return;
 
-  const changeParts: string[] = [];
-  if ('tags' in result) changeParts.push(`תגיות → ${result.tags!.length ? result.tags!.join(', ') : '(ללא תגית)'}`);
-  if ('location' in result) changeParts.push(`מיקום → "${result.location!.name}"`);
+  const changeParts = summarizeBulkEdit(result);
   if (!(await confirmDialog(`לעדכן ${selected.size} תצפיות: ${changeParts.join(', ')}? הפעולה אינה הפיכה אוטומטית.`, 'עדכון'))) return;
 
   const updated = await applyBulkEdit([...selected], result);
