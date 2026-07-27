@@ -17,6 +17,7 @@ import { getFirebaseSyncCode, configureFirebaseSync, onFirebaseSyncStatus, isFir
 import {
   notificationsSupported, permissionState, requestPermission,
   isEnabled, setEnabled, isMigrationEnabled, setMigrationEnabled, isOnThisDayEnabled, setOnThisDayEnabled,
+  isInactivityEnabled, setInactivityEnabled,
   checkAndNotify, type NotifPermission,
 } from '../lib/notifications';
 import { pickLocation, type LatLng } from '../lib/location-picker';
@@ -72,7 +73,7 @@ const CATEGORY_META: Record<SettingsCategory, { icon: IconName; title: string; s
   sync: { icon: 'cloud', title: 'סנכרון וגיבוי', subtitle: 'סנכרון לענן (Firebase), גיבוי ושחזור' },
   lists: { icon: 'list', title: 'ניהול רשימות', subtitle: 'מינים, מיקומים, תגיות וצופים' },
   photos: { icon: 'camera', title: 'ייבוא תמונות', subtitle: 'שיוך תמונות לתצפיות לפי תאריך' },
-  notifications: { icon: 'bell', title: 'התראות', subtitle: 'תזכורות נדידה ו"בתאריך הזה"' },
+  notifications: { icon: 'bell', title: 'התראות', subtitle: 'תזכורות נדידה, "בתאריך הזה" וחוסר פעילות' },
   files: { icon: 'folder', title: 'קבצים', subtitle: 'דוחות תצפית וקבצים חיצוניים' },
   data: { icon: 'database', title: 'נתונים מקומיים', subtitle: 'מידע על המכשיר, מחיקת הכל' },
 };
@@ -126,6 +127,7 @@ export async function activate(): Promise<void> {
   const notifEnabled = await isEnabled();
   const notifMigration = await isMigrationEnabled();
   const notifOnThisDay = await isOnThisDayEnabled();
+  const notifInactivity = await isInactivityEnabled();
 
   const activeTheme = currentTheme();
   const activeAccent = currentAccent();
@@ -146,7 +148,7 @@ export async function activate(): Promise<void> {
     </div>
     ${activeCategory === 'appearance' ? appearanceHtml(activeTheme, activeAccent, activeFontColor, activeFontSize, activeFontWeight) : ''}
     ${activeCategory === 'sync' ? syncHtml(fbCode) : ''}
-    ${activeCategory === 'notifications' ? notificationsHtml(notifSupported, notifPermission, notifEnabled, notifMigration, notifOnThisDay) : ''}
+    ${activeCategory === 'notifications' ? notificationsHtml(notifSupported, notifPermission, notifEnabled, notifMigration, notifOnThisDay, notifInactivity) : ''}
     ${activeCategory === 'lists' ? listsHtml() : ''}
     ${activeCategory === 'photos' ? photosHtml() : ''}
     ${activeCategory === 'files' ? filesHtml() : ''}
@@ -297,7 +299,7 @@ function wireSync(): void {
 
 /* ---------- התראות ---------- */
 
-function notificationsHtml(notifSupported: boolean, notifPermission: NotifPermission, notifEnabled: boolean, notifMigration: boolean, notifOnThisDay: boolean): string {
+function notificationsHtml(notifSupported: boolean, notifPermission: NotifPermission, notifEnabled: boolean, notifMigration: boolean, notifOnThisDay: boolean, notifInactivity: boolean): string {
   return `
     <div class="settings-card">
       ${!notifSupported ? `
@@ -323,6 +325,10 @@ function notificationsHtml(notifSupported: boolean, notifPermission: NotifPermis
             <span>תזכורות "בתאריך הזה" (תצפיות משנים קודמות)</span>
             <input type="checkbox" id="s-notif-on-this-day" ${notifOnThisDay ? 'checked' : ''}>
           </label>
+          <label class="notif-toggle-row">
+            <span>תזכורת "לא תיעדתם זמן מה" (7 ימים ללא תצפית)</span>
+            <input type="checkbox" id="s-notif-inactivity" ${notifInactivity ? 'checked' : ''}>
+          </label>
         </div>`}
     </div>
   `;
@@ -335,6 +341,9 @@ function wireNotifications(): void {
   });
   container.querySelector('#s-notif-on-this-day')?.addEventListener('change', (e) => {
     void setOnThisDayEnabled((e.target as HTMLInputElement).checked);
+  });
+  container.querySelector('#s-notif-inactivity')?.addEventListener('change', (e) => {
+    void setInactivityEnabled((e.target as HTMLInputElement).checked);
   });
 }
 

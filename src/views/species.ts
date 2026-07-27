@@ -10,6 +10,7 @@ import { speciesNames, entriesOf, entryImages } from '../lib/observation';
 import { getImageObjectUrl } from '../lib/media';
 import { qs, input, select } from '../lib/dom';
 import { icon } from '../lib/icons';
+import { speciesInfoButtonHtml, openSpeciesInfoModal } from '../lib/species-info';
 import { viewModeToggleHtml, wireViewModeToggle, syncViewModeToggle, type ViewDisplayMode } from '../lib/view-mode';
 import { navigate } from '../main';
 import type { ViewParams } from './view';
@@ -329,6 +330,7 @@ function detailsHtml(name: string): string {
       <div class="sp-actions">
         ${n ? `<button class="btn btn-sm btn-primary act-obs" data-name="${escapeHtml(name)}">${icon('list')} הצגת ${n} התצפיות</button>` : ''}
         <button class="btn btn-sm act-report" data-name="${escapeHtml(name)}">${icon('plus')} דיווח תצפית</button>
+        ${speciesInfoButtonHtml(d.he, d.sci)}
       </div>
     </div>`;
 }
@@ -375,6 +377,12 @@ function tileHtml(name: string, mode: ViewDisplayMode): string {
 
 function onListClick(e: Event): void {
   const target = e.target as HTMLElement;
+  const infoBtn = target.closest<HTMLElement>('.species-info-btn');
+  if (infoBtn) {
+    e.stopPropagation();
+    openSpeciesInfoModal(infoBtn.dataset.speciesInfo!, infoBtn.dataset.speciesSci || undefined);
+    return;
+  }
   const obs = target.closest<HTMLElement>('.act-obs');
   if (obs) { e.stopPropagation(); navigate('cards', { filterSpecies: obs.dataset.name! }); return; }
   const report = target.closest<HTMLElement>('.act-report');

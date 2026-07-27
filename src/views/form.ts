@@ -19,6 +19,8 @@ import { renderTrackPreview } from '../lib/track-preview';
 import { saveDraft, loadDraft, clearDraft, type ObservationDraft } from '../lib/draft';
 import { qs, input } from '../lib/dom';
 import { icon } from '../lib/icons';
+import { openSpeciesInfoModal } from '../lib/species-info';
+import { SPECIES_DETAILS } from '../data/species-data';
 import { navigate, goBack } from '../main';
 import type { ViewParams } from './view';
 import type { Observation, ObservationImage, SpeciesEntry, LocationRow, ObservationTrack, TagRow, ObserverRow, TrackReportPin } from '../types';
@@ -688,6 +690,7 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
         <input type="number" class="sp-qty" min="1" step="1" inputmode="numeric" value="${entry.quantity}" title="מספר פרטים">
         <button type="button" class="btn btn-icon qty-plus" title="עוד">+</button>
       </div>
+      <button type="button" class="btn btn-icon sp-info" title="מידע על המין">${icon('info')}</button>
       <button type="button" class="btn btn-icon sp-remove" title="הסרת מין">✕</button>
     </div>
     <div class="sp-entry-second">
@@ -720,6 +723,12 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
     dropReportPin(spInput.value, 'add');
   });
   spInput.addEventListener('change', maybeDropNewSpeciesPin);
+
+  row.querySelector('.sp-info')!.addEventListener('click', () => {
+    const name = spInput.value.trim();
+    if (!name) { toast('בחרו קודם מין', true); return; }
+    openSpeciesInfoModal(name, SPECIES_DETAILS[name]?.sci);
+  });
 
   wireCombo(
     spInput,

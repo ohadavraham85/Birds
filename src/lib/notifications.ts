@@ -12,6 +12,11 @@ import type { Observation } from '../types';
 const KEY_ENABLED = 'notifEnabled';
 const KEY_MIGRATION = 'notifMigrationEnabled';
 const KEY_ON_THIS_DAY = 'notifOnThisDayEnabled';
+const KEY_INACTIVITY = 'notifInactivityEnabled';
+
+/** Days since the last observation before a "haven't logged in a while"
+ * nudge starts firing (once/day, until a new observation is saved). */
+const INACTIVITY_THRESHOLD_DAYS = 7;
 
 export function notificationsSupported(): boolean {
   return typeof Notification !== 'undefined';
@@ -52,6 +57,14 @@ export async function isOnThisDayEnabled(): Promise<boolean> {
 
 export async function setOnThisDayEnabled(value: boolean): Promise<void> {
   await setSetting(KEY_ON_THIS_DAY, value);
+}
+
+export async function isInactivityEnabled(): Promise<boolean> {
+  return getSetting<boolean>(KEY_INACTIVITY, true);
+}
+
+export async function setInactivityEnabled(value: boolean): Promise<void> {
+  await setSetting(KEY_INACTIVITY, value);
 }
 
 interface MigrationWindow { key: string; month: number; day: number; title: string; body: string }
@@ -118,11 +131,27 @@ async function checkOnThisDay(observations: Observation[]): Promise<void> {
   await setSetting(flagKey, true);
 }
 
+/** A gentle nudge once the most recent observation is more than
+ * INACTIVITY_THRESHOLD_DAYS old — skipped entirely for a brand-new user
+ * with no observations yet, so it never fires before their first outing. */
+async function checkInactivity(observations: Observation[]): Promise<void> {
+  if (!observations.length) return;
+  const now = new Date();
+  const latest = observations.reduce((a, b) => (new Date(a.dateTime) > new Date(b.dateTime) ? a : b));
+  const days = Math.floor((now.getTime() - new Date(latest.dateTime).getTime()) / 86_400_000);
+  if (days < INACTIVITY_THRESHOLD_DAYS) return;
+  const flagKey = `notifiedInactivity_${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
+  if (await getSetting<boolean>(flagKey, false)) return;
+  await showNotification('כבר זמן לצאת לצפות', `לא תיעדת תצפית כבר ${days} ימים — מתי היציאה הבאה?`, 'inactivity');
+  await setSetting(flagKey, true);
+}
+
 /** Call once at app startup (after Notification permission has been granted
- * and the feature turned on) to check both reminder types for "today". */
+ * and the feature turned on) to check all reminder types for "today". */
 export async function checkAndNotify(observations: Observation[]): Promise<void> {
   if (!notificationsSupported() || Notification.permission !== 'granted') return;
   if (!(await isEnabled())) return;
   if (await isMigrationEnabled()) await checkMigration();
   if (await isOnThisDayEnabled()) await checkOnThisDay(observations);
+  if (await isInactivityEnabled()) await checkInactivity(observations);
 }

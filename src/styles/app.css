@@ -745,6 +745,16 @@ textarea { min-height: 130px; resize: vertical; white-space: pre-wrap; line-heig
 .filter-modal-check { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: .92rem; cursor: pointer; }
 .filter-modal-check input { flex-shrink: 0; }
 
+/* ---------- species info modal (Wikipedia-backed quick reference) ---------- */
+
+.species-info-modal { max-width: 380px; }
+.species-info-modal h3 { margin-top: 0; color: var(--accent-900); }
+.species-info-loading { display: flex; align-items: center; gap: 8px; color: var(--ink-soft); }
+.species-info-img { width: 100%; max-height: 220px; object-fit: cover; border-radius: var(--radius); margin-bottom: 10px; }
+.species-info-extract { font-size: .92rem; line-height: 1.5; color: var(--ink); }
+.species-info-link { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; color: var(--accent-700); font-weight: 600; text-decoration: none; }
+.species-info-link:hover { text-decoration: underline; }
+
 /* ---------- export dropdown ---------- */
 
 .export-wrap { position: relative; display: inline-block; }
