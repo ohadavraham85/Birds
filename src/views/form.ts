@@ -450,8 +450,17 @@ export async function activate(): Promise<void> {
   availableObservers = await listObserverRows();
   const savedLocationRows = await listLocationRows();
   savedLocations = new Map(savedLocationRows.map((l) => [l.name, l]));
-  locationSuggestions = [...new Set([...all.map((o) => o.locationName), ...savedLocationRows.map((l) => l.name)].filter(Boolean))]
-    .sort((a, b) => a.localeCompare(b, 'he'));
+  // `all` is already newest-first by observation date, so de-duping by first
+  // occurrence surfaces each location in order of its most recent use.
+  // Saved locations never yet used in an observation have no "last used"
+  // date, so they're appended alphabetically at the end.
+  const usedByRecency: string[] = [];
+  const used = new Set<string>();
+  for (const o of all) {
+    if (o.locationName && !used.has(o.locationName)) { used.add(o.locationName); usedByRecency.push(o.locationName); }
+  }
+  const neverUsed = savedLocationRows.map((l) => l.name).filter((n) => !used.has(n)).sort((a, b) => a.localeCompare(b, 'he'));
+  locationSuggestions = [...usedByRecency, ...neverUsed];
 
   if (editId) {
     await loadForEdit(editId);
