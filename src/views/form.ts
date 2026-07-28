@@ -12,7 +12,7 @@ import { getImageObjectUrl } from '../lib/media';
 import { pickLocation } from '../lib/location-picker';
 import { wireCombo } from '../lib/combo';
 import { entriesOf, entryImages, speciesNames } from '../lib/observation';
-import { startTracking, stopTracking, isTracking, elapsedMs, snapshot, seedFromDraft, distanceMetersSoFar, fmtDistance, lastPoint } from '../lib/gps-track';
+import { startTracking, stopTracking, isTracking, elapsedMs, snapshot, seedFromDraft, distanceMetersSoFar, fmtDistance, lastPoint, haversineMeters } from '../lib/gps-track';
 import { isVoiceDictationSupported, startDictation, stopDictation, isDictating } from '../lib/voice-dictation';
 import { parseObservationVoice } from '../lib/voice-parse';
 import { renderTrackPreview } from '../lib/track-preview';
@@ -85,11 +85,15 @@ export function init(el: HTMLElement): void {
     <div class="form-head">
       <button type="button" class="btn btn-sm" id="back-btn">→ חזרה</button>
       <h2 id="form-title">תצפית חדשה</h2>
+      <button type="button" class="btn btn-icon voice-dictate-btn emphasized" id="voice-dictate-btn" title="הכתבת תצפית בקול" aria-label="הכתבת תצפית בקול">${icon('mic')}</button>
     </div>
     <form id="obs-form" autocomplete="off">
       <div class="field field-datetime-compact">
-        ${icon('clock')}
-        <input type="datetime-local" id="f-datetime" aria-label="תאריך ושעה" required>
+        <label for="f-datetime">תאריך ושעה</label>
+        <div class="datetime-inline">
+          ${icon('clock')}
+          <input type="datetime-local" id="f-datetime" required>
+        </div>
       </div>
 
       <div class="field-row location-row">
@@ -102,7 +106,6 @@ export function init(el: HTMLElement): void {
           </div>
         </div>
         <button type="button" class="btn btn-icon location-pin-btn" id="pick-map-btn" title="בחירת מיקום על המפה" aria-label="בחירת מיקום על המפה">${icon('pin')}</button>
-        <button type="button" class="btn btn-icon voice-dictate-btn" id="voice-dictate-btn" title="הכתבת תצפית בקול" aria-label="הכתבת תצפית בקול">${icon('mic')}</button>
       </div>
       <span class="hint" id="gps-status"></span>
       <div class="track-status voice-status" id="voice-status" hidden>
@@ -147,18 +150,18 @@ export function init(el: HTMLElement): void {
       </div>
 
       <div class="field">
-        <label>מיני הציפור <span class="hint">(לכל מין: כמות, הערה ותמונות משלו)</span></label>
+        <label>מיני הציפור</label>
         <div id="species-rows"></div>
         <button type="button" class="btn btn-sm" id="add-species-row" style="margin-top:6px">${icon('plus')} הוספת מין</button>
       </div>
 
       <div class="field">
-        <label for="f-notes">הערות כלליות <span class="hint">(פסקאות וירידות שורה נשמרות; אפשר Markdown)</span></label>
+        <label for="f-notes">הערות כלליות</label>
         <textarea id="f-notes" placeholder="סיכום שטח מפורט..."></textarea>
       </div>
 
       <div class="field">
-        <label for="f-media-link">קישור לתמונות/סרטונים בענן <span class="hint">(Google Photos, Lightroom וכו')</span></label>
+        <label for="f-media-link">קישור לתמונות/סרטונים בענן</label>
         <input type="url" id="f-media-link" placeholder="https://photos.app.goo.gl/...">
       </div>
 
@@ -660,6 +663,29 @@ function updateLocationPinUI(): void {
   btn.setAttribute('aria-label', title);
 }
 
+/** A saved location (Settings → ניהול רשימת המיקומים) counts as "here" once
+ * a fix lands within this many meters of it. */
+const NEARBY_LOCATION_RADIUS_M = 500;
+
+/** Whenever coordinates are (re)established — GPS auto-fill or a manual map
+ * pick — snaps the location name to the closest saved location if one falls
+ * within NEARBY_LOCATION_RADIUS_M, the same way typing a saved name locks
+ * coordinates to it (see applyLocationName). Silently no-ops otherwise, so
+ * an unrecognized spot just keeps whatever name/coords were set. */
+function maybeSnapToNearbySavedLocation(lat: number, lng: number): void {
+  let nearest: LocationRow | null = null;
+  let nearestDist = Infinity;
+  for (const loc of savedLocations.values()) {
+    if (loc.lat == null || loc.lng == null) continue;
+    const d = haversineMeters({ lat, lng, t: 0 }, { lat: loc.lat, lng: loc.lng, t: 0 });
+    if (d < nearestDist) { nearestDist = d; nearest = loc; }
+  }
+  if (nearest && nearestDist <= NEARBY_LOCATION_RADIUS_M) {
+    input(container, '#f-location').value = nearest.name;
+    applyLocationName(nearest.name);
+  }
+}
+
 function autoFillGps(): void {
   const status = qs(container, '#gps-status');
   if (!navigator.geolocation) { status.textContent = '(GPS לא זמין)'; return; }
@@ -672,6 +698,7 @@ function autoFillGps(): void {
       currentLng = pos.coords.longitude;
       status.textContent = `(דיוק ±${Math.round(pos.coords.accuracy)} מ')`;
       updateLocationPinUI();
+      maybeSnapToNearbySavedLocation(currentLat, currentLng);
     },
     () => { status.textContent = ''; },
     { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 },
@@ -687,6 +714,7 @@ async function openPicker(): Promise<void> {
     currentLng = result.lng;
     qs(container, '#gps-status').textContent = '(נבחר על המפה)';
     updateLocationPinUI();
+    maybeSnapToNearbySavedLocation(currentLat, currentLng);
   }
 }
 

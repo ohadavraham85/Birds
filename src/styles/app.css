@@ -520,9 +520,9 @@ label.notif-toggle-row.track-toggle-row input[type="checkbox"]:checked { backgro
 .field label { display: block; font-weight: 600; margin-bottom: 5px; color: var(--accent-900); font-size: .95rem; }
 .field .hint { font-weight: 400; color: var(--ink-soft); font-size: .8rem; }
 
-/* ---------- observation form: compact datetime row + location row with pin/mic icons ---------- */
+/* ---------- observation form: compact datetime row + location row with pin icon ---------- */
 
-.field-datetime-compact {
+.field-datetime-compact .datetime-inline {
   display: flex; align-items: center; gap: 6px;
   color: var(--ink-soft);
 }
@@ -542,6 +542,15 @@ label.notif-toggle-row.track-toggle-row input[type="checkbox"]:checked { backgro
 
 .field-row.two-up { display: flex; gap: 8px; margin-bottom: 14px; }
 .field-row.two-up > * { flex: 1 1 50%; min-width: 0; }
+
+/* Recording button lives in the form header, next to the title — emphasized
+ * (filled accent, larger) since it's a primary action, not a minor icon. */
+.form-head .voice-dictate-btn.emphasized {
+  background: var(--accent-700); border-color: var(--accent-700); color: #fff;
+  width: 40px; height: 40px; padding: 0; flex-shrink: 0;
+}
+.form-head .voice-dictate-btn.emphasized .icon { width: 20px; height: 20px; }
+.form-head .voice-dictate-btn.emphasized.recording { background: var(--danger); border-color: var(--danger); }
 
 input[type="text"], input[type="number"], input[type="datetime-local"],
 input[type="password"], textarea, select {
