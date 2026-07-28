@@ -520,6 +520,19 @@ label.notif-toggle-row.track-toggle-row input[type="checkbox"]:checked { backgro
 .field label { display: block; font-weight: 600; margin-bottom: 5px; color: var(--accent-900); font-size: .95rem; }
 .field .hint { font-weight: 400; color: var(--ink-soft); font-size: .8rem; }
 
+/* Bordered card wrapping each field-group in the observation form, so the
+ * different field types (date/time, location, tags/observers, species,
+ * notes, media link) read as distinct sections instead of one long block. */
+.field-frame {
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+.field-frame > .field:last-child,
+.field-frame > .field-row:last-child { margin-bottom: 0; }
+
 /* ---------- observation form: compact datetime row + location row with pin icon ---------- */
 
 .field-datetime-compact .datetime-inline {
