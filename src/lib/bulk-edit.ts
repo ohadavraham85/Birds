@@ -2,11 +2,13 @@
  * a batch of observations at once) and the mutation that applies it. Shared
  * by the table view and the journal's long-press multi-select. */
 
-import { listTagRows, listLocationRows, listObserverRows, addObserver, getObservation, saveObservation } from '../db/repository';
+import { listTagRows, listLocationRows, listObserverRows, addObserver, addTag, getObservation, saveObservation } from '../db/repository';
 import { wireCombo } from './combo';
 import { escapeHtml } from './markdown';
 import { icon } from './icons';
 import type { Observation, LocationRow } from '../types';
+
+const DEFAULT_TAG_COLORS = ['#2e7d32', '#1565c0', '#c62828', '#6a1b9a', '#ef6c00', '#00838f'];
 
 export interface BulkEditResult {
   /** Replaces each selected observation's tags with exactly this set. */
@@ -20,12 +22,13 @@ export interface BulkEditResult {
 }
 
 export async function openBulkEditModal(count: number, observations: Observation[]): Promise<BulkEditResult | null> {
-  const tagRows = await listTagRows();
+  let tagRows = await listTagRows();
   const locationRows = await listLocationRows();
   let observerRows = await listObserverRows();
   const savedLocations = new Map<string, LocationRow>(locationRows.map((l) => [l.name, l]));
   const locationSuggestions = [...new Set([...observations.map((o) => o.locationName), ...locationRows.map((l) => l.name)].filter(Boolean))]
     .sort((a, b) => a.localeCompare(b, 'he'));
+  const selectedTags = new Set<string>();
   const selectedObservers = new Set<string>();
 
   return new Promise((resolve) => {
@@ -35,12 +38,17 @@ export async function openBulkEditModal(count: number, observations: Observation
       <div class="modal bulk-edit-modal">
         <h3>עריכה מרוכזת — ${count} תצפיות</h3>
         <label class="notif-toggle-row"><span>עדכון תגיות</span><input type="checkbox" id="be-tags-toggle"></label>
-        <div class="filter-modal-checks" id="be-tags-field" hidden>
-          ${tagRows.map((t) => `
-            <label class="filter-modal-check">
-              <input type="checkbox" class="be-tag-check" value="${escapeHtml(t.name)}">
-              <span>${escapeHtml(t.name)}</span>
-            </label>`).join('') || '<p class="hint">אין תגיות שמורות — ניתן ליצור בהגדרות</p>'}
+        <div class="field bulk-select" id="be-tags-field" hidden>
+          <button type="button" class="bulk-select-btn" id="be-tags-btn" aria-expanded="false">
+            <span id="be-tags-label">בחירת תגיות...</span><span class="bulk-select-caret">▾</span>
+          </button>
+          <div class="bulk-select-menu" id="be-tags-menu" hidden>
+            <div id="be-tag-checks"></div>
+            <div class="tag-quick-add">
+              <input type="text" id="be-tag-new" placeholder="הוספת תגית חדשה...">
+              <button type="button" class="btn btn-sm" id="be-tag-add">${icon('plus')} הוספה</button>
+            </div>
+          </div>
         </div>
         <label class="notif-toggle-row"><span>עדכון מיקום</span><input type="checkbox" id="be-location-toggle"></label>
         <div class="field combo" id="be-location-field" hidden>
@@ -49,11 +57,16 @@ export async function openBulkEditModal(count: number, observations: Observation
           <span class="hint" id="be-location-hint"></span>
         </div>
         <label class="notif-toggle-row"><span>עדכון צופים</span><input type="checkbox" id="be-observers-toggle"></label>
-        <div class="field" id="be-observers-field" hidden>
-          <div class="observer-picker" id="be-observer-picker"></div>
-          <div class="tag-quick-add">
-            <input type="text" id="be-observer-new" placeholder="הוספת צופה חדש...">
-            <button type="button" class="btn btn-sm" id="be-observer-add">${icon('plus')} הוספה</button>
+        <div class="field bulk-select" id="be-observers-field" hidden>
+          <button type="button" class="bulk-select-btn" id="be-observers-btn" aria-expanded="false">
+            <span id="be-observers-label">בחירת צופים...</span><span class="bulk-select-caret">▾</span>
+          </button>
+          <div class="bulk-select-menu" id="be-observers-menu" hidden>
+            <div id="be-observer-checks"></div>
+            <div class="tag-quick-add">
+              <input type="text" id="be-observer-new" placeholder="הוספת צופה חדש...">
+              <button type="button" class="btn btn-sm" id="be-observer-add">${icon('plus')} הוספה</button>
+            </div>
           </div>
         </div>
         <label class="notif-toggle-row"><span>הוספת הערה</span><input type="checkbox" id="be-notes-toggle"></label>
@@ -72,11 +85,73 @@ export async function openBulkEditModal(count: number, observations: Observation
       </div>`;
     document.getElementById('modal-root')!.appendChild(backdrop);
 
-    const close = (result: BulkEditResult | null): void => { backdrop.remove(); resolve(result); };
+    const dropdownCleanups: (() => void)[] = [];
+    const close = (result: BulkEditResult | null): void => {
+      dropdownCleanups.forEach((fn) => fn());
+      backdrop.remove();
+      resolve(result);
+    };
+
+    /** Wires a compact toggle-button + checklist-panel control, so the modal
+     * doesn't show every tag/observer checkbox at once — closes on an
+     * outside click, like the map's layer-stack menu. The document-level
+     * listener is torn down in `close()` so repeat modal opens don't leak it. */
+    const wireDropdown = (btn: HTMLButtonElement, menu: HTMLElement): void => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        menu.hidden = !menu.hidden;
+        btn.setAttribute('aria-expanded', String(!menu.hidden));
+      });
+      const onOutsideClick = (e: MouseEvent): void => {
+        if (!menu.hidden && !menu.contains(e.target as Node) && e.target !== btn) {
+          menu.hidden = true;
+          btn.setAttribute('aria-expanded', 'false');
+        }
+      };
+      document.addEventListener('click', onOutsideClick);
+      dropdownCleanups.push(() => document.removeEventListener('click', onOutsideClick));
+    };
 
     const tagsToggle = backdrop.querySelector<HTMLInputElement>('#be-tags-toggle')!;
     const tagsField = backdrop.querySelector<HTMLElement>('#be-tags-field')!;
     tagsToggle.addEventListener('change', () => { tagsField.hidden = !tagsToggle.checked; });
+    const tagsBtn = backdrop.querySelector<HTMLButtonElement>('#be-tags-btn')!;
+    const tagsMenu = backdrop.querySelector<HTMLElement>('#be-tags-menu')!;
+    const tagsLabel = backdrop.querySelector<HTMLElement>('#be-tags-label')!;
+    const tagChecks = backdrop.querySelector<HTMLElement>('#be-tag-checks')!;
+    wireDropdown(tagsBtn, tagsMenu);
+    const updateTagsLabel = (): void => {
+      tagsLabel.textContent = selectedTags.size
+        ? `${selectedTags.size} תגיות נבחרו: ${[...selectedTags].join(', ')}`
+        : 'בחירת תגיות...';
+    };
+    const renderTagChecks = (): void => {
+      tagChecks.innerHTML = tagRows.map((t) => `
+        <label class="filter-modal-check">
+          <input type="checkbox" class="be-tag-check" value="${escapeHtml(t.name)}" ${selectedTags.has(t.name) ? 'checked' : ''}>
+          <span>${escapeHtml(t.name)}</span>
+        </label>`).join('') || '<p class="hint">אין תגיות שמורות</p>';
+    };
+    renderTagChecks();
+    tagChecks.addEventListener('change', (e) => {
+      const cb = e.target as HTMLInputElement;
+      if (!cb.classList.contains('be-tag-check')) return;
+      if (cb.checked) selectedTags.add(cb.value); else selectedTags.delete(cb.value);
+      updateTagsLabel();
+    });
+    backdrop.querySelector('#be-tag-add')!.addEventListener('click', async () => {
+      const inp = backdrop.querySelector<HTMLInputElement>('#be-tag-new')!;
+      const name = inp.value.trim();
+      if (!name) return;
+      if (!tagRows.some((t) => t.name === name)) {
+        await addTag(name, DEFAULT_TAG_COLORS[tagRows.length % DEFAULT_TAG_COLORS.length]!, 'tagGeneric');
+        tagRows = await listTagRows();
+      }
+      selectedTags.add(name);
+      inp.value = '';
+      renderTagChecks();
+      updateTagsLabel();
+    });
 
     const locationToggle = backdrop.querySelector<HTMLInputElement>('#be-location-toggle')!;
     const locationField = backdrop.querySelector<HTMLElement>('#be-location-field')!;
@@ -97,19 +172,29 @@ export async function openBulkEditModal(count: number, observations: Observation
     const observersToggle = backdrop.querySelector<HTMLInputElement>('#be-observers-toggle')!;
     const observersField = backdrop.querySelector<HTMLElement>('#be-observers-field')!;
     observersToggle.addEventListener('change', () => { observersField.hidden = !observersToggle.checked; });
-    const observerPicker = backdrop.querySelector<HTMLElement>('#be-observer-picker')!;
-    const renderObserverPicker = (): void => {
-      observerPicker.innerHTML = observerRows.map((o) => `
-        <button type="button" class="observer-chip${selectedObservers.has(o.name) ? ' selected' : ''}" data-name="${escapeHtml(o.name)}">${escapeHtml(o.name)}</button>`).join('')
-        || '<p class="hint">אין צופים שמורים</p>';
+    const observersBtn = backdrop.querySelector<HTMLButtonElement>('#be-observers-btn')!;
+    const observersMenu = backdrop.querySelector<HTMLElement>('#be-observers-menu')!;
+    const observersLabel = backdrop.querySelector<HTMLElement>('#be-observers-label')!;
+    const observerChecks = backdrop.querySelector<HTMLElement>('#be-observer-checks')!;
+    wireDropdown(observersBtn, observersMenu);
+    const updateObserversLabel = (): void => {
+      observersLabel.textContent = selectedObservers.size
+        ? `${selectedObservers.size} צופים נבחרו: ${[...selectedObservers].join(', ')}`
+        : 'בחירת צופים...';
     };
-    renderObserverPicker();
-    observerPicker.addEventListener('click', (e) => {
-      const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('.observer-chip');
-      if (!btn) return;
-      const name = btn.dataset.name!;
-      if (selectedObservers.has(name)) selectedObservers.delete(name); else selectedObservers.add(name);
-      btn.classList.toggle('selected', selectedObservers.has(name));
+    const renderObserverChecks = (): void => {
+      observerChecks.innerHTML = observerRows.map((o) => `
+        <label class="filter-modal-check">
+          <input type="checkbox" class="be-observer-check" value="${escapeHtml(o.name)}" ${selectedObservers.has(o.name) ? 'checked' : ''}>
+          <span>${escapeHtml(o.name)}</span>
+        </label>`).join('') || '<p class="hint">אין צופים שמורים</p>';
+    };
+    renderObserverChecks();
+    observerChecks.addEventListener('change', (e) => {
+      const cb = e.target as HTMLInputElement;
+      if (!cb.classList.contains('be-observer-check')) return;
+      if (cb.checked) selectedObservers.add(cb.value); else selectedObservers.delete(cb.value);
+      updateObserversLabel();
     });
     backdrop.querySelector('#be-observer-add')!.addEventListener('click', async () => {
       const inp = backdrop.querySelector<HTMLInputElement>('#be-observer-new')!;
@@ -121,7 +206,8 @@ export async function openBulkEditModal(count: number, observations: Observation
       }
       selectedObservers.add(name);
       inp.value = '';
-      renderObserverPicker();
+      renderObserverChecks();
+      updateObserversLabel();
     });
 
     const notesToggle = backdrop.querySelector<HTMLInputElement>('#be-notes-toggle')!;
@@ -135,7 +221,7 @@ export async function openBulkEditModal(count: number, observations: Observation
     backdrop.querySelector('#be-apply')!.addEventListener('click', () => {
       const result: BulkEditResult = {};
       if (tagsToggle.checked) {
-        result.tags = [...backdrop.querySelectorAll<HTMLInputElement>('.be-tag-check:checked')].map((cb) => cb.value);
+        result.tags = [...selectedTags];
       }
       if (locationToggle.checked) {
         const name = locationInput.value.trim();
