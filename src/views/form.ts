@@ -100,7 +100,7 @@ export function init(el: HTMLElement): void {
         <div class="field field-location-prominent">
           <label for="f-location">מיקום התצפית</label>
           <div class="combo with-arrow">
-            <input type="text" id="f-location" placeholder='למשל: "בריכות דגים", "נחל שחל"'>
+            <input type="text" id="f-location">
             <button type="button" class="combo-toggle" title="פתיחת הרשימה" aria-label="פתיחת הרשימה">▾</button>
             <div class="combo-list" id="location-list" hidden></div>
           </div>
@@ -130,7 +130,7 @@ export function init(el: HTMLElement): void {
           <div class="bulk-select-menu" id="tags-select-menu" hidden>
             <div id="tag-checks"></div>
             <div class="tag-quick-add">
-              <input type="text" id="f-tag-new" placeholder="הוספת תגית חדשה...">
+              <input type="text" id="f-tag-new" aria-label="הוספת תגית חדשה">
               <button type="button" class="btn btn-sm" id="f-tag-add">${icon('plus')} הוספה</button>
             </div>
           </div>
@@ -142,7 +142,7 @@ export function init(el: HTMLElement): void {
           <div class="bulk-select-menu" id="observers-select-menu" hidden>
             <div id="observer-checks"></div>
             <div class="tag-quick-add">
-              <input type="text" id="f-observer-new" placeholder="הוספת צופה חדש...">
+              <input type="text" id="f-observer-new" aria-label="הוספת צופה חדש">
               <button type="button" class="btn btn-sm" id="f-observer-add">${icon('plus')} הוספה</button>
             </div>
           </div>
@@ -157,12 +157,12 @@ export function init(el: HTMLElement): void {
 
       <div class="field">
         <label for="f-notes">הערות כלליות</label>
-        <textarea id="f-notes" placeholder="סיכום שטח מפורט..."></textarea>
+        <textarea id="f-notes"></textarea>
       </div>
 
       <div class="field">
         <label for="f-media-link">קישור לתמונות/סרטונים בענן</label>
-        <input type="url" id="f-media-link" placeholder="https://photos.app.goo.gl/...">
+        <input type="url" id="f-media-link">
       </div>
 
       <button type="submit" class="btn btn-primary btn-block" id="save-btn">${icon('save')} שמירת התצפית</button>
@@ -733,7 +733,7 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
   row.innerHTML = `
     <div class="sp-entry-main">
       <div class="combo sp-combo">
-        <input type="text" class="sp-input" placeholder="הקלידו לחיפוש מין..." value="${escapeHtml(entry.species)}">
+        <input type="text" class="sp-input" aria-label="מין הציפור" value="${escapeHtml(entry.species)}">
         <div class="combo-list" hidden></div>
       </div>
       <div class="qty-stepper">
@@ -747,7 +747,7 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
       <button type="button" class="btn btn-icon sp-remove" title="הסרת מין">✕</button>
     </div>
     <div class="sp-entry-second"${hasNote ? '' : ' hidden'}>
-      <input type="text" class="sp-note" placeholder="הערה למין זה (לא חובה)" value="${escapeHtml(entry.note || '')}">
+      <input type="text" class="sp-note" aria-label="הערה למין זה" value="${escapeHtml(entry.note || '')}">
     </div>
     <div class="sp-thumbs"></div>
   `;
