@@ -91,27 +91,30 @@ export function init(el: HTMLElement): void {
       <span class="track-dot"></span>
       <span id="voice-interim">מקשיב...</span>
     </div>
-    <label class="notif-toggle-row track-toggle-row" id="track-toggle-row" hidden>
-      <span>הקלטת מסלול GPS לתצפית זו</span>
-      <input type="checkbox" id="track-toggle">
-    </label>
-    <div class="track-status" id="track-status" hidden>
-      <span class="track-dot"></span>
-      <span>מקליט מסלול GPS · <span id="track-timer">00:00</span> · <span id="track-distance">0 מ'</span></span>
-    </div>
     <form id="obs-form" autocomplete="off">
-      <div class="field field-datetime-compact">
-        ${icon('clock')}
-        <input type="datetime-local" id="f-datetime" aria-label="תאריך ושעה" required>
+      <div class="field-row location-datetime-row">
+        <div class="field field-location-prominent">
+          <label for="f-location">מיקום התצפית</label>
+          <div class="combo with-arrow">
+            <input type="text" id="f-location" placeholder='למשל: "בריכות דגים", "נחל שחל"'>
+            <button type="button" class="combo-toggle" title="פתיחת הרשימה" aria-label="פתיחת הרשימה">▾</button>
+            <div class="combo-list" id="location-list" hidden></div>
+          </div>
+        </div>
+
+        <div class="field field-datetime-compact">
+          ${icon('clock')}
+          <input type="datetime-local" id="f-datetime" aria-label="תאריך ושעה" required>
+        </div>
       </div>
 
-      <div class="field field-location-prominent">
-        <label for="f-location">מיקום התצפית</label>
-        <div class="combo with-arrow">
-          <input type="text" id="f-location" placeholder='למשל: "בריכות דגים", "נחל שחל"'>
-          <button type="button" class="combo-toggle" title="פתיחת הרשימה" aria-label="פתיחת הרשימה">▾</button>
-          <div class="combo-list" id="location-list" hidden></div>
-        </div>
+      <label class="notif-toggle-row track-toggle-row" id="track-toggle-row" hidden>
+        <span>הקלטת מסלול GPS לתצפית זו</span>
+        <input type="checkbox" id="track-toggle">
+      </label>
+      <div class="track-status" id="track-status" hidden>
+        <span class="track-dot"></span>
+        <span>מקליט מסלול GPS · <span id="track-timer">00:00</span> · <span id="track-distance">0 מ'</span></span>
       </div>
 
       <div class="field">
