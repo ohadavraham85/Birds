@@ -4,6 +4,7 @@
 
 import { listTagRows, listLocationRows, listObserverRows, addObserver, addTag, getObservation, saveObservation } from '../db/repository';
 import { wireCombo } from './combo';
+import { wireDropdown } from './dropdown-select';
 import { escapeHtml } from './markdown';
 import { icon } from './icons';
 import type { Observation, LocationRow } from '../types';
@@ -92,26 +93,6 @@ export async function openBulkEditModal(count: number, observations: Observation
       resolve(result);
     };
 
-    /** Wires a compact toggle-button + checklist-panel control, so the modal
-     * doesn't show every tag/observer checkbox at once — closes on an
-     * outside click, like the map's layer-stack menu. The document-level
-     * listener is torn down in `close()` so repeat modal opens don't leak it. */
-    const wireDropdown = (btn: HTMLButtonElement, menu: HTMLElement): void => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        menu.hidden = !menu.hidden;
-        btn.setAttribute('aria-expanded', String(!menu.hidden));
-      });
-      const onOutsideClick = (e: MouseEvent): void => {
-        if (!menu.hidden && !menu.contains(e.target as Node) && e.target !== btn) {
-          menu.hidden = true;
-          btn.setAttribute('aria-expanded', 'false');
-        }
-      };
-      document.addEventListener('click', onOutsideClick);
-      dropdownCleanups.push(() => document.removeEventListener('click', onOutsideClick));
-    };
-
     const tagsToggle = backdrop.querySelector<HTMLInputElement>('#be-tags-toggle')!;
     const tagsField = backdrop.querySelector<HTMLElement>('#be-tags-field')!;
     tagsToggle.addEventListener('change', () => { tagsField.hidden = !tagsToggle.checked; });
@@ -119,7 +100,7 @@ export async function openBulkEditModal(count: number, observations: Observation
     const tagsMenu = backdrop.querySelector<HTMLElement>('#be-tags-menu')!;
     const tagsLabel = backdrop.querySelector<HTMLElement>('#be-tags-label')!;
     const tagChecks = backdrop.querySelector<HTMLElement>('#be-tag-checks')!;
-    wireDropdown(tagsBtn, tagsMenu);
+    dropdownCleanups.push(wireDropdown(tagsBtn, tagsMenu));
     const updateTagsLabel = (): void => {
       tagsLabel.textContent = selectedTags.size
         ? `${selectedTags.size} תגיות נבחרו: ${[...selectedTags].join(', ')}`
@@ -176,7 +157,7 @@ export async function openBulkEditModal(count: number, observations: Observation
     const observersMenu = backdrop.querySelector<HTMLElement>('#be-observers-menu')!;
     const observersLabel = backdrop.querySelector<HTMLElement>('#be-observers-label')!;
     const observerChecks = backdrop.querySelector<HTMLElement>('#be-observer-checks')!;
-    wireDropdown(observersBtn, observersMenu);
+    dropdownCleanups.push(wireDropdown(observersBtn, observersMenu));
     const updateObserversLabel = (): void => {
       observersLabel.textContent = selectedObservers.size
         ? `${selectedObservers.size} צופים נבחרו: ${[...selectedObservers].join(', ')}`

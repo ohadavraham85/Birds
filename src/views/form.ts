@@ -19,8 +19,7 @@ import { renderTrackPreview } from '../lib/track-preview';
 import { saveDraft, loadDraft, clearDraft, type ObservationDraft } from '../lib/draft';
 import { qs, input } from '../lib/dom';
 import { icon } from '../lib/icons';
-import { openSpeciesInfoModal } from '../lib/species-info';
-import { SPECIES_DETAILS } from '../data/species-data';
+import { wireDropdown } from '../lib/dropdown-select';
 import { navigate, goBack } from '../main';
 import type { ViewParams } from './view';
 import type { Observation, ObservationImage, SpeciesEntry, LocationRow, ObservationTrack, TagRow, ObserverRow, TrackReportPin } from '../types';
@@ -101,31 +100,13 @@ export function init(el: HTMLElement): void {
       <span>מקליט מסלול GPS · <span id="track-timer">00:00</span> · <span id="track-distance">0 מ'</span></span>
     </div>
     <form id="obs-form" autocomplete="off">
-      <div class="field">
-        <label for="f-datetime">תאריך ושעה</label>
-        <input type="datetime-local" id="f-datetime" required>
+      <div class="field field-datetime-compact">
+        ${icon('clock')}
+        <input type="datetime-local" id="f-datetime" aria-label="תאריך ושעה" required>
       </div>
 
-      <div class="field">
-        <label>תגיות <span class="hint">(בחירה מרובה; אפשר גם להוסיף תגית חדשה)</span></label>
-        <div class="tag-picker" id="tag-picker"></div>
-        <div class="tag-quick-add">
-          <input type="text" id="f-tag-new" placeholder="הוספת תגית חדשה...">
-          <button type="button" class="btn btn-sm" id="f-tag-add">${icon('plus')} הוספה</button>
-        </div>
-      </div>
-
-      <div class="field">
-        <label>צופים נוספים <span class="hint">(בחירה מרובה; אפשר גם להוסיף צופה חדש)</span></label>
-        <div class="observer-picker" id="observer-picker"></div>
-        <div class="tag-quick-add">
-          <input type="text" id="f-observer-new" placeholder="הוספת צופה חדש...">
-          <button type="button" class="btn btn-sm" id="f-observer-add">${icon('plus')} הוספה</button>
-        </div>
-      </div>
-
-      <div class="field">
-        <label for="f-location">מיקום <span class="hint">(בחירה מרשימה או יצירת חדש)</span></label>
+      <div class="field field-location-prominent">
+        <label for="f-location">מיקום התצפית</label>
         <div class="combo with-arrow">
           <input type="text" id="f-location" placeholder='למשל: "בריכות דגים", "נחל שחל"'>
           <button type="button" class="combo-toggle" title="פתיחת הרשימה" aria-label="פתיחת הרשימה">▾</button>
@@ -134,11 +115,37 @@ export function init(el: HTMLElement): void {
       </div>
 
       <div class="field">
-        <label>מיקום על המפה</label>
         <button type="button" class="btn location-pin-btn" id="pick-map-btn">
           ${icon('pin')} <span id="location-pin-label">בחירת מיקום על המפה</span>
         </button>
         <span class="hint" id="gps-status"></span>
+      </div>
+
+      <div class="field-row two-up">
+        <div class="bulk-select" id="tags-select">
+          <button type="button" class="bulk-select-btn" id="tags-select-btn" aria-expanded="false">
+            <span id="tags-select-label">תגיות</span><span class="bulk-select-caret">▾</span>
+          </button>
+          <div class="bulk-select-menu" id="tags-select-menu" hidden>
+            <div id="tag-checks"></div>
+            <div class="tag-quick-add">
+              <input type="text" id="f-tag-new" placeholder="הוספת תגית חדשה...">
+              <button type="button" class="btn btn-sm" id="f-tag-add">${icon('plus')} הוספה</button>
+            </div>
+          </div>
+        </div>
+        <div class="bulk-select" id="observers-select">
+          <button type="button" class="bulk-select-btn" id="observers-select-btn" aria-expanded="false">
+            <span id="observers-select-label">צופים</span><span class="bulk-select-caret">▾</span>
+          </button>
+          <div class="bulk-select-menu" id="observers-select-menu" hidden>
+            <div id="observer-checks"></div>
+            <div class="tag-quick-add">
+              <input type="text" id="f-observer-new" placeholder="הוספת צופה חדש...">
+              <button type="button" class="btn btn-sm" id="f-observer-add">${icon('plus')} הוספה</button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="field">
@@ -161,10 +168,12 @@ export function init(el: HTMLElement): void {
     </form>
   `;
 
-  qs(container, '#tag-picker').addEventListener('click', (e) => onTagChipClick(e));
+  wireDropdown(qs<HTMLButtonElement>(container, '#tags-select-btn'), qs(container, '#tags-select-menu'));
+  wireDropdown(qs<HTMLButtonElement>(container, '#observers-select-btn'), qs(container, '#observers-select-menu'));
+  qs(container, '#tag-checks').addEventListener('change', (e) => onTagCheckChange(e));
   qs(container, '#f-tag-add').addEventListener('click', () => void onQuickAddTag());
   input(container, '#f-tag-new').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); void onQuickAddTag(); } });
-  qs(container, '#observer-picker').addEventListener('click', (e) => onObserverChipClick(e));
+  qs(container, '#observer-checks').addEventListener('change', (e) => onObserverCheckChange(e));
   qs(container, '#f-observer-add').addEventListener('click', () => void onQuickAddObserver());
   input(container, '#f-observer-new').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); void onQuickAddObserver(); } });
   wireCombo(input(container, '#f-location'), qs(container, '#location-list'), () => locationSuggestions, {
@@ -542,44 +551,54 @@ async function loadForEdit(id: string): Promise<void> {
   renderObserverPicker();
 }
 
-/* ---------- tags (multi-select chip picker; replaces the old single project field) ---------- */
+/* ---------- tags (compact dropdown checklist; replaces the old single project field) ---------- */
 
 function renderTagPicker(): void {
-  const el = qs(container, '#tag-picker');
+  const el = qs(container, '#tag-checks');
   el.innerHTML = availableTags.length
     ? availableTags.map((t) => `
-      <button type="button" class="tag-chip${selectedTags.has(t.name) ? ' selected' : ''}" data-name="${escapeHtml(t.name)}" style="--tag-color:${escapeHtml(t.color)}">
-        ${icon(t.icon)} ${escapeHtml(t.name)}
-      </button>`).join('')
+      <label class="filter-modal-check">
+        <input type="checkbox" class="f-tag-check" value="${escapeHtml(t.name)}" ${selectedTags.has(t.name) ? 'checked' : ''}>
+        <span>${icon(t.icon)} ${escapeHtml(t.name)}</span>
+      </label>`).join('')
     : '<p class="hint" style="padding:2px 0">אין עדיין תגיות — אפשר להוסיף אחת למטה.</p>';
+  updateTagsSelectLabel();
 }
 
-function onTagChipClick(e: Event): void {
-  const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('.tag-chip');
-  if (!btn) return;
-  const name = btn.dataset.name!;
-  if (selectedTags.has(name)) selectedTags.delete(name); else selectedTags.add(name);
-  btn.classList.toggle('selected', selectedTags.has(name));
+function updateTagsSelectLabel(): void {
+  qs(container, '#tags-select-label').textContent = selectedTags.size ? `תגיות (${selectedTags.size}): ${[...selectedTags].join(', ')}` : 'תגיות';
 }
 
-/* ---------- observers (multi-select chip picker, same pattern as tags) ---------- */
+function onTagCheckChange(e: Event): void {
+  const cb = (e.target as HTMLElement).closest<HTMLInputElement>('.f-tag-check');
+  if (!cb) return;
+  if (cb.checked) selectedTags.add(cb.value); else selectedTags.delete(cb.value);
+  updateTagsSelectLabel();
+}
+
+/* ---------- observers (compact dropdown checklist, same pattern as tags) ---------- */
 
 function renderObserverPicker(): void {
-  const el = qs(container, '#observer-picker');
+  const el = qs(container, '#observer-checks');
   el.innerHTML = availableObservers.length
     ? availableObservers.map((o) => `
-      <button type="button" class="observer-chip${selectedObservers.has(o.name) ? ' selected' : ''}" data-name="${escapeHtml(o.name)}">
-        ${escapeHtml(o.name)}
-      </button>`).join('')
+      <label class="filter-modal-check">
+        <input type="checkbox" class="f-observer-check" value="${escapeHtml(o.name)}" ${selectedObservers.has(o.name) ? 'checked' : ''}>
+        <span>${escapeHtml(o.name)}</span>
+      </label>`).join('')
     : '<p class="hint" style="padding:2px 0">אין עדיין צופים שמורים — אפשר להוסיף אחד למטה.</p>';
+  updateObserversSelectLabel();
 }
 
-function onObserverChipClick(e: Event): void {
-  const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('.observer-chip');
-  if (!btn) return;
-  const name = btn.dataset.name!;
-  if (selectedObservers.has(name)) selectedObservers.delete(name); else selectedObservers.add(name);
-  btn.classList.toggle('selected', selectedObservers.has(name));
+function updateObserversSelectLabel(): void {
+  qs(container, '#observers-select-label').textContent = selectedObservers.size ? `צופים (${selectedObservers.size}): ${[...selectedObservers].join(', ')}` : 'צופים';
+}
+
+function onObserverCheckChange(e: Event): void {
+  const cb = (e.target as HTMLElement).closest<HTMLInputElement>('.f-observer-check');
+  if (!cb) return;
+  if (cb.checked) selectedObservers.add(cb.value); else selectedObservers.delete(cb.value);
+  updateObserversSelectLabel();
 }
 
 async function onQuickAddObserver(): Promise<void> {
@@ -679,6 +698,7 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
   const rows = qs(container, '#species-rows');
   const row = document.createElement('div');
   row.className = 'sp-entry';
+  const hasNote = !!entry.note?.trim();
   row.innerHTML = `
     <div class="sp-entry-main">
       <div class="combo sp-combo">
@@ -690,12 +710,12 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
         <input type="number" class="sp-qty" min="1" step="1" inputmode="numeric" value="${entry.quantity}" title="מספר פרטים">
         <button type="button" class="btn btn-icon qty-plus" title="עוד">+</button>
       </div>
-      <button type="button" class="btn btn-icon sp-info" title="מידע על המין">${icon('info')}</button>
-      <button type="button" class="btn btn-icon sp-remove" title="הסרת מין">✕</button>
-    </div>
-    <div class="sp-entry-second">
+      <button type="button" class="btn btn-icon sp-note-toggle${hasNote ? ' has-content' : ''}" title="הערה למין זה">${icon('document')}</button>
       <button type="button" class="btn btn-icon sp-add-img" title="הוספת תמונות למין">${icon('camera')}</button>
       <input type="file" class="sp-file" accept="image/*,.heic,.tif,.tiff" multiple hidden>
+      <button type="button" class="btn btn-icon sp-remove" title="הסרת מין">✕</button>
+    </div>
+    <div class="sp-entry-second"${hasNote ? '' : ' hidden'}>
       <input type="text" class="sp-note" placeholder="הערה למין זה (לא חובה)" value="${escapeHtml(entry.note || '')}">
     </div>
     <div class="sp-thumbs"></div>
@@ -724,10 +744,15 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
   });
   spInput.addEventListener('change', maybeDropNewSpeciesPin);
 
-  row.querySelector('.sp-info')!.addEventListener('click', () => {
-    const name = spInput.value.trim();
-    if (!name) { toast('בחרו קודם מין', true); return; }
-    openSpeciesInfoModal(name, SPECIES_DETAILS[name]?.sci);
+  const noteToggleBtn = row.querySelector<HTMLButtonElement>('.sp-note-toggle')!;
+  const secondRow = row.querySelector<HTMLElement>('.sp-entry-second')!;
+  const noteInput = row.querySelector<HTMLInputElement>('.sp-note')!;
+  noteToggleBtn.addEventListener('click', () => {
+    secondRow.hidden = !secondRow.hidden;
+    if (!secondRow.hidden) noteInput.focus();
+  });
+  noteInput.addEventListener('input', () => {
+    noteToggleBtn.classList.toggle('has-content', !!noteInput.value.trim());
   });
 
   wireCombo(
@@ -753,7 +778,9 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
     if (container.querySelectorAll('#species-rows .sp-entry').length > 1) row.remove();
     else {
       row.querySelector<HTMLInputElement>('.sp-input')!.value = '';
-      row.querySelector<HTMLInputElement>('.sp-note')!.value = '';
+      noteInput.value = '';
+      secondRow.hidden = true;
+      noteToggleBtn.classList.remove('has-content');
       qtyInput.value = '1';
       rowImages.set(row, { pending: [], kept: [] });
       pinnedSpeciesRows.delete(row);
