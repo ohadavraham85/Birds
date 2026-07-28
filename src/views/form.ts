@@ -88,29 +88,33 @@ export function init(el: HTMLElement): void {
       <button type="button" class="btn btn-icon voice-dictate-btn emphasized" id="voice-dictate-btn" title="הכתבת תצפית בקול" aria-label="הכתבת תצפית בקול">${icon('mic')}</button>
     </div>
     <form id="obs-form" autocomplete="off">
-      <div class="field field-datetime-compact">
-        <label for="f-datetime">תאריך ושעה</label>
-        <div class="datetime-inline">
-          ${icon('clock')}
-          <input type="datetime-local" id="f-datetime" required>
+      <div class="field-frame">
+        <div class="field field-datetime-compact">
+          <label for="f-datetime">תאריך ושעה</label>
+          <div class="datetime-inline">
+            ${icon('clock')}
+            <input type="datetime-local" id="f-datetime" required>
+          </div>
         </div>
       </div>
 
-      <div class="field-row location-row">
-        <div class="field field-location-prominent">
-          <label for="f-location">מיקום התצפית</label>
-          <div class="combo with-arrow">
-            <input type="text" id="f-location">
-            <button type="button" class="combo-toggle" title="פתיחת הרשימה" aria-label="פתיחת הרשימה">▾</button>
-            <div class="combo-list" id="location-list" hidden></div>
+      <div class="field-frame">
+        <div class="field-row location-row">
+          <div class="field field-location-prominent">
+            <label for="f-location">מיקום התצפית</label>
+            <div class="combo with-arrow">
+              <input type="text" id="f-location">
+              <button type="button" class="combo-toggle" title="פתיחת הרשימה" aria-label="פתיחת הרשימה">▾</button>
+              <div class="combo-list" id="location-list" hidden></div>
+            </div>
           </div>
+          <button type="button" class="btn btn-icon location-pin-btn" id="pick-map-btn" title="בחירת מיקום על המפה" aria-label="בחירת מיקום על המפה">${icon('pin')}</button>
         </div>
-        <button type="button" class="btn btn-icon location-pin-btn" id="pick-map-btn" title="בחירת מיקום על המפה" aria-label="בחירת מיקום על המפה">${icon('pin')}</button>
-      </div>
-      <span class="hint" id="gps-status"></span>
-      <div class="track-status voice-status" id="voice-status" hidden>
-        <span class="track-dot"></span>
-        <span id="voice-interim">מקשיב...</span>
+        <span class="hint" id="gps-status"></span>
+        <div class="track-status voice-status" id="voice-status" hidden>
+          <span class="track-dot"></span>
+          <span id="voice-interim">מקשיב...</span>
+        </div>
       </div>
 
       <label class="notif-toggle-row track-toggle-row" id="track-toggle-row" hidden>
@@ -122,47 +126,55 @@ export function init(el: HTMLElement): void {
         <span>מקליט מסלול GPS · <span id="track-timer">00:00</span> · <span id="track-distance">0 מ'</span></span>
       </div>
 
-      <div class="field-row two-up">
-        <div class="bulk-select" id="tags-select">
-          <button type="button" class="bulk-select-btn" id="tags-select-btn" aria-expanded="false">
-            <span id="tags-select-label">תגיות</span><span class="bulk-select-caret">▾</span>
-          </button>
-          <div class="bulk-select-menu" id="tags-select-menu" hidden>
-            <div id="tag-checks"></div>
-            <div class="tag-quick-add">
-              <input type="text" id="f-tag-new" aria-label="הוספת תגית חדשה">
-              <button type="button" class="btn btn-sm" id="f-tag-add">${icon('plus')} הוספה</button>
+      <div class="field-frame">
+        <div class="field-row two-up">
+          <div class="bulk-select" id="tags-select">
+            <button type="button" class="bulk-select-btn" id="tags-select-btn" aria-expanded="false">
+              <span id="tags-select-label">תגיות</span><span class="bulk-select-caret">▾</span>
+            </button>
+            <div class="bulk-select-menu" id="tags-select-menu" hidden>
+              <div id="tag-checks"></div>
+              <div class="tag-quick-add">
+                <input type="text" id="f-tag-new" aria-label="הוספת תגית חדשה">
+                <button type="button" class="btn btn-sm" id="f-tag-add">${icon('plus')} הוספה</button>
+              </div>
+            </div>
+          </div>
+          <div class="bulk-select" id="observers-select">
+            <button type="button" class="bulk-select-btn" id="observers-select-btn" aria-expanded="false">
+              <span id="observers-select-label">צופים</span><span class="bulk-select-caret">▾</span>
+            </button>
+            <div class="bulk-select-menu" id="observers-select-menu" hidden>
+              <div id="observer-checks"></div>
+              <div class="tag-quick-add">
+                <input type="text" id="f-observer-new" aria-label="הוספת צופה חדש">
+                <button type="button" class="btn btn-sm" id="f-observer-add">${icon('plus')} הוספה</button>
+              </div>
             </div>
           </div>
         </div>
-        <div class="bulk-select" id="observers-select">
-          <button type="button" class="bulk-select-btn" id="observers-select-btn" aria-expanded="false">
-            <span id="observers-select-label">צופים</span><span class="bulk-select-caret">▾</span>
-          </button>
-          <div class="bulk-select-menu" id="observers-select-menu" hidden>
-            <div id="observer-checks"></div>
-            <div class="tag-quick-add">
-              <input type="text" id="f-observer-new" aria-label="הוספת צופה חדש">
-              <button type="button" class="btn btn-sm" id="f-observer-add">${icon('plus')} הוספה</button>
-            </div>
-          </div>
+      </div>
+
+      <div class="field-frame">
+        <div class="field">
+          <label>מיני הציפור</label>
+          <div id="species-rows"></div>
+          <button type="button" class="btn btn-sm" id="add-species-row" style="margin-top:6px">${icon('plus')} הוספת מין</button>
         </div>
       </div>
 
-      <div class="field">
-        <label>מיני הציפור</label>
-        <div id="species-rows"></div>
-        <button type="button" class="btn btn-sm" id="add-species-row" style="margin-top:6px">${icon('plus')} הוספת מין</button>
+      <div class="field-frame">
+        <div class="field">
+          <label for="f-notes">הערות כלליות</label>
+          <textarea id="f-notes"></textarea>
+        </div>
       </div>
 
-      <div class="field">
-        <label for="f-notes">הערות כלליות</label>
-        <textarea id="f-notes"></textarea>
-      </div>
-
-      <div class="field">
-        <label for="f-media-link">קישור לתמונות/סרטונים בענן</label>
-        <input type="url" id="f-media-link">
+      <div class="field-frame">
+        <div class="field">
+          <label for="f-media-link">קישור לתמונות/סרטונים בענן</label>
+          <input type="url" id="f-media-link">
+        </div>
       </div>
 
       <button type="submit" class="btn btn-primary btn-block" id="save-btn">${icon('save')} שמירת התצפית</button>
