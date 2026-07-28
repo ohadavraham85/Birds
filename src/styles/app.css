@@ -350,7 +350,6 @@ body {
 label.notif-toggle-row.track-toggle-row input[type="checkbox"] { background: #e8a13c; }
 label.notif-toggle-row.track-toggle-row input[type="checkbox"]:checked { background: var(--danger); }
 
-.voice-dictate-btn { margin-bottom: 10px; }
 .voice-dictate-btn.recording { background: var(--danger); border-color: var(--danger); color: #fff; }
 
 .obs-card .track-preview { margin-top: 10px; }
@@ -521,18 +520,18 @@ label.notif-toggle-row.track-toggle-row input[type="checkbox"]:checked { backgro
 .field label { display: block; font-weight: 600; margin-bottom: 5px; color: var(--accent-900); font-size: .95rem; }
 .field .hint { font-weight: 400; color: var(--ink-soft); font-size: .8rem; }
 
-/* ---------- observation form: location + datetime in one row ---------- */
-
-.location-datetime-row { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 14px; }
-.location-datetime-row .field-location-prominent { flex: 1 1 auto; min-width: 0; margin-bottom: 0; }
-.location-datetime-row .field-datetime-compact { flex: 0 0 auto; margin-bottom: 0; }
+/* ---------- observation form: compact datetime row + location row with pin/mic icons ---------- */
 
 .field-datetime-compact {
-  display: flex; align-items: center; gap: 4px;
+  display: flex; align-items: center; gap: 6px;
   color: var(--ink-soft);
 }
-.field-datetime-compact .icon { flex-shrink: 0; width: 15px; height: 15px; }
-.location-datetime-row .field-datetime-compact input { width: 162px; padding: 8px 4px; font-size: .78rem; }
+.field-datetime-compact .icon { flex-shrink: 0; width: 16px; height: 16px; }
+.field-datetime-compact input { width: auto; padding: 8px 10px; font-size: .9rem; }
+
+.location-row { display: flex; align-items: flex-end; gap: 6px; margin-bottom: 4px; }
+.location-row .field-location-prominent { flex: 1 1 auto; min-width: 0; margin-bottom: 0; }
+.location-row .btn-icon { flex-shrink: 0; }
 
 .field-location-prominent label { font-size: 1.15rem; font-weight: 800; color: var(--accent-900); white-space: nowrap; }
 .field-location-prominent input {
@@ -540,11 +539,6 @@ label.notif-toggle-row.track-toggle-row input[type="checkbox"]:checked { backgro
   border-width: 2px; border-color: var(--accent-600);
 }
 .field-location-prominent input:focus { border-color: transparent; }
-
-/* sharing the row with the datetime field leaves less width, so the label
- * and input scale down a step — still visually the bigger of the two fields. */
-.location-datetime-row .field-location-prominent label { font-size: .95rem; margin-bottom: 4px; }
-.location-datetime-row .field-location-prominent input { font-size: .95rem; padding: 10px 12px; }
 
 .field-row.two-up { display: flex; gap: 8px; margin-bottom: 14px; }
 .field-row.two-up > * { flex: 1 1 50%; min-width: 0; }

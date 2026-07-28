@@ -86,13 +86,13 @@ export function init(el: HTMLElement): void {
       <button type="button" class="btn btn-sm" id="back-btn">→ חזרה</button>
       <h2 id="form-title">תצפית חדשה</h2>
     </div>
-    <button type="button" class="btn btn-block voice-dictate-btn" id="voice-dictate-btn">${icon('mic')} הכתבת תצפית בקול</button>
-    <div class="track-status voice-status" id="voice-status" hidden>
-      <span class="track-dot"></span>
-      <span id="voice-interim">מקשיב...</span>
-    </div>
     <form id="obs-form" autocomplete="off">
-      <div class="field-row location-datetime-row">
+      <div class="field field-datetime-compact">
+        ${icon('clock')}
+        <input type="datetime-local" id="f-datetime" aria-label="תאריך ושעה" required>
+      </div>
+
+      <div class="field-row location-row">
         <div class="field field-location-prominent">
           <label for="f-location">מיקום התצפית</label>
           <div class="combo with-arrow">
@@ -101,11 +101,13 @@ export function init(el: HTMLElement): void {
             <div class="combo-list" id="location-list" hidden></div>
           </div>
         </div>
-
-        <div class="field field-datetime-compact">
-          ${icon('clock')}
-          <input type="datetime-local" id="f-datetime" aria-label="תאריך ושעה" required>
-        </div>
+        <button type="button" class="btn btn-icon location-pin-btn" id="pick-map-btn" title="בחירת מיקום על המפה" aria-label="בחירת מיקום על המפה">${icon('pin')}</button>
+        <button type="button" class="btn btn-icon voice-dictate-btn" id="voice-dictate-btn" title="הכתבת תצפית בקול" aria-label="הכתבת תצפית בקול">${icon('mic')}</button>
+      </div>
+      <span class="hint" id="gps-status"></span>
+      <div class="track-status voice-status" id="voice-status" hidden>
+        <span class="track-dot"></span>
+        <span id="voice-interim">מקשיב...</span>
       </div>
 
       <label class="notif-toggle-row track-toggle-row" id="track-toggle-row" hidden>
@@ -115,13 +117,6 @@ export function init(el: HTMLElement): void {
       <div class="track-status" id="track-status" hidden>
         <span class="track-dot"></span>
         <span>מקליט מסלול GPS · <span id="track-timer">00:00</span> · <span id="track-distance">0 מ'</span></span>
-      </div>
-
-      <div class="field">
-        <button type="button" class="btn location-pin-btn" id="pick-map-btn">
-          ${icon('pin')} <span id="location-pin-label">בחירת מיקום על המפה</span>
-        </button>
-        <span class="hint" id="gps-status"></span>
       </div>
 
       <div class="field-row two-up">
@@ -215,7 +210,8 @@ function onVoiceDictateClick(): void {
   const status = qs(container, '#voice-status');
   const interim = qs(container, '#voice-interim');
   btn.classList.add('recording');
-  btn.innerHTML = `${icon('mic')} הפסקת הקלטה`;
+  btn.title = 'הפסקת הקלטה';
+  btn.setAttribute('aria-label', 'הפסקת הקלטה');
   status.hidden = false;
   interim.textContent = 'מקשיב...';
 
@@ -228,7 +224,8 @@ function onVoiceDictateClick(): void {
     onError: (msg) => toast(msg, true, 5000),
     onEnd: () => {
       btn.classList.remove('recording');
-      btn.innerHTML = `${icon('mic')} הכתבת תצפית בקול`;
+      btn.title = 'הכתבת תצפית בקול';
+      btn.setAttribute('aria-label', 'הכתבת תצפית בקול');
       status.hidden = true;
     },
   });
@@ -652,12 +649,15 @@ function applyLocationName(name: string): void {
 }
 
 function updateLocationPinUI(): void {
-  const label = qs(container, '#location-pin-label');
   const btn = qs<HTMLButtonElement>(container, '#pick-map-btn');
   btn.classList.toggle('locked', coordsLocked);
-  if (coordsLocked) label.textContent = 'מיקום קבוע — הצגה על המפה';
-  else if (currentLat != null && currentLng != null) label.textContent = 'מיקום נבחר — לחיצה לשינוי על המפה';
-  else label.textContent = 'בחירת מיקום על המפה';
+  const title = coordsLocked
+    ? 'מיקום קבוע — הצגה על המפה'
+    : currentLat != null && currentLng != null
+      ? 'מיקום נבחר — לחיצה לשינוי על המפה'
+      : 'בחירת מיקום על המפה';
+  btn.title = title;
+  btn.setAttribute('aria-label', title);
 }
 
 function autoFillGps(): void {
