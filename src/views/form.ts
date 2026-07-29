@@ -129,8 +129,8 @@ export function init(el: HTMLElement): void {
       <div class="field-frame">
         <div class="field-row two-up">
           <div class="bulk-select" id="tags-select">
-            <button type="button" class="bulk-select-btn" id="tags-select-btn" aria-expanded="false">
-              <span id="tags-select-label">תגיות</span><span class="bulk-select-caret">▾</span>
+            <button type="button" class="bulk-select-btn wrap-chips" id="tags-select-btn" aria-expanded="false">
+              <span class="select-chips" id="tags-select-label"><span class="select-placeholder">תגיות</span></span><span class="bulk-select-caret">▾</span>
             </button>
             <div class="bulk-select-menu" id="tags-select-menu" hidden>
               <div id="tag-checks"></div>
@@ -141,8 +141,8 @@ export function init(el: HTMLElement): void {
             </div>
           </div>
           <div class="bulk-select" id="observers-select">
-            <button type="button" class="bulk-select-btn" id="observers-select-btn" aria-expanded="false">
-              <span id="observers-select-label">צופים</span><span class="bulk-select-caret">▾</span>
+            <button type="button" class="bulk-select-btn wrap-chips" id="observers-select-btn" aria-expanded="false">
+              <span class="select-chips" id="observers-select-label"><span class="select-placeholder">צופים</span></span><span class="bulk-select-caret">▾</span>
             </button>
             <div class="bulk-select-menu" id="observers-select-menu" hidden>
               <div id="observer-checks"></div>
@@ -575,6 +575,19 @@ async function loadForEdit(id: string): Promise<void> {
   renderObserverPicker();
 }
 
+/** Deterministic color for entities that have no stored color of their own
+ * (observers) — hashes the name so the same person always gets the same
+ * chip color across renders, without needing a persisted field. */
+function colorForName(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  return DEFAULT_TAG_COLORS[hash % DEFAULT_TAG_COLORS.length]!;
+}
+
+function selectChipHtml(name: string, color: string, iconHtml = ''): string {
+  return `<span class="select-chip" style="background:${color}22;color:${color};border-color:${color}66">${iconHtml}${escapeHtml(name)}</span>`;
+}
+
 /* ---------- tags (compact dropdown checklist; replaces the old single project field) ---------- */
 
 function renderTagPicker(): void {
@@ -590,7 +603,13 @@ function renderTagPicker(): void {
 }
 
 function updateTagsSelectLabel(): void {
-  qs(container, '#tags-select-label').textContent = selectedTags.size ? `תגיות (${selectedTags.size}): ${[...selectedTags].join(', ')}` : 'תגיות';
+  const el = qs(container, '#tags-select-label');
+  el.innerHTML = selectedTags.size
+    ? [...selectedTags].map((name) => {
+      const t = availableTags.find((x) => x.name === name);
+      return selectChipHtml(name, t?.color || colorForName(name), t ? icon(t.icon) : '');
+    }).join('')
+    : '<span class="select-placeholder">תגיות</span>';
 }
 
 function onTagCheckChange(e: Event): void {
@@ -615,7 +634,10 @@ function renderObserverPicker(): void {
 }
 
 function updateObserversSelectLabel(): void {
-  qs(container, '#observers-select-label').textContent = selectedObservers.size ? `צופים (${selectedObservers.size}): ${[...selectedObservers].join(', ')}` : 'צופים';
+  const el = qs(container, '#observers-select-label');
+  el.innerHTML = selectedObservers.size
+    ? [...selectedObservers].map((name) => selectChipHtml(name, colorForName(name))).join('')
+    : '<span class="select-placeholder">צופים</span>';
 }
 
 function onObserverCheckChange(e: Event): void {
@@ -762,10 +784,15 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
         <input type="number" class="sp-qty" min="1" step="1" inputmode="numeric" value="${entry.quantity}" title="מספר פרטים">
         <button type="button" class="btn btn-icon qty-plus" title="עוד">+</button>
       </div>
-      <button type="button" class="btn btn-icon sp-note-toggle${hasNote ? ' has-content' : ''}" title="הערה למין זה">${icon('document')}</button>
-      <button type="button" class="btn btn-icon sp-add-img" title="הוספת תמונות למין">${icon('camera')}</button>
+      <div class="bulk-select sp-edit-select">
+        <button type="button" class="btn btn-icon sp-edit-btn${hasNote ? ' has-content' : ''}" title="עריכת מין" aria-label="עריכת מין" aria-expanded="false">${icon('edit')}</button>
+        <div class="bulk-select-menu sp-edit-menu" hidden>
+          <button type="button" class="sp-menu-item sp-add-img">${icon('camera')} הוספת תמונה</button>
+          <button type="button" class="sp-menu-item sp-note-toggle">${icon('document')} הערה למין זה</button>
+          <button type="button" class="sp-menu-item sp-remove danger">${icon('trash')} הסרת מין</button>
+        </div>
+      </div>
       <input type="file" class="sp-file" accept="image/*,.heic,.tif,.tiff" multiple hidden>
-      <button type="button" class="btn btn-icon sp-remove" title="הסרת מין">✕</button>
     </div>
     <div class="sp-entry-second"${hasNote ? '' : ' hidden'}>
       <input type="text" class="sp-note" aria-label="הערה למין זה" value="${escapeHtml(entry.note || '')}">
@@ -796,15 +823,20 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
   });
   spInput.addEventListener('change', maybeDropNewSpeciesPin);
 
+  const editBtn = row.querySelector<HTMLButtonElement>('.sp-edit-btn')!;
+  const editMenu = row.querySelector<HTMLElement>('.sp-edit-menu')!;
+  const disposeEditMenu = wireDropdown(editBtn, editMenu);
+
   const noteToggleBtn = row.querySelector<HTMLButtonElement>('.sp-note-toggle')!;
   const secondRow = row.querySelector<HTMLElement>('.sp-entry-second')!;
   const noteInput = row.querySelector<HTMLInputElement>('.sp-note')!;
   noteToggleBtn.addEventListener('click', () => {
+    editMenu.hidden = true;
     secondRow.hidden = !secondRow.hidden;
     if (!secondRow.hidden) noteInput.focus();
   });
   noteInput.addEventListener('input', () => {
-    noteToggleBtn.classList.toggle('has-content', !!noteInput.value.trim());
+    editBtn.classList.toggle('has-content', !!noteInput.value.trim());
   });
 
   wireCombo(
@@ -815,7 +847,10 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
   );
 
   const fileInput = row.querySelector<HTMLInputElement>('.sp-file')!;
-  row.querySelector('.sp-add-img')!.addEventListener('click', () => fileInput.click());
+  row.querySelector('.sp-add-img')!.addEventListener('click', () => {
+    editMenu.hidden = true;
+    fileInput.click();
+  });
   fileInput.addEventListener('change', (e) => {
     const files = (e.target as HTMLInputElement).files;
     const st = rowImages.get(row)!;
@@ -827,12 +862,15 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
   });
 
   row.querySelector('.sp-remove')!.addEventListener('click', () => {
-    if (container.querySelectorAll('#species-rows .sp-entry').length > 1) row.remove();
-    else {
+    editMenu.hidden = true;
+    if (container.querySelectorAll('#species-rows .sp-entry').length > 1) {
+      disposeEditMenu();
+      row.remove();
+    } else {
       row.querySelector<HTMLInputElement>('.sp-input')!.value = '';
       noteInput.value = '';
       secondRow.hidden = true;
-      noteToggleBtn.classList.remove('has-content');
+      editBtn.classList.remove('has-content');
       qtyInput.value = '1';
       rowImages.set(row, { pending: [], kept: [] });
       pinnedSpeciesRows.delete(row);

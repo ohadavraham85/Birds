@@ -58,12 +58,27 @@ export function wireStarButton(root: HTMLElement): void {
   });
 }
 
-function headMetaHtml(o: Observation): string {
+/** @param collapsible When true (the default — calendar list + detail view),
+ * tags/observers hide behind a count toggle. The journal's list display
+ * always wants them visible, so it passes false and gets a plain, always-
+ * expanded block instead. */
+function headMetaHtml(o: Observation, collapsible = true): string {
   const url = mapsUrl(o);
   const hasPhotos = allImages(o).length > 0;
   const mediaHref = o.mediaLink ? safeHttpUrl(o.mediaLink) : null;
   const tagCount = o.tags?.length || 0;
   const observerCount = o.observers?.length || 0;
+  const metaDetailsHtml = `
+    ${tagCount ? `<div class="tag-badge-row">${tagBadgesHtml(o.tags)}</div>` : ''}
+    ${observerCount ? `<div class="observer-row" title="צופים נוספים">${icon('users')} ${escapeHtml(o.observers!.join(', '))}</div>` : ''}`;
+  const tagsObserversHtml = !(tagCount || observerCount) ? '' : collapsible ? `
+      <button type="button" class="card-meta-toggle" data-meta-toggle title="הצגת תגיות וצופים">
+        ${tagCount ? `<span>${icon('tagGeneric')} ${tagCount} תגיות</span>` : ''}
+        ${observerCount ? `<span>${icon('users')} ${observerCount} צופים</span>` : ''}
+        <span class="card-meta-caret">${icon('chevronsDown')}</span>
+      </button>
+      <div class="card-meta-details" hidden>${metaDetailsHtml}</div>` : `
+      <div class="card-meta-details">${metaDetailsHtml}</div>`;
   return `
     <div class="card-head">
       <div class="card-place">
@@ -80,16 +95,7 @@ function headMetaHtml(o: Observation): string {
       ${hasPhotos ? `<span class="media-indicator" title="כולל תמונות מצורפות">${icon('camera')}</span>` : ''}
       ${mediaHref ? `<a href="${escapeHtml(mediaHref)}" target="_blank" rel="noopener" class="media-indicator media-link-icon" title="פתיחת התמונות/סרטונים בענן">${icon('link')}</a>` : ''}
     </div>
-    ${tagCount || observerCount ? `
-      <button type="button" class="card-meta-toggle" data-meta-toggle title="הצגת תגיות וצופים">
-        ${tagCount ? `<span>${icon('tagGeneric')} ${tagCount} תגיות</span>` : ''}
-        ${observerCount ? `<span>${icon('users')} ${observerCount} צופים</span>` : ''}
-        <span class="card-meta-caret">${icon('chevronsDown')}</span>
-      </button>
-      <div class="card-meta-details" hidden>
-        ${tagCount ? `<div class="tag-badge-row">${tagBadgesHtml(o.tags)}</div>` : ''}
-        ${observerCount ? `<div class="observer-row" title="צופים נוספים">${icon('users')} ${escapeHtml(o.observers!.join(', '))}</div>` : ''}
-      </div>` : ''}`;
+    ${tagsObserversHtml}`;
 }
 
 /** Wires the collapsed tags/observers toggle rendered by `headMetaHtml()` —
@@ -111,7 +117,7 @@ export function wireCardMetaToggle(root: HTMLElement): void {
 export function renderObservationSummary(o: Observation): HTMLElement {
   const card = document.createElement('article');
   card.className = 'obs-card obs-card-compact';
-  card.innerHTML = headMetaHtml(o);
+  card.innerHTML = headMetaHtml(o, false);
   applyFamilyAccent(card, o);
   wireStarButton(card);
   wireTagBadges(card);
