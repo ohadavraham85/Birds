@@ -142,8 +142,6 @@ function ensureMap(): void {
 
   // long-press (contextmenu on touch) drops a pin at a new location
   map.on('contextmenu', (e: L.LeafletMouseEvent) => dropPin(e.latlng));
-
-  startGeoWatch();
 }
 
 /** Bottom sheet: place name, the full observation history at that point
@@ -233,6 +231,7 @@ let layersInitialized = false;
 
 export async function activate(): Promise<void> {
   ensureMap();
+  startGeoWatch();
   setTimeout(() => map?.invalidateSize(), 60);
 
   if (!layersInitialized) {
@@ -259,6 +258,14 @@ export async function activate(): Promise<void> {
 
   tracksLayer!.clearLayers();
   for (const t of await listTracks()) drawTrack(t);
+}
+
+/** Stops the continuous "my location" GPS watch the moment the user leaves
+ * this tab — without this, watchPosition(enableHighAccuracy: true) would
+ * keep polling the GPS radio for the rest of the session even while
+ * browsing other screens, needlessly draining battery and generating heat. */
+export function deactivate(): void {
+  if (geoWatchId != null) { navigator.geolocation.clearWatch(geoWatchId); geoWatchId = null; }
 }
 
 /* ---------- GPS "my location" ---------- */
