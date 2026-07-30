@@ -13,6 +13,7 @@ import { hydrateIcons, icon, type IconName } from './lib/icons';
 import { initFirebaseSyncFromSettings, onFirebaseSyncStatus, type FirebaseSyncStatus } from './firebase/firestore-sync';
 import { checkAndNotify } from './lib/notifications';
 import { refreshTagsCache } from './lib/tags-cache';
+import { isPatternLockEnabled, renderLockScreen } from './lib/pattern-lock';
 import type { View, ViewParams } from './views/view';
 
 initTheme();
@@ -209,6 +210,14 @@ function setupStatusIndicator(): void {
 }
 
 async function init(): Promise<void> {
+  if (isPatternLockEnabled()) {
+    const overlay = document.createElement('div');
+    overlay.className = 'pattern-lock-overlay';
+    document.body.appendChild(overlay);
+    await renderLockScreen(overlay);
+    overlay.remove();
+  }
+
   hydrateIcons(document.body);
   await seedSpeciesIfEmpty(SPECIES_SEED, SPECIES_SEED_VERSION);
   await refreshTagsCache();

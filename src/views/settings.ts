@@ -21,7 +21,8 @@ import {
   checkAndNotify, type NotifPermission,
 } from '../lib/notifications';
 import { pickLocation, type LatLng } from '../lib/location-picker';
-import { toast, confirmDialog, fmtDateTime } from '../lib/ui';
+import { toast, confirmDialog, fmtDateTime, showModal } from '../lib/ui';
+import { isPatternLockEnabled, clearPatternLock, renderPatternSetup } from '../lib/pattern-lock';
 import { escapeHtml } from '../lib/markdown';
 import { parseCsv, mapHeaders, parseCoordinates, parseDateTime, type HeaderMap, type CsvField } from '../lib/csv';
 import { qs, input } from '../lib/dom';
@@ -67,7 +68,7 @@ let photoImportObsCache: Observation[] = [];
 
 /* ---------- category menu ---------- */
 
-type SettingsCategory = 'appearance' | 'sync' | 'lists' | 'photos' | 'notifications' | 'files' | 'data';
+type SettingsCategory = 'appearance' | 'sync' | 'lists' | 'photos' | 'notifications' | 'files' | 'security' | 'data';
 let activeCategory: SettingsCategory | null = null;
 
 const CATEGORY_META: Record<SettingsCategory, { icon: IconName; title: string; subtitle: string }> = {
@@ -77,6 +78,7 @@ const CATEGORY_META: Record<SettingsCategory, { icon: IconName; title: string; s
   photos: { icon: 'camera', title: 'ייבוא תמונות', subtitle: 'שיוך תמונות לתצפיות לפי תאריך' },
   notifications: { icon: 'bell', title: 'התראות', subtitle: 'תזכורות נדידה, "בתאריך הזה" וחוסר פעילות' },
   files: { icon: 'folder', title: 'קבצים', subtitle: 'דוחות תצפית וקבצים חיצוניים' },
+  security: { icon: 'lock', title: 'נעילת דפוס', subtitle: 'הגנה על האפליקציה בעזרת דפוס נעילה' },
   data: { icon: 'database', title: 'נתונים מקומיים', subtitle: 'מידע על המכשיר, מחיקת הכל' },
 };
 
@@ -154,6 +156,7 @@ export async function activate(): Promise<void> {
     ${activeCategory === 'lists' ? listsHtml() : ''}
     ${activeCategory === 'photos' ? photosHtml() : ''}
     ${activeCategory === 'files' ? filesHtml() : ''}
+    ${activeCategory === 'security' ? securityHtml(isPatternLockEnabled()) : ''}
     ${activeCategory === 'data' ? dataHtml(obsCount, version) : ''}
   `;
 
@@ -165,6 +168,7 @@ export async function activate(): Promise<void> {
   if (activeCategory === 'lists') wireLists();
   if (activeCategory === 'photos') wirePhotos();
   if (activeCategory === 'files') wireFiles();
+  if (activeCategory === 'security') wireSecurity();
   if (activeCategory === 'data') wireData();
 }
 
@@ -647,6 +651,57 @@ function wireLists(): void {
   input(container, '#s-observer-new').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); void onAddObserverManaged(); } });
   qs(container, '#s-observer-list').addEventListener('click', (e) => void onObserverListClick(e));
   void renderObserverManageList();
+}
+
+/* ---------- נעילת דפוס ---------- */
+
+function securityHtml(enabled: boolean): string {
+  return `
+    <div class="settings-card">
+      <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
+        נעילת דפוס דורשת ציור דפוס (כמו במסך הנעילה של אנדרואיד) בכל פתיחה של האפליקציה.
+        זו הגנה בסיסית מפני מי שמעיין במכשיר או פותח את הקישור — לא הצפנה אמיתית, מאחר שזהו אתר
+        סטטי ללא שרת. הדפוס עצמו לא נשמר בשום מקום, רק גיבוב (hash) שלו במכשיר הזה.
+      </p>
+      <label class="notif-toggle-row">
+        <span>הפעלת נעילת דפוס</span>
+        <input type="checkbox" id="s-pattern-enabled" ${enabled ? 'checked' : ''}>
+      </label>
+      ${enabled ? `<button type="button" class="btn btn-sm" id="s-pattern-change" style="margin-top:10px">${icon('lock')} שינוי הדפוס</button>` : ''}
+    </div>
+  `;
+}
+
+async function promptPatternSetupModal(): Promise<boolean> {
+  const wrap = document.createElement('div');
+  wrap.className = 'pattern-lock-modal';
+  const close = showModal(wrap);
+  const ok = await renderPatternSetup(wrap, close);
+  close();
+  return ok;
+}
+
+function wireSecurity(): void {
+  const checkbox = qs<HTMLInputElement>(container, '#s-pattern-enabled');
+  checkbox.addEventListener('change', () => {
+    void (async () => {
+      if (checkbox.checked) {
+        const ok = await promptPatternSetupModal();
+        if (!ok) { checkbox.checked = false; return; }
+        toast('נעילת הדפוס הופעלה ✓');
+      } else {
+        if (!(await confirmDialog('לבטל את נעילת הדפוס?', 'ביטול'))) { checkbox.checked = true; return; }
+        clearPatternLock();
+        toast('נעילת הדפוס בוטלה');
+      }
+      await activate();
+    })();
+  });
+  container.querySelector('#s-pattern-change')?.addEventListener('click', () => {
+    void (async () => {
+      if (await promptPatternSetupModal()) toast('הדפוס עודכן ✓');
+    })();
+  });
 }
 
 /* ---------- נתונים מקומיים ---------- */
