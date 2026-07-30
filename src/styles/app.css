@@ -1743,6 +1743,37 @@ a.media-link-icon:hover { color: var(--accent-700); }
 .pdf-report .rpt-media-link a { color: #2d6a4f; }
 .pdf-report .rpt-foot { border-top: 2px solid #2d6a4f; margin-top: 16px; padding-top: 8px; text-align: center; font-size: 11px; color: #5b6d62; }
 
+/* ---------- pattern lock ---------- */
+
+.pattern-lock-overlay {
+  position: fixed; inset: 0; z-index: 5000;
+  background: var(--paper);
+  display: flex; align-items: center; justify-content: center;
+}
+.pattern-lock-card { text-align: center; padding: 20px; }
+.pattern-lock-card h2 { margin: 0 0 6px; color: var(--accent-900); }
+.pattern-lock-subtitle { color: var(--ink-soft); margin: 0 0 18px; min-height: 1.2em; }
+.pattern-lock-subtitle.error { color: var(--danger); }
+.pattern-lock-svg { touch-action: none; user-select: none; }
+.pattern-dot { fill: var(--card); stroke: var(--line); stroke-width: 2; transition: fill .1s, stroke .1s; }
+.pattern-dot.active { fill: var(--accent-700); stroke: var(--accent-700); }
+.pattern-line-seg, .pattern-drag-line { stroke: var(--accent-700); stroke-width: 4; stroke-linecap: round; }
+.pattern-lock-footer { margin-top: 14px; }
+.pattern-lock-confirm-text { font-size: .85rem; color: var(--ink-soft); max-width: 240px; margin: 0 auto 10px; }
+.pattern-lock-confirm-actions { display: flex; gap: 8px; justify-content: center; }
+.pattern-lock-link {
+  border: 0; background: none; color: var(--ink-soft); text-decoration: underline;
+  font: inherit; font-size: .85rem; cursor: pointer; padding: 4px;
+}
+@keyframes pattern-shake {
+  10%, 90% { transform: translateX(-2px); }
+  20%, 80% { transform: translateX(4px); }
+  30%, 50%, 70% { transform: translateX(-8px); }
+  40%, 60% { transform: translateX(8px); }
+}
+.pattern-lock-card.shake { animation: pattern-shake .5s; }
+.pattern-lock-modal .pattern-lock-card { padding: 4px; }
+
 @media print {
   .topbar, .tabbar, .toast { display: none !important; }
 }
