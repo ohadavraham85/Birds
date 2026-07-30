@@ -448,7 +448,7 @@ label.notif-toggle-row.track-toggle-row input[type="checkbox"]:checked { backgro
 }
 .map-layer-btn:hover { background: var(--accent-50); }
 .map-layers-menu {
-  position: absolute; bottom: calc(var(--tabbar-h) + 18px + 46px + 10px + 46px + 10px); left: 16px;
+  position: absolute; bottom: calc(var(--tabbar-h) + 18px + 46px + 10px + 46px + 10px + 46px + 10px); left: 16px;
   background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
   box-shadow: var(--shadow-lg); padding: 10px 14px; z-index: 700;
   display: flex; flex-direction: column; gap: 8px; min-width: 168px;
@@ -1719,30 +1719,77 @@ a.media-link-icon:hover { color: var(--accent-700); }
 .goal-attainment-card .stat-card-head h4 { margin: 0; color: var(--accent-700); font-size: .92rem; }
 .stat-donut-sm { width: 90px; height: 90px; }
 
-/* ---------- PDF report template (rendered off-screen) ---------- */
+/* ---------- asset map markers ---------- */
 
-.pdf-report { direction: rtl; font-family: Arial, "Noto Sans Hebrew", sans-serif; color: #1d2721; padding: 24px; background: #fff; width: 720px; }
-.pdf-report .rpt-head { border-bottom: 3px solid #2d6a4f; padding-bottom: 10px; margin-bottom: 18px; }
-.pdf-report .rpt-head h1 { color: #1b4332; margin: 0 0 4px; font-size: 22px; }
-.pdf-report .rpt-head .rpt-sub { color: #5b6d62; font-size: 12px; }
-.pdf-report .rpt-obs { border: 1px solid #dce7df; border-radius: 8px; padding: 12px 14px; margin-bottom: 12px; page-break-inside: avoid; }
-.pdf-report .rpt-obs h2 { font-size: 15px; margin: 0 0 6px; color: #2d6a4f; }
-.pdf-report .rpt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; font-size: 12px; margin-bottom: 6px; }
-.pdf-report .rpt-grid b { color: #1b4332; }
-.pdf-report .rpt-notes { font-size: 12px; line-height: 1.55; border-top: 1px dashed #dce7df; padding-top: 6px; margin-top: 4px; }
-.pdf-report .rpt-notes p { margin: 0 0 6px; }
-.pdf-report .rpt-contact { text-align: center; margin-bottom: 12px; }
-.pdf-report .rpt-birder { font-weight: 700; color: #1b4332; font-size: 14px; }
-.pdf-report .rpt-birder-line { color: #5b6d62; font-size: 11px; }
-.pdf-report .rpt-species { margin: 6px 0; padding-inline-start: 20px; font-size: 12px; }
-.pdf-report .rpt-species li { margin-bottom: 4px; }
-.pdf-report .rpt-sp-note { color: #5b6d62; font-size: 11px; }
-.pdf-report .rpt-sp-imgs { margin-top: 2px; }
-.pdf-report .rpt-track-legend { font-size: 11px; color: #5b6d62; margin-top: 4px; }
-.pdf-report .rpt-media-link { font-size: 12px; margin-top: 6px; word-break: break-all; }
-.pdf-report .rpt-media-link a { color: #2d6a4f; }
-.pdf-report .rpt-foot { border-top: 2px solid #2d6a4f; margin-top: 16px; padding-top: 8px; text-align: center; font-size: 11px; color: #5b6d62; }
-
-@media print {
-  .topbar, .tabbar, .toast { display: none !important; }
+.asset-marker-badge {
+  width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  box-shadow: var(--shadow-lg); border: 2px solid #fff; color: #fff;
 }
+.asset-marker-badge .icon { width: 16px; height: 16px; }
+.asset-sheet-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+
+.map-filter-btn {
+  position: absolute; bottom: calc(var(--tabbar-h) + 18px + 46px + 10px + 46px + 10px); left: 16px;
+  width: 46px; height: 46px; border-radius: 50%; border: 0;
+  background: var(--card); box-shadow: var(--shadow-lg);
+  font-size: 1.25rem; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; z-index: 700;
+}
+.map-filter-btn:hover { background: var(--accent-50); }
+
+/* ---------- status badge (asset status pill) ---------- */
+
+.status-badge {
+  display: inline-flex; align-items: center; color: #fff; font-size: .78rem; font-weight: 600;
+  padding: 3px 10px; border-radius: 999px; white-space: nowrap;
+}
+
+/* ---------- forms: field groups, actions, photo grid ---------- */
+
+.field-group {
+  border: 1.5px solid var(--line); border-radius: var(--radius); background: var(--card);
+  padding: 14px 16px; margin-bottom: 16px;
+}
+.field-group > .field:last-child { margin-bottom: 0; }
+.form-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+
+.photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; margin-top: 8px; }
+.photo-cell { position: relative; aspect-ratio: 1; border-radius: var(--radius); overflow: hidden; background: var(--accent-50); }
+.photo-cell img { width: 100%; height: 100%; object-fit: cover; cursor: pointer; }
+.photo-missing { width: 100%; height: 100%; background: var(--accent-100); }
+.photo-remove {
+  position: absolute; top: 4px; left: 4px; width: 22px; height: 22px; padding: 0;
+  border-radius: 50%; background: rgba(0,0,0,.55); color: #fff; border: 0; line-height: 1;
+}
+
+/* ---------- home: type tiles + recent maintenance activity ---------- */
+
+.type-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 8px; margin-bottom: 6px; }
+.type-tile {
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 12px 6px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  cursor: pointer; font: inherit; color: inherit;
+}
+.type-tile:hover { background: var(--accent-50); }
+.type-tile-icon { color: var(--accent-700); }
+.type-tile-num { font-size: 1.1rem; font-weight: 700; color: var(--accent-900); }
+.type-tile-label { font-size: .74rem; color: var(--ink-soft); }
+
+.activity-list { display: flex; flex-direction: column; gap: 6px; }
+.activity-row {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line);
+  border-radius: var(--radius); background: var(--card); cursor: pointer; font: inherit; color: inherit; text-align: right;
+  width: 100%;
+}
+.activity-row:hover { background: var(--accent-50); }
+.activity-row-date { color: var(--ink-soft); font-size: .82rem; white-space: nowrap; }
+.activity-row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.activity-row-main .hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- asset detail: maintenance log ---------- */
+
+.maint-list { display: flex; flex-direction: column; gap: 8px; }
+.maint-row { position: relative; padding: 10px 36px 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); }
+.maint-row-main { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.maint-row p { margin: 0; font-size: .92rem; }
+.maint-del { position: absolute; top: 8px; left: 8px; }

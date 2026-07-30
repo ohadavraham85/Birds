@@ -1,66 +1,43 @@
-/* views/table.ts — רשימת התצפיות: סינון (חיפוש + מין + תגית + טווח תאריכים),
- * מיון לפי עמודה, קיבוץ (תגית / מין), סימון מרובה, וייצוא Excel/PDF. */
+/* views/table.ts — רשימת הנכסים: חיפוש, סינון לפי סוג/סטטוס, מיון לפי עמודה,
+ * סימון מרובה למחיקה, וייצוא ל-CSV/Excel. */
 
-import {
-  listObservations, deleteObservation, saveObservation, listSpecies, addSpecies,
-} from '../db/repository';
-import { toast, fmtDateTime, fmtCoords, confirmDialog, withBusyButton } from '../lib/ui';
+import { listAssets, deleteAsset } from '../db/repository';
+import { toast, confirmDialog } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
-import { parseCsv, mapHeaders, parseCoordinates, parseDateTime, type HeaderMap, type CsvField } from '../lib/csv';
-import { exportObservationsPdf } from '../lib/pdf';
-import { exportObservationsExcel } from '../lib/export-excel';
-import { openBulkEditModal, applyBulkEdit, summarizeBulkEdit } from '../lib/bulk-edit';
+import { toCsv } from '../lib/csv';
 import { qs, input, select } from '../lib/dom';
 import { icon } from '../lib/icons';
-import { renderObservationTile } from '../lib/tile-card';
-import { tagBadgesHtml, wireTagBadges } from '../lib/tag-badge';
-import { viewModeToggleHtml, wireViewModeToggle, syncViewModeToggle, type ViewDisplayMode } from '../lib/view-mode';
-import { speciesNames, totalQuantity, hasSpecies, primarySpecies, speciesLabel } from '../lib/observation';
+import { ASSET_TYPE_META, ASSET_STATUS_META, VOLTAGE_META } from '../lib/asset-meta';
+import { ASSET_TYPES, ASSET_STATUSES } from '../types';
 import { navigate } from '../main';
 import type { ViewParams } from './view';
-import type { Observation } from '../types';
+import type { Asset, AssetType, AssetStatus } from '../types';
 
 let container: HTMLElement;
 let selected = new Set<string>();
-let observations: Observation[] = [];
-let filtered: Observation[] = [];
-const filters = { q: '', species: '', tag: '', from: '', to: '' };
-let groupBy: 'none' | 'tag' | 'species' = 'none';
-let sortBy: 'dateTime' | 'species' | 'quantity' | 'locationName' | 'tags' = 'dateTime';
-let sortDir: 'asc' | 'desc' = 'desc';
-let displayMode: ViewDisplayMode = 'list';
+let assets: Asset[] = [];
+let filtered: Asset[] = [];
+const filters = { q: '', type: '' as AssetType | '', status: '' as AssetStatus | '' };
+let sortBy: 'name' | 'type' | 'status' | 'voltage' | 'lastMaintenanceDate' = 'name';
+let sortDir: 'asc' | 'desc' = 'asc';
 
 export function init(el: HTMLElement): void {
   container = el;
   container.innerHTML = `
-    <h2>רשימת תצפיות</h2>
+    <h2>רשימת נכסים</h2>
     <div class="filter-bar">
-      <input type="search" id="flt-q" class="filter-search" placeholder="חיפוש (מין, מיקום, תגית, הערות)...">
-      <select id="flt-species" class="filter-sel"><option value="">כל המינים</option></select>
-      <select id="flt-tag" class="filter-sel"><option value="">כל התגיות</option></select>
-      <select id="flt-group" class="filter-sel">
-        <option value="none">ללא קיבוץ</option>
-        <option value="tag">קיבוץ לפי תגית</option>
-        <option value="species">קיבוץ לפי מין</option>
+      <input type="search" id="flt-q" class="filter-search" placeholder="חיפוש (שם, מספר נכס, כתובת)...">
+      <select id="flt-type" class="filter-sel"><option value="">כל הסוגים</option>
+        ${ASSET_TYPES.map((t) => `<option value="${t}">${ASSET_TYPE_META[t].label}</option>`).join('')}
       </select>
-      <label class="date-range">מ־<input type="date" id="flt-from" title="מתאריך"></label>
-      <label class="date-range">עד<input type="date" id="flt-to" title="עד תאריך"></label>
+      <select id="flt-status" class="filter-sel"><option value="">כל הסטטוסים</option>
+        ${ASSET_STATUSES.map((s) => `<option value="${s}">${ASSET_STATUS_META[s].label}</option>`).join('')}
+      </select>
       <button class="btn btn-sm" id="flt-clear" title="ניקוי סינון">נקה</button>
-      ${viewModeToggleHtml('tbl-view-mode')}
     </div>
     <div class="table-toolbar">
-      <label class="btn btn-sm" style="cursor:pointer">
-        ${icon('upload')} ייבוא CSV
-        <input type="file" id="csv-input" accept=".csv,text/csv" hidden>
-      </label>
-      <div class="export-wrap">
-        <button class="btn btn-sm btn-primary" id="export-btn">${icon('download')} ייצוא ▾</button>
-        <div class="export-menu" id="export-menu" hidden>
-          <button data-fmt="excel">${icon('grid')} Excel (CSV)</button>
-          <button data-fmt="pdf">${icon('document')} PDF</button>
-        </div>
-      </div>
-      <button class="btn btn-sm" id="bulk-edit-btn" disabled>${icon('edit')} עריכה מרוכזת</button>
+      <button class="btn btn-sm btn-primary" id="export-btn">${icon('download')} ייצוא ל-Excel/CSV</button>
+      <button class="btn btn-sm" id="add-btn">${icon('plus')} נכס חדש</button>
       <button class="btn btn-sm btn-danger" id="del-btn" disabled>${icon('trash')} מחיקה</button>
       <span class="spacer"></span>
       <span class="sel-count" id="sel-count"></span>
@@ -68,386 +45,174 @@ export function init(el: HTMLElement): void {
     <div class="table-wrap">
       <table class="obs-table">
         <thead>
-          <tr id="obs-head">
+          <tr id="asset-head">
             <th style="width:36px"><input type="checkbox" id="sel-all" title="בחירת כל המוצג"></th>
-            <th style="width:44px">#</th>
-            <th class="sortable" data-sort="dateTime">תאריך ושעה<span class="sort-ind"></span></th>
-            <th class="sortable" data-sort="species">מין הציפור<span class="sort-ind"></span></th>
-            <th class="sortable" data-sort="quantity">כמות<span class="sort-ind"></span></th>
-            <th class="sortable" data-sort="locationName">מיקום<span class="sort-ind"></span></th>
-            <th>קואורדינטות</th>
-            <th class="sortable" data-sort="tags">תגיות<span class="sort-ind"></span></th>
-            <th>הערות</th>
+            <th class="sortable" data-sort="name">שם / מספר נכס<span class="sort-ind"></span></th>
+            <th class="sortable" data-sort="type">סוג<span class="sort-ind"></span></th>
+            <th class="sortable" data-sort="status">סטטוס<span class="sort-ind"></span></th>
+            <th class="sortable" data-sort="voltage">מתח<span class="sort-ind"></span></th>
+            <th>כתובת</th>
+            <th class="sortable" data-sort="lastMaintenanceDate">תחזוקה אחרונה<span class="sort-ind"></span></th>
             <th></th>
           </tr>
         </thead>
-        <tbody id="obs-tbody"></tbody>
+        <tbody id="asset-tbody"></tbody>
       </table>
     </div>
-    <div id="obs-tile-wrap" hidden></div>
-    <p id="table-empty" style="color:var(--ink-soft)" hidden>אין תצפיות להצגה.</p>
+    <p id="table-empty" style="color:var(--ink-soft)" hidden>אין נכסים להצגה.</p>
   `;
 
-  wireViewModeToggle(container, 'tbl-view-mode', (mode) => { displayMode = mode; renderRows(); });
   input(container, '#flt-q').addEventListener('input', (e) => { filters.q = (e.target as HTMLInputElement).value; applyFilters(); });
-  select(container, '#flt-species').addEventListener('change', (e) => { filters.species = (e.target as HTMLSelectElement).value; applyFilters(); });
-  select(container, '#flt-tag').addEventListener('change', (e) => { filters.tag = (e.target as HTMLSelectElement).value; applyFilters(); });
-  select(container, '#flt-group').addEventListener('change', (e) => { groupBy = (e.target as HTMLSelectElement).value as typeof groupBy; renderRows(); });
-  input(container, '#flt-from').addEventListener('change', (e) => { filters.from = (e.target as HTMLInputElement).value; applyFilters(); });
-  input(container, '#flt-to').addEventListener('change', (e) => { filters.to = (e.target as HTMLInputElement).value; applyFilters(); });
+  select(container, '#flt-type').addEventListener('change', (e) => { filters.type = (e.target as HTMLSelectElement).value as AssetType | ''; applyFilters(); });
+  select(container, '#flt-status').addEventListener('change', (e) => { filters.status = (e.target as HTMLSelectElement).value as AssetStatus | ''; applyFilters(); });
   qs(container, '#flt-clear').addEventListener('click', clearFilters);
-  qs(container, '#obs-head').addEventListener('click', onHeaderClick);
-
+  qs(container, '#asset-head').addEventListener('click', onHeaderClick);
+  qs(container, '#add-btn').addEventListener('click', () => navigate('form'));
+  qs(container, '#export-btn').addEventListener('click', onExport);
+  qs(container, '#del-btn').addEventListener('click', () => void onBulkDelete());
   input(container, '#sel-all').addEventListener('change', (e) => {
     const checked = (e.target as HTMLInputElement).checked;
-    filtered.forEach((o) => (checked ? selected.add(o.id) : selected.delete(o.id)));
+    filtered.forEach((a) => (checked ? selected.add(a.id) : selected.delete(a.id)));
     renderRows();
   });
-  qs(container, '#bulk-edit-btn').addEventListener('click', () => void onBulkEdit());
-  qs(container, '#del-btn').addEventListener('click', () => void onBulkDelete());
-  input(container, '#csv-input').addEventListener('change', (e) => void onImportCsv(e));
-  qs(container, '#obs-tbody').addEventListener('click', (e) => void onRowClick(e));
-  setupExportMenu();
+  qs(container, '#asset-tbody').addEventListener('click', (e) => void onRowClick(e));
 }
 
 export function setParams(params: ViewParams): void {
-  if (params && 'species' in params) {
-    filters.q = ''; filters.tag = ''; filters.from = ''; filters.to = '';
-    filters.species = params.species || '';
-    if (container) {
-      input(container, '#flt-q').value = '';
-      input(container, '#flt-from').value = '';
-      input(container, '#flt-to').value = '';
-    }
+  filters.q = '';
+  filters.type = params?.filterType ?? '';
+  filters.status = params?.filterStatus ?? '';
+  if (container) {
+    input(container, '#flt-q').value = '';
+    select(container, '#flt-type').value = filters.type;
+    select(container, '#flt-status').value = filters.status;
   }
 }
 
-export async function activate(): Promise<void> {
-  observations = await listObservations();
-  selected = new Set([...selected].filter((id) => observations.some((o) => o.id === id)));
-  populateFilterOptions();
+function clearFilters(): void {
+  filters.q = ''; filters.type = ''; filters.status = '';
+  input(container, '#flt-q').value = '';
+  select(container, '#flt-type').value = '';
+  select(container, '#flt-status').value = '';
   applyFilters();
-}
-
-/* ---------- filtering ---------- */
-
-function populateFilterOptions(): void {
-  const species = [...new Set(observations.flatMap(speciesNames))].sort((a, b) => a.localeCompare(b, 'he'));
-  const tags = [...new Set(observations.flatMap((o) => o.tags))].sort((a, b) => a.localeCompare(b, 'he'));
-  const fill = (sel: HTMLSelectElement, items: string[], keep: string, allLabel: string): void => {
-    sel.innerHTML = `<option value="">${allLabel}</option>`
-      + items.map((v) => `<option value="${escapeHtml(v)}"${v === keep ? ' selected' : ''}>${escapeHtml(v)}</option>`).join('');
-  };
-  fill(select(container, '#flt-species'), species, filters.species, 'כל המינים');
-  fill(select(container, '#flt-tag'), tags, filters.tag, 'כל התגיות');
-}
-
-function localDay(iso: string): string {
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return '';
-  const p = (n: number): string => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
 function applyFilters(): void {
   const q = filters.q.trim().toLowerCase();
-  filtered = observations.filter((o) => {
-    if (filters.species && !hasSpecies(o, filters.species)) return false;
-    if (filters.tag && !o.tags.includes(filters.tag)) return false;
-    if (filters.from || filters.to) {
-      const day = localDay(o.dateTime);
-      if (filters.from && day && day < filters.from) return false;
-      if (filters.to && day && day > filters.to) return false;
-    }
-    if (q) {
-      const hay = `${speciesNames(o).join(' ')} ${o.locationName || ''} ${o.tags.join(' ')} ${o.notes || ''}`.toLowerCase();
-      if (!hay.includes(q)) return false;
-    }
+  filtered = assets.filter((a) => {
+    if (filters.type && a.type !== filters.type) return false;
+    if (filters.status && a.status !== filters.status) return false;
+    if (q && !(a.name.toLowerCase().includes(q) || a.code.toLowerCase().includes(q) || (a.address ?? '').toLowerCase().includes(q))) return false;
     return true;
   });
-  sortFiltered();
+  sortRows();
   renderRows();
 }
 
-function sortFiltered(): void {
+function sortRows(): void {
   const dir = sortDir === 'asc' ? 1 : -1;
-  const byDate = (a: Observation, b: Observation): number =>
-    (a.dateTime || '') < (b.dateTime || '') ? -1 : (a.dateTime || '') > (b.dateTime || '') ? 1 : 0;
   filtered.sort((a, b) => {
-    let r: number;
-    if (sortBy === 'quantity') r = totalQuantity(a) - totalQuantity(b);
-    else if (sortBy === 'dateTime') r = byDate(a, b);
-    else if (sortBy === 'species') r = primarySpecies(a).localeCompare(primarySpecies(b), 'he');
-    else if (sortBy === 'tags') r = (a.tags[0] || '').localeCompare(b.tags[0] || '', 'he');
-    else r = String(a[sortBy] || '').localeCompare(String(b[sortBy] || ''), 'he');
-    if (r === 0) r = byDate(a, b);
-    return r * dir;
+    let av: string, bv: string;
+    if (sortBy === 'type') { av = ASSET_TYPE_META[a.type].label; bv = ASSET_TYPE_META[b.type].label; }
+    else if (sortBy === 'status') { av = ASSET_STATUS_META[a.status].label; bv = ASSET_STATUS_META[b.status].label; }
+    else if (sortBy === 'voltage') { av = VOLTAGE_META[a.voltage].label; bv = VOLTAGE_META[b.voltage].label; }
+    else if (sortBy === 'lastMaintenanceDate') { av = a.lastMaintenanceDate ?? ''; bv = b.lastMaintenanceDate ?? ''; }
+    else { av = a.name || a.code; bv = b.name || b.code; }
+    return av.localeCompare(bv, 'he') * dir;
   });
 }
 
 function onHeaderClick(e: Event): void {
-  const th = (e.target as HTMLElement).closest<HTMLElement>('th.sortable');
+  const th = (e.target as HTMLElement).closest<HTMLElement>('.sortable');
   if (!th) return;
   const key = th.dataset.sort as typeof sortBy;
-  if (sortBy === key) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
-  else { sortBy = key; sortDir = key === 'dateTime' ? 'desc' : 'asc'; }
-  sortFiltered();
+  if (sortBy === key) sortDir = sortDir === 'asc' ? 'desc' : 'asc'; else { sortBy = key; sortDir = 'asc'; }
+  sortRows();
   renderRows();
 }
 
 function updateSortIndicators(): void {
-  container.querySelectorAll<HTMLElement>('#obs-head th.sortable').forEach((th) => {
+  container.querySelectorAll<HTMLElement>('.sortable').forEach((th) => {
     const ind = th.querySelector('.sort-ind')!;
-    if (th.dataset.sort === sortBy) { th.classList.add('sorted'); ind.textContent = sortDir === 'asc' ? ' ▲' : ' ▼'; }
-    else { th.classList.remove('sorted'); ind.textContent = ''; }
+    ind.textContent = th.dataset.sort === sortBy ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '';
   });
 }
 
-function clearFilters(): void {
-  filters.q = ''; filters.species = ''; filters.tag = ''; filters.from = ''; filters.to = '';
-  input(container, '#flt-q').value = '';
-  select(container, '#flt-species').value = '';
-  select(container, '#flt-tag').value = '';
-  input(container, '#flt-from').value = '';
-  input(container, '#flt-to').value = '';
-  applyFilters();
-}
-
-/* ---------- rendering ---------- */
-
-function rowHtml(o: Observation): string {
-  return `
-    <tr data-id="${o.id}" class="${selected.has(o.id) ? 'selected' : ''}">
-      <td><input type="checkbox" class="row-sel" ${selected.has(o.id) ? 'checked' : ''}></td>
-      <td class="num">${o.seqNo ? `#${o.seqNo}` : ''}</td>
-      <td class="num">${fmtDateTime(o.dateTime)}</td>
-      <td><strong>${escapeHtml(speciesLabel(o))}</strong></td>
-      <td>${totalQuantity(o)}</td>
-      <td>${escapeHtml(o.locationName || '')}</td>
-      <td class="num">${fmtCoords(o.lat, o.lng)}</td>
-      <td>${o.tags.length ? tagBadgesHtml(o.tags) : ''}</td>
-      <td class="notes-cell" title="${escapeHtml(o.notes || '')}">${escapeHtml((o.notes || '').replace(/\s+/g, ' '))}</td>
-      <td class="row-actions">
-        <button class="btn btn-sm act-edit" title="עריכה">${icon('edit')}</button>
-        <button class="btn btn-sm act-del" title="מחיקה">${icon('trash')}</button>
+function renderRows(): void {
+  const tbody = qs(container, '#asset-tbody');
+  qs<HTMLElement>(container, '#table-empty').hidden = filtered.length > 0;
+  updateSortIndicators();
+  tbody.innerHTML = filtered.map((a) => {
+    const t = ASSET_TYPE_META[a.type];
+    const s = ASSET_STATUS_META[a.status];
+    return `
+    <tr data-id="${a.id}">
+      <td><input type="checkbox" class="row-sel" data-id="${a.id}" ${selected.has(a.id) ? 'checked' : ''}></td>
+      <td>${icon(t.icon)} ${escapeHtml(a.name || '—')}${a.code ? ` <span class="hint">#${escapeHtml(a.code)}</span>` : ''}</td>
+      <td>${t.label}</td>
+      <td><span class="status-badge" style="background:${s.color}">${s.label}</span></td>
+      <td>${VOLTAGE_META[a.voltage].label}</td>
+      <td>${escapeHtml(a.address ?? '')}</td>
+      <td>${escapeHtml(a.lastMaintenanceDate ?? '')}</td>
+      <td>
+        <button type="button" class="btn btn-icon row-view" data-id="${a.id}" title="פרטים" aria-label="פרטים">${icon('eye')}</button>
+        <button type="button" class="btn btn-icon row-edit" data-id="${a.id}" title="עריכה" aria-label="עריכה">${icon('edit')}</button>
       </td>
     </tr>`;
+  }).join('');
+  updateSelToolbar();
 }
 
-function groupKeys(o: Observation): string[] {
-  if (groupBy === 'tag') return o.tags.length ? o.tags : ['(ללא תגית)'];
-  if (groupBy === 'species') return speciesNames(o).length ? speciesNames(o) : ['(ללא מין)'];
-  return [];
+function updateSelToolbar(): void {
+  const count = selected.size;
+  qs<HTMLButtonElement>(container, '#del-btn').disabled = count === 0;
+  qs(container, '#sel-count').textContent = count ? `${count} נבחרו` : '';
+  const allChecked = filtered.length > 0 && filtered.every((a) => selected.has(a.id));
+  input(container, '#sel-all').checked = allChecked;
 }
-
-function renderRows(): void {
-  syncViewModeToggle(container, 'tbl-view-mode', displayMode);
-  qs(container, '.table-wrap').hidden = displayMode !== 'list';
-  qs(container, '#obs-tile-wrap').hidden = displayMode === 'list';
-  qs(container, '#table-empty').hidden = filtered.length > 0;
-
-  if (displayMode !== 'list') {
-    const tileWrap = qs(container, '#obs-tile-wrap');
-    tileWrap.className = `obs-tile-grid obs-tile-grid-${displayMode}`;
-    tileWrap.innerHTML = '';
-    for (const o of filtered) {
-      const tile = renderObservationTile(o, displayMode === 'rect' ? 'rect' : 'square');
-      tile.addEventListener('click', () => navigate('form', { editId: o.id }));
-      tileWrap.appendChild(tile);
-    }
-    updateToolbar();
-    return;
-  }
-
-  const tbody = qs(container, '#obs-tbody');
-  if (groupBy === 'none') {
-    tbody.innerHTML = filtered.map(rowHtml).join('');
-  } else {
-    const groups = new Map<string, Observation[]>();
-    for (const o of filtered) {
-      for (const k of groupKeys(o)) (groups.get(k) ?? groups.set(k, []).get(k)!).push(o);
-    }
-    const keys = [...groups.keys()].sort((a, b) => a.localeCompare(b, 'he'));
-    tbody.innerHTML = keys.map((k) => {
-      const rows = groups.get(k)!;
-      const totalQty = rows.reduce((s, o) => s + totalQuantity(o), 0);
-      const allSel = rows.every((o) => selected.has(o.id));
-      return `
-        <tr class="group-head" data-group="${escapeHtml(k)}">
-          <td><input type="checkbox" class="group-sel" ${allSel ? 'checked' : ''}></td>
-          <td colspan="9">
-            <span class="group-title">${escapeHtml(k)}</span>
-            <span class="group-meta">${rows.length} תצפיות · ${totalQty} פרטים</span>
-          </td>
-        </tr>` + rows.map(rowHtml).join('');
-    }).join('');
-  }
-  wireTagBadges(tbody);
-  updateSortIndicators();
-  updateToolbar();
-}
-
-function updateToolbar(): void {
-  const n = selected.size;
-  qs(container, '#sel-count').textContent =
-    n ? `${n} מסומנות` : (filtered.length !== observations.length ? `${filtered.length} מוצגות` : '');
-  qs<HTMLButtonElement>(container, '#del-btn').disabled = n === 0;
-  qs<HTMLButtonElement>(container, '#bulk-edit-btn').disabled = n === 0;
-  const all = input(container, '#sel-all');
-  const selInView = filtered.filter((o) => selected.has(o.id)).length;
-  all.checked = filtered.length > 0 && selInView === filtered.length;
-  all.indeterminate = selInView > 0 && selInView < filtered.length;
-}
-
-/* ---------- selection & row actions ---------- */
 
 async function onRowClick(e: Event): Promise<void> {
   const target = e.target as HTMLElement;
-  const groupHead = target.closest<HTMLElement>('tr.group-head');
-  if (groupHead && target.classList.contains('group-sel')) {
-    const key = groupHead.dataset.group!;
-    const rows = filtered.filter((o) => groupKeys(o).includes(key));
-    const checked = (target as HTMLInputElement).checked;
-    rows.forEach((o) => (checked ? selected.add(o.id) : selected.delete(o.id)));
-    renderRows();
-    return;
-  }
-  const tr = target.closest<HTMLElement>('tr[data-id]');
-  if (!tr) return;
-  const id = tr.dataset.id!;
-
   if (target.classList.contains('row-sel')) {
-    (target as HTMLInputElement).checked ? selected.add(id) : selected.delete(id);
-    tr.classList.toggle('selected', (target as HTMLInputElement).checked);
-    updateToolbar();
-    if (groupBy !== 'none') renderRows();
+    const id = target.dataset.id!;
+    if ((target as HTMLInputElement).checked) selected.add(id); else selected.delete(id);
+    updateSelToolbar();
     return;
   }
-  if (target.closest('.act-edit')) { navigate('form', { editId: id }); return; }
-  if (target.closest('.act-del')) {
-    if (await confirmDialog('למחוק את התצפית?', 'מחיקה')) {
-      await deleteObservation(id);
-      selected.delete(id);
-      await activate();
-      toast('התצפית נמחקה');
-    }
-  }
+  const viewBtn = target.closest<HTMLElement>('.row-view');
+  if (viewBtn) { navigate('detail', { viewId: viewBtn.dataset.id! }); return; }
+  const editBtn = target.closest<HTMLElement>('.row-edit');
+  if (editBtn) { navigate('form', { editId: editBtn.dataset.id! }); return; }
 }
 
 async function onBulkDelete(): Promise<void> {
   if (!selected.size) return;
-  if (!(await confirmDialog(`למחוק ${selected.size} תצפיות שנבחרו?`, 'מחיקת הנבחרות'))) return;
-  for (const id of selected) await deleteObservation(id);
-  selected.clear();
+  if (!(await confirmDialog(`למחוק ${selected.size} נכסים? הפעולה אינה הפיכה.`, 'מחיקה'))) return;
+  for (const id of selected) await deleteAsset(id);
+  toast(`${selected.size} נכסים נמחקו`);
+  selected = new Set();
   await activate();
-  toast('התצפיות נמחקו');
 }
 
-/* ---------- bulk edit (project / location) ---------- */
-
-async function onBulkEdit(): Promise<void> {
-  if (!selected.size) return;
-  const result = await openBulkEditModal(selected.size, observations);
-  if (!result) return;
-
-  const changeParts = summarizeBulkEdit(result);
-  if (!(await confirmDialog(`לעדכן ${selected.size} תצפיות: ${changeParts.join(', ')}? הפעולה אינה הפיכה אוטומטית.`, 'עדכון'))) return;
-
-  const updated = await applyBulkEdit([...selected], result);
-  selected.clear();
-  await activate();
-  toast(`${updated} תצפיות עודכנו ✓`);
+function onExport(): void {
+  if (!filtered.length) { toast('אין נכסים לייצוא', true); return; }
+  const rows: unknown[][] = [
+    ['מספר נכס', 'שם', 'סוג', 'סטטוס', 'מתח', 'קו רוחב', 'קו אורך', 'כתובת', 'תאריך התקנה', 'תחזוקה אחרונה', 'הערות'],
+    ...filtered.map((a) => [
+      a.code, a.name, ASSET_TYPE_META[a.type].label, ASSET_STATUS_META[a.status].label, VOLTAGE_META[a.voltage].label,
+      a.lat ?? '', a.lng ?? '', a.address ?? '', a.installDate ?? '', a.lastMaintenanceDate ?? '', a.notes ?? '',
+    ]),
+  ];
+  const blob = new Blob([toCsv(rows)], { type: 'text/csv;charset=utf-8' });
+  const el = document.createElement('a');
+  el.href = URL.createObjectURL(blob);
+  el.download = `נכסי-חשמל-${new Date().toISOString().slice(0, 10)}.csv`;
+  el.click();
+  URL.revokeObjectURL(el.href);
+  toast(`יוצאו ${filtered.length} נכסים ✓`);
 }
 
-/* ---------- export ---------- */
-
-function exportSet(): Observation[] {
-  if (selected.size) {
-    const chosen = filtered.filter((o) => selected.has(o.id));
-    const extra = observations.filter((o) => selected.has(o.id) && !filtered.includes(o));
-    return [...chosen, ...extra];
-  }
-  return filtered;
-}
-
-function setupExportMenu(): void {
-  const btn = qs<HTMLButtonElement>(container, '#export-btn');
-  const menu = qs(container, '#export-menu');
-  btn.addEventListener('click', (e) => { e.stopPropagation(); menu.hidden = !menu.hidden; });
-  menu.addEventListener('click', (e) => {
-    const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-fmt]');
-    if (!b) return;
-    menu.hidden = true;
-    if (b.dataset.fmt === 'excel') exportExcel();
-    else void exportPdf();
-  });
-  document.addEventListener('click', (e) => {
-    if (!(e.target as HTMLElement).closest('.export-wrap')) menu.hidden = true;
-  });
-}
-
-async function exportPdf(): Promise<void> {
-  const source = exportSet();
-  if (!source.length) { toast('אין תצפיות לייצוא', true); return; }
-  const btn = qs<HTMLButtonElement>(container, '#export-btn');
-  try {
-    await withBusyButton(btn, 'מפיק דו"ח...', () => exportObservationsPdf(source));
-  } catch (err) {
-    toast('הפקת ה-PDF נכשלה: ' + (err as Error).message, true, 5000);
-  }
-}
-
-function exportExcel(): void {
-  exportObservationsExcel(exportSet());
-}
-
-/* ---------- CSV import ---------- */
-
-async function onImportCsv(e: Event): Promise<void> {
-  const fileInput = e.target as HTMLInputElement;
-  const file = fileInput.files?.[0];
-  fileInput.value = '';
-  if (!file) return;
-  let rows: string[][];
-  try { rows = parseCsv(await file.text()); }
-  catch { toast('קריאת הקובץ נכשלה — ודאו שזהו קובץ CSV תקין', true); return; }
-  if (rows.length < 2) { toast('הקובץ ריק או חסרה שורת כותרות', true); return; }
-
-  const map: HeaderMap = mapHeaders(rows[0]!);
-  if (!('species' in map)) { toast('לא נמצאה עמודת "מין הציפור" בקובץ (species / מין)', true, 5000); return; }
-
-  const known = new Set(await listSpecies());
-  let imported = 0;
-  let newSpecies = 0;
-  const val = (r: string[], f: CsvField): string => (map[f] != null ? String(r[map[f]!] ?? '').trim() : '');
-
-  for (const r of rows.slice(1)) {
-    const species = val(r, 'species');
-    if (!species) continue;
-    if (!known.has(species)) { await addSpecies(species); known.add(species); newSpecies++; }
-    let lat: number | null = null;
-    let lng: number | null = null;
-    if (map.coordinates != null) ({ lat, lng } = parseCoordinates(val(r, 'coordinates')));
-    if (map.lat != null && val(r, 'lat') !== '') lat = parseFloat(val(r, 'lat'));
-    if (map.lng != null && val(r, 'lng') !== '') lng = parseFloat(val(r, 'lng'));
-    const tags = val(r, 'tags').split(',').map((t) => t.trim()).filter(Boolean);
-
-    await saveObservation({
-      id: crypto.randomUUID(),
-      dateTime: parseDateTime(val(r, 'dateTime')) || new Date().toISOString(),
-      locationName: val(r, 'locationName'),
-      lat: Number.isFinite(lat) ? lat : null,
-      lng: Number.isFinite(lng) ? lng : null,
-      project: tags[0] || '',
-      tags,
-      entries: [{ species, quantity: Math.max(1, parseInt(val(r, 'quantity'), 10) || 1) }],
-      images: [],
-      notes: map.notes != null ? String(r[map.notes] ?? '') : '',
-      deleted: false,
-      updatedAt: '',
-    });
-    imported++;
-  }
-  await activate();
-  toast(`יובאו ${imported} תצפיות` + (newSpecies ? ` (נוספו ${newSpecies} מינים חדשים לרשימת המאסטר)` : ''), false, 5000);
+export async function activate(): Promise<void> {
+  assets = await listAssets();
+  applyFilters();
 }

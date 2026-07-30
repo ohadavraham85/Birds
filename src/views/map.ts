@@ -1,76 +1,98 @@
-/* views/map.ts — מסך מפת השטח: נקודה אחת לכל מיקום ייחודי (לפי הקואורדינטות
- * של התצפית הראשונה שנרשמה שם), עם תווית קטנה וצמודה של שם המיקום. לחיצה על
- * נקודה פותחת חלון תחתון (bottom sheet) עם שם המקום, רשימת כל התצפיות
- * ההיסטוריות באותו מיקום (מהחדשה לישנה, לחיצה על אחת פותחת אותה בתצוגת
- * צפייה), וכפתור קומפקטי להוספת תצפית חדשה; לחיצה ארוכה על המפה פותחת אותו
- * חלון במיקום חדש שנבחר. שכבת הלוויין במצב היברידי כוללת שכבת תוויות (שמות
- * מקומות/כבישים) מעל צילום האוויר. שכבת GPS מציגה את מיקום המשתמש בזמן
- * אמת, עם כפתור להתמרכזות עליו. */
+/* views/map.ts — מסך מפת הנכסים: כל נכס (עמוד/שנאי/לוח/מונה/קו/מפסק/גנרטור)
+ * מוצג כסמן צבוע לפי סטטוס עם אייקון סוג הנכס. לחיצה על סמן פותחת חלון תחתון
+ * (bottom sheet) עם פרטי הנכס וקיצורי דרך לעריכה/תחזוקה/מחיקה; לחיצה ארוכה על
+ * המפה פותחת טופס נכס חדש במיקום שנבחר. שכבת הלוויין כוללת שכבת תוויות מעל
+ * צילום האוויר, ותפריט סינון לפי סוג/סטטוס. */
 
 import L from '../lib/leaflet-setup';
-import { listObservations, listTracks, getSetting, setSetting } from '../db/repository';
+import { listAssets } from '../db/repository';
 import { toast } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
-import { speciesLabel } from '../lib/observation';
 import { icon } from '../lib/icons';
 import { qs } from '../lib/dom';
 import { navigate } from '../main';
 import { createMapLayers, loadMapLayerState, setMapLayerPref, applyMapLayerState, type MapLayerState, type MapLayers } from '../lib/map-layers';
-import { TRACK_SEGMENT_COLOR } from '../lib/track-preview';
-import { addDirectionArrows, addReportPins } from '../lib/track-map';
-import type { Observation, ObservationTrack } from '../types';
+import { ASSET_TYPE_META, ASSET_STATUS_META, VOLTAGE_META } from '../lib/asset-meta';
+import { ASSET_TYPES, ASSET_STATUSES } from '../types';
+import type { Asset, AssetType, AssetStatus } from '../types';
 
 let container: HTMLElement;
 let map: L.Map | undefined;
 let markersLayer: L.LayerGroup | undefined;
-let tracksLayer: L.LayerGroup | undefined;
-let dropMarker: L.Marker | undefined;
 let myLocationMarker: L.CircleMarker | undefined;
 let geoWatchId: number | null = null;
 let layers: MapLayers;
-let allObservations: Observation[] = [];
+let allAssets: Asset[] = [];
 let closeSheet: (() => void) | null = null;
 
-/** Which base/overlay tiles are showing — persisted per device (like the color
- * theme) so the map reopens the way the user last left it. */
 let layerState: MapLayerState = { satellite: true, roads: false, labels: true };
-/** Whether the "מסלולי צפרות" (recorded GPS tracks) overlay is showing —
- * kept separate from MapLayerState since it's not shared with location-picker.ts. */
-let showTracks = false;
+const activeTypes = new Set<AssetType>(ASSET_TYPES);
+const activeStatuses = new Set<AssetStatus>(ASSET_STATUSES);
 
-/** Round green badge with a bird glyph, replacing Leaflet's default pin.
- * tooltipAnchor keeps the small permanent name label snug against the badge. */
-const birdIcon = L.divIcon({
-  className: 'bird-div-icon',
-  html: `<div class="bird-marker-badge">${icon('bird')}</div>`,
-  iconSize: [30, 30],
-  iconAnchor: [15, 15],
-  tooltipAnchor: [0, -16],
-  popupAnchor: [0, -17],
-});
+function assetDivIcon(asset: Asset): L.DivIcon {
+  const color = ASSET_STATUS_META[asset.status].color;
+  return L.divIcon({
+    className: 'asset-div-icon',
+    html: `<div class="asset-marker-badge" style="background:${color}">${icon(ASSET_TYPE_META[asset.type].icon)}</div>`,
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
+    tooltipAnchor: [0, -16],
+    popupAnchor: [0, -17],
+  });
+}
 
 export function init(el: HTMLElement): void {
   container = el;
   container.innerHTML = `
     <div id="map-container"></div>
-    <div class="map-hint">לחיצה ארוכה על המפה מוסיפה תצפית במיקום חדש · לחיצה על נקודה קיימת מציגה את היסטוריית התצפיות שם</div>
+    <div class="map-hint">לחיצה ארוכה על המפה מוסיפה נכס חדש במיקום · לחיצה על סמן קיים מציגה את פרטיו</div>
     <button id="locate-btn" class="map-locate-btn" type="button" title="התמרכזות על המיקום הנוכחי" aria-label="התמרכזות על המיקום הנוכחי">${icon('target')}</button>
+    <button id="filter-toggle-btn" class="map-filter-btn" type="button" title="סינון נכסים" aria-label="סינון נכסים">${icon('filter')}</button>
     <button id="layer-toggle-btn" class="map-layer-btn" type="button" title="שכבות מפה" aria-label="שכבות מפה">${icon('layers')}</button>
+    <div class="map-layers-menu" id="map-filter-menu" hidden>
+      <strong>סוג נכס</strong>
+      ${ASSET_TYPES.map((t) => `<label><input type="checkbox" class="f-type" value="${t}" checked> ${icon(ASSET_TYPE_META[t].icon)} ${ASSET_TYPE_META[t].label}</label>`).join('')}
+      <strong>סטטוס</strong>
+      ${ASSET_STATUSES.map((s) => `<label><input type="checkbox" class="f-status" value="${s}" checked> ${ASSET_STATUS_META[s].label}</label>`).join('')}
+    </div>
     <div class="map-layers-menu" id="map-layers-menu" hidden>
       <label><input type="checkbox" id="ml-satellite"> שכבת לוויין</label>
       <label><input type="checkbox" id="ml-roads"> שכבת כבישים</label>
       <label><input type="checkbox" id="ml-labels"> תוויות גיאוגרפיות</label>
-      <label><input type="checkbox" id="ml-tracks"> שכבת מסלולי צפרות</label>
     </div>
-    <div class="map-empty" id="map-empty" hidden>אין עדיין תצפיות עם קואורדינטות.<br>הוסיפו תצפית עם מיקום GPS והיא תופיע כאן.</div>
+    <div class="map-empty" id="map-empty" hidden>אין עדיין נכסים עם מיקום.<br>הוסיפו נכס עם מיקום GPS והוא יופיע כאן.</div>
   `;
   qs(container, '#locate-btn').addEventListener('click', onLocateClick);
-  const menu = qs(container, '#map-layers-menu');
-  qs(container, '#layer-toggle-btn').addEventListener('click', () => { menu.hidden = !menu.hidden; });
-  document.addEventListener('click', (e) => {
-    if (!menu.hidden && !(e.target as HTMLElement).closest('.map-layer-btn, .map-layers-menu')) menu.hidden = true;
+
+  const filterMenu = qs(container, '#map-filter-menu');
+  qs(container, '#filter-toggle-btn').addEventListener('click', () => {
+    filterMenu.hidden = !filterMenu.hidden;
+    if (!filterMenu.hidden) layersMenu.hidden = true;
   });
-  menu.addEventListener('change', (e) => void onLayerCheckboxChange(e));
+  filterMenu.addEventListener('change', onFilterChange);
+
+  const layersMenu = qs(container, '#map-layers-menu');
+  qs(container, '#layer-toggle-btn').addEventListener('click', () => {
+    layersMenu.hidden = !layersMenu.hidden;
+    if (!layersMenu.hidden) filterMenu.hidden = true;
+  });
+  layersMenu.addEventListener('change', (e) => void onLayerCheckboxChange(e));
+
+  document.addEventListener('click', (e) => {
+    const t = e.target as HTMLElement;
+    if (!layersMenu.hidden && !t.closest('.map-layer-btn, #map-layers-menu')) layersMenu.hidden = true;
+    if (!filterMenu.hidden && !t.closest('.map-filter-btn, #map-filter-menu')) filterMenu.hidden = true;
+  });
+}
+
+function onFilterChange(e: Event): void {
+  const t = e.target as HTMLInputElement;
+  if (t.classList.contains('f-type')) {
+    if (t.checked) activeTypes.add(t.value as AssetType); else activeTypes.delete(t.value as AssetType);
+  } else if (t.classList.contains('f-status')) {
+    if (t.checked) activeStatuses.add(t.value as AssetStatus); else activeStatuses.delete(t.value as AssetStatus);
+  }
+  renderMarkers();
 }
 
 async function loadLayerState(): Promise<void> {
@@ -81,33 +103,15 @@ function syncLayerCheckboxes(): void {
   qs<HTMLInputElement>(container, '#ml-satellite').checked = layerState.satellite;
   qs<HTMLInputElement>(container, '#ml-roads').checked = layerState.roads;
   qs<HTMLInputElement>(container, '#ml-labels').checked = layerState.labels;
-  qs<HTMLInputElement>(container, '#ml-tracks').checked = showTracks;
 }
 
-/** Applies the current layerState to the live map — satellite/street are a
- * mutually-exclusive base, roads and labels are independent overlays that
- * can layer on top of either base. */
 function applyLayerState(): void {
   if (!map) return;
   applyMapLayerState(map, layers, layerState);
 }
 
-/** The tracks layer's polylines are (re)drawn every activate() regardless of
- * visibility; this only toggles whether that layer group sits on the map —
- * mirrors how roads/labels tile layers are shown/hidden without recreating them. */
-function applyTracksVisibility(): void {
-  if (!map || !tracksLayer) return;
-  if (showTracks) tracksLayer.addTo(map); else map.removeLayer(tracksLayer);
-}
-
 async function onLayerCheckboxChange(e: Event): Promise<void> {
   const target = e.target as HTMLInputElement;
-  if (target.id === 'ml-tracks') {
-    showTracks = target.checked;
-    await setSetting('mapLayerTracks', showTracks);
-    applyTracksVisibility();
-    return;
-  }
   const key = target.id === 'ml-satellite' ? 'satellite' : target.id === 'ml-roads' ? 'roads' : target.id === 'ml-labels' ? 'labels' : null;
   if (!key) return;
   layerState = { ...layerState, [key]: target.checked };
@@ -115,21 +119,7 @@ async function onLayerCheckboxChange(e: Event): Promise<void> {
   applyLayerState();
 }
 
-function drawTrack(t: ObservationTrack): void {
-  for (const seg of t.segments) {
-    if (seg.points.length < 2) continue;
-    L.polyline(seg.points.map((p) => [p.lat, p.lng]), {
-      color: TRACK_SEGMENT_COLOR[seg.kind], weight: 4, opacity: 0.85,
-    }).addTo(tracksLayer!);
-    if (seg.kind === 'walk') addDirectionArrows(tracksLayer!, seg);
-  }
-  if (t.reportPins?.length) addReportPins(tracksLayer!, t.reportPins);
-}
-
-/** Fixed default extent covering all of Israel's territory — the map always
- * opens here rather than auto-fitting to wherever the user's own pins
- * happen to be, so its initial view stays predictable regardless of what's
- * been logged so far. */
+/** Fixed default extent covering all of Israel's territory. */
 const ISRAEL_BOUNDS: [[number, number], [number, number]] = [[29.4, 34.2], [33.4, 35.95]];
 
 function ensureMap(): void {
@@ -138,31 +128,36 @@ function ensureMap(): void {
   map.fitBounds(ISRAEL_BOUNDS);
   layers = createMapLayers();
   markersLayer = L.layerGroup().addTo(map);
-  tracksLayer = L.layerGroup();
-
-  // long-press (contextmenu on touch) drops a pin at a new location
   map.on('contextmenu', (e: L.LeafletMouseEvent) => dropPin(e.latlng));
 }
 
-/** Bottom sheet: place name, the full observation history at that point
- * (newest first, tap to open in View Mode), and a compact "+" to log a new
- * visit there. Used both for existing marker taps and for a freshly dropped
- * pin (where the history list is simply empty). */
-function openLocationSheet(label: string, history: Observation[], params: { lat: number; lng: number; locationName?: string }): void {
-  closeSheet?.();
+function assetSheetHtml(asset: Asset): string {
+  const t = ASSET_TYPE_META[asset.type];
+  const s = ASSET_STATUS_META[asset.status];
+  return `
+    <div class="map-sheet-head">
+      <h3>${icon(t.icon)} ${escapeHtml(asset.name || t.label)}</h3>
+      <button type="button" class="btn btn-icon map-sheet-close" title="סגירה" aria-label="סגירה">✕</button>
+    </div>
+    <div class="asset-sheet-meta">
+      <span class="status-badge" style="background:${s.color}">${s.label}</span>
+      <span class="hint">${t.label} · ${VOLTAGE_META[asset.voltage].label}${asset.code ? ` · #${escapeHtml(asset.code)}` : ''}</span>
+    </div>
+    ${asset.address ? `<p class="hint">${icon('pin')} ${escapeHtml(asset.address)}</p>` : ''}
+    ${asset.lastMaintenanceDate ? `<p class="hint">${icon('wrench')} תחזוקה אחרונה: ${escapeHtml(asset.lastMaintenanceDate)}</p>` : ''}
+    <div class="modal-actions">
+      <button type="button" class="btn btn-primary map-sheet-detail">${icon('document')} פרטים ותחזוקה</button>
+      <button type="button" class="btn map-sheet-edit">${icon('edit')} עריכה</button>
+    </div>`;
+}
 
+function openAssetSheet(asset: Asset): void {
+  closeSheet?.();
   const backdrop = document.createElement('div');
   backdrop.className = 'sheet-backdrop';
   const sheet = document.createElement('div');
   sheet.className = 'map-sheet';
-  sheet.innerHTML = `
-    <div class="map-sheet-head">
-      <h3>${escapeHtml(label)}</h3>
-      <button type="button" class="btn btn-icon map-sheet-close" title="סגירה" aria-label="סגירה">✕</button>
-    </div>
-    <div class="map-sheet-list"></div>
-    <button type="button" class="btn btn-primary btn-block map-sheet-add">${icon('plus')} הוספת תצפית כאן</button>
-  `;
+  sheet.innerHTML = assetSheetHtml(asset);
   backdrop.appendChild(sheet);
   document.getElementById('modal-root')!.appendChild(backdrop);
 
@@ -170,61 +165,49 @@ function openLocationSheet(label: string, history: Observation[], params: { lat:
   closeSheet = close;
   backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
   sheet.querySelector('.map-sheet-close')!.addEventListener('click', close);
-  sheet.querySelector('.map-sheet-add')!.addEventListener('click', () => { close(); navigate('form', params); });
-
-  const list = sheet.querySelector<HTMLElement>('.map-sheet-list')!;
-  if (!history.length) {
-    list.innerHTML = '<p class="map-sheet-empty">אין עדיין תצפיות במיקום זה.</p>';
-  } else {
-    for (const o of history) {
-      const item = document.createElement('button');
-      item.type = 'button';
-      item.className = 'map-sheet-item';
-      const time = new Date(o.dateTime).toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric' });
-      item.innerHTML = `
-        <span class="map-sheet-item-species">${escapeHtml(speciesLabel(o) || 'ללא מין')}</span>
-        <span class="map-sheet-item-date">${time}</span>`;
-      item.addEventListener('click', () => { close(); navigate('detail', { viewId: o.id }); });
-      list.appendChild(item);
-    }
-  }
+  sheet.querySelector('.map-sheet-detail')!.addEventListener('click', () => { close(); navigate('detail', { viewId: asset.id }); });
+  sheet.querySelector('.map-sheet-edit')!.addEventListener('click', () => { close(); navigate('form', { editId: asset.id }); });
 }
 
-/** All observations that share a location (by exact trimmed name), newest first.
- * Observations without a location name are treated as their own single-item history. */
-function historyFor(key: string): Observation[] {
-  return allObservations
-    .filter((o) => groupKey(o) === key)
-    .sort((a, b) => (a.dateTime < b.dateTime ? 1 : a.dateTime > b.dateTime ? -1 : 0));
+function newAssetSheetHtml(lat: number, lng: number): string {
+  return `
+    <div class="map-sheet-head">
+      <h3>${icon('plus')} מיקום חדש</h3>
+      <button type="button" class="btn btn-icon map-sheet-close" title="סגירה" aria-label="סגירה">✕</button>
+    </div>
+    <p class="hint">${lat.toFixed(5)}, ${lng.toFixed(5)}</p>
+    <button type="button" class="btn btn-primary btn-block map-sheet-add">${icon('plus')} הוספת נכס כאן</button>`;
 }
 
 function dropPin(latlng: L.LatLng): void {
-  const params = { lat: +latlng.lat.toFixed(6), lng: +latlng.lng.toFixed(6) };
-  dropMarker?.remove();
-  dropMarker = L.marker(latlng, { icon: birdIcon }).addTo(map!);
-  dropMarker.on('click', () => openLocationSheet('מיקום חדש', [], params));
-  openLocationSheet('מיקום חדש', [], params);
+  const lat = +latlng.lat.toFixed(6);
+  const lng = +latlng.lng.toFixed(6);
+  closeSheet?.();
+  const backdrop = document.createElement('div');
+  backdrop.className = 'sheet-backdrop';
+  const sheet = document.createElement('div');
+  sheet.className = 'map-sheet';
+  sheet.innerHTML = newAssetSheetHtml(lat, lng);
+  backdrop.appendChild(sheet);
+  document.getElementById('modal-root')!.appendChild(backdrop);
+  const close = (): void => { backdrop.remove(); if (closeSheet === close) closeSheet = null; };
+  closeSheet = close;
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+  sheet.querySelector('.map-sheet-close')!.addEventListener('click', close);
+  sheet.querySelector('.map-sheet-add')!.addEventListener('click', () => { close(); navigate('form', { lat, lng }); });
 }
 
-/** Groups observations that share a location name, so repeat visits to the
- * same named place collapse into one map point. Observations without a name
- * (or with coordinates only) each keep their own point. */
-function groupKey(o: Observation): string {
-  return o.locationName.trim() || `#${o.id}`;
-}
-
-interface LocationGroup { first: Observation; count: number }
-
-function groupByLocation(withCoords: Observation[]): LocationGroup[] {
-  const groups = new Map<string, Observation[]>();
-  for (const o of withCoords) {
-    const key = groupKey(o);
-    (groups.get(key) ?? groups.set(key, []).get(key)!).push(o);
+function renderMarkers(): void {
+  if (!markersLayer) return;
+  markersLayer.clearLayers();
+  const visible = allAssets.filter((a) => a.lat != null && a.lng != null && activeTypes.has(a.type) && activeStatuses.has(a.status));
+  qsEmpty(visible.length === 0 && allAssets.length === 0);
+  for (const asset of visible) {
+    const marker = L.marker([asset.lat!, asset.lng!], { icon: assetDivIcon(asset) });
+    marker.bindTooltip(asset.name || ASSET_TYPE_META[asset.type].label, { direction: 'top' });
+    marker.on('click', () => openAssetSheet(asset));
+    marker.addTo(markersLayer!);
   }
-  return [...groups.values()].map((list) => {
-    const sorted = [...list].sort((a, b) => (a.dateTime < b.dateTime ? -1 : a.dateTime > b.dateTime ? 1 : 0));
-    return { first: sorted[0]!, count: list.length };
-  });
 }
 
 let layersInitialized = false;
@@ -237,38 +220,17 @@ export async function activate(): Promise<void> {
   if (!layersInitialized) {
     layersInitialized = true;
     await loadLayerState();
-    showTracks = await getSetting('mapLayerTracks', false);
     syncLayerCheckboxes();
     applyLayerState();
-    applyTracksVisibility();
   }
 
-  markersLayer!.clearLayers();
-  allObservations = await listObservations();
-  const withCoords = allObservations.filter((o) => o.lat != null && o.lng != null);
-  qsEmpty(withCoords.length === 0);
-
-  for (const { first, count } of groupByLocation(withCoords)) {
-    const marker = L.marker([first.lat!, first.lng!], { icon: birdIcon });
-    const label = (first.locationName || 'מיקום ללא שם') + (count > 1 ? ` (${count})` : '');
-    const key = groupKey(first);
-    marker.on('click', () => openLocationSheet(label, historyFor(key), { lat: first.lat!, lng: first.lng!, locationName: first.locationName }));
-    marker.addTo(markersLayer!);
-  }
-
-  tracksLayer!.clearLayers();
-  for (const t of await listTracks()) drawTrack(t);
+  allAssets = await listAssets();
+  renderMarkers();
 }
 
-/** Stops the continuous "my location" GPS watch the moment the user leaves
- * this tab — without this, watchPosition(enableHighAccuracy: true) would
- * keep polling the GPS radio for the rest of the session even while
- * browsing other screens, needlessly draining battery and generating heat. */
 export function deactivate(): void {
   if (geoWatchId != null) { navigator.geolocation.clearWatch(geoWatchId); geoWatchId = null; }
 }
-
-/* ---------- GPS "my location" ---------- */
 
 function startGeoWatch(): void {
   if (!navigator.geolocation) return;
@@ -308,4 +270,3 @@ function qsEmpty(show: boolean): void {
   const e = container.querySelector<HTMLElement>('#map-empty');
   if (e) e.hidden = !show;
 }
-

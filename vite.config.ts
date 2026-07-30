@@ -12,10 +12,6 @@ export default defineConfig({
   },
   server: {
     port: 8787,
-    // dev proxy to the reference sync server so the app can call /api/* same-origin
-    proxy: {
-      '/api': { target: 'http://localhost:8790', changeOrigin: true },
-    },
   },
   plugins: [
     VitePWA({
@@ -25,17 +21,17 @@ export default defineConfig({
       registerType: 'autoUpdate',
       injectRegister: null, // we register manually in main.ts for lifecycle control
       manifest: {
-        name: 'יומן צפרות — ניהול ותיעוד תצפיות',
-        short_name: 'יומן צפרות',
+        name: 'ניהול נכסי חשמל — מפת נכסים ותחזוקה',
+        short_name: 'נכסי חשמל',
         description:
-          'מערכת offline-first לניהול ותיעוד תצפיות צפרות, עם סנכרון לשרת כשחוזרת התקשורת.',
+          'מערכת offline-first לניהול מפת נכסי חשמל (עמודים, שנאים, לוחות, מוני חשמל וקווים) עם יומן תחזוקה.',
         lang: 'he',
         dir: 'rtl',
         start_url: '.',
         scope: '.',
         display: 'standalone',
-        background_color: '#fbfdfb',
-        theme_color: '#2d6a4f',
+        background_color: '#eef0f2',
+        theme_color: '#1b2330',
         categories: ['productivity', 'utilities'],
         icons: [
           { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },

@@ -1,19 +1,16 @@
 {
-  "name": "birds-journal",
-  "version": "2.0.0",
-  "description": "יומן צפרות — PWA offline-first לניהול ותיעוד תצפיות, עם סנכרון לשרת",
+  "name": "electric-assets-map",
+  "version": "1.0.0",
+  "description": "ניהול נכסי חשמל — PWA offline-first למיפוי וניהול נכסי חשמל (עמודים, שנאים, לוחות, מוני חשמל וקווים) עם יומן תחזוקה",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --port 8788",
-    "typecheck": "tsc --noEmit",
-    "server": "node server/index.mjs"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "dexie": "^4.0.10",
-    "firebase": "^12.16.0",
-    "html2pdf.js": "^0.10.3",
     "leaflet": "^1.9.4",
     "workbox-cacheable-response": "^7.4.1",
     "workbox-core": "^7.4.1",

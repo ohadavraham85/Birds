@@ -3,34 +3,32 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#2d6a4f">
-  <meta name="description" content="מערכת offline-first לניהול ותיעוד תצפיות צפרות, עם סנכרון לשרת כשחוזרת התקשורת">
-  <title>יומן צפרות</title>
+  <meta name="theme-color" content="#1b2330">
+  <meta name="description" content="מערכת offline-first לניהול מפת נכסי חשמל — עמודים, שנאים, לוחות, מוני חשמל וקווים, עם יומן תחזוקה">
+  <title>ניהול נכסי חשמל</title>
   <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
   <script>
     try {
       var root = document.documentElement;
-      var t = localStorage.getItem('birds-theme'); if (t) root.setAttribute('data-theme', t);
-      var a = localStorage.getItem('birds-accent'); if (a) root.setAttribute('data-accent', a);
-      var fc = localStorage.getItem('birds-font-color'); if (fc) root.setAttribute('data-font-color', fc);
-      var fs = localStorage.getItem('birds-font-size'); if (fs) root.setAttribute('data-font-size', fs);
-      var fw = localStorage.getItem('birds-font-weight'); if (fw) root.setAttribute('data-font-weight', fw);
+      var t = localStorage.getItem('assets-theme'); if (t) root.setAttribute('data-theme', t);
+      var a = localStorage.getItem('assets-accent'); if (a) root.setAttribute('data-accent', a);
+      var fc = localStorage.getItem('assets-font-color'); if (fc) root.setAttribute('data-font-color', fc);
+      var fs = localStorage.getItem('assets-font-size'); if (fs) root.setAttribute('data-font-size', fs);
+      var fw = localStorage.getItem('assets-font-weight'); if (fw) root.setAttribute('data-font-weight', fw);
     } catch (e) {}
   </script>
 </head>
 <body>
   <header class="topbar">
-    <span class="topbar-flying-bird" aria-hidden="true" data-icon="bird"></span>
     <div class="topbar-title">
-      <span class="logo" data-icon="logo" aria-hidden="true"></span>
+      <span class="logo" data-icon="bolt" aria-hidden="true"></span>
       <div class="topbar-title-text">
-        <h1>יומן צפרות - אוהד אברהם</h1>
+        <h1>ניהול נכסי חשמל</h1>
         <span class="topbar-datetime" id="topbar-datetime"></span>
       </div>
     </div>
     <div class="topbar-actions">
-      <span id="sync-pill" class="sync-pill" hidden></span>
       <span id="net-status" class="net-status" title="מצב חיבור"></span>
       <button id="nav-action" class="topbar-btn" title="הגדרות" aria-label="הגדרות"></button>
     </div>
@@ -40,22 +38,17 @@
     <section id="view-home" class="view" hidden></section>
     <section id="view-form" class="view" hidden></section>
     <section id="view-map" class="view view-flush" hidden></section>
-    <section id="view-table" class="view" hidden></section>
-    <section id="view-cards" class="view" hidden></section>
+    <section id="view-list" class="view" hidden></section>
     <section id="view-detail" class="view" hidden></section>
-    <section id="view-species" class="view" hidden></section>
-    <section id="view-calendar" class="view" hidden></section>
     <section id="view-settings" class="view" hidden></section>
   </main>
 
-  <button id="fab" class="fab" title="הוספת תצפית" aria-label="הוספת תצפית" hidden><span class="icon icon-lg" data-icon="plus"></span></button>
+  <button id="fab" class="fab" title="הוספת נכס" aria-label="הוספת נכס" hidden><span class="icon icon-lg" data-icon="plus"></span></button>
 
   <nav class="tabbar" aria-label="ניווט ראשי">
-    <button data-view="cards" class="tab"><span class="tab-icon" data-icon="journal"></span><span>יומן</span></button>
-    <button data-view="calendar" class="tab"><span class="tab-icon" data-icon="calendar"></span><span>לוח שנה</span></button>
+    <button data-view="list" class="tab"><span class="tab-icon" data-icon="table"></span><span>רשימה</span></button>
     <button data-view="home" class="tab tab-home"><span class="tab-icon" data-icon="home"></span><span>בית</span></button>
     <button data-view="map" class="tab"><span class="tab-icon" data-icon="map"></span><span>מפה</span></button>
-    <button data-view="species" class="tab"><span class="tab-icon" data-icon="bird"></span><span>מינים</span></button>
   </nav>
 
   <div id="toast" class="toast" hidden></div>

@@ -54,11 +54,11 @@ export const FONT_WEIGHTS = [
 export type FontWeightId = (typeof FONT_WEIGHTS)[number]['id'];
 
 const KEYS = {
-  theme: 'birds-theme',
-  accent: 'birds-accent',
-  fontColor: 'birds-font-color',
-  fontSize: 'birds-font-size',
-  fontWeight: 'birds-font-weight',
+  theme: 'assets-theme',
+  accent: 'assets-accent',
+  fontColor: 'assets-font-color',
+  fontSize: 'assets-font-size',
+  fontWeight: 'assets-font-weight',
 } as const;
 
 function readId<T extends string>(key: string, valid: readonly { id: T }[], fallback: T): T {
@@ -67,7 +67,7 @@ function readId<T extends string>(key: string, valid: readonly { id: T }[], fall
 }
 
 export function currentTheme(): ThemeId {
-  return readId(KEYS.theme, THEMES, 'classic');
+  return readId(KEYS.theme, THEMES, 'slate');
 }
 export function currentAccent(): AccentId {
   return readId(KEYS.accent, ACCENTS, 'default');

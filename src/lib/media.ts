@@ -1,24 +1,10 @@
-/* lib/media.ts — resolve an observation image to a displayable object URL.
- * Prefers the local blob; if it is missing but the image has a Firebase
- * Storage download URL (remoteId), it downloads and caches it. */
+/* lib/media.ts — resolve an asset image to a displayable object URL. */
 
-import { getMedia, saveMedia } from '../db/repository';
-import type { ObservationImage } from '../types';
+import { getMedia } from '../db/repository';
+import type { AssetImage } from '../types';
 
-export async function getImageObjectUrl(img: ObservationImage, obsId = ''): Promise<string | null> {
-  if (img?.localId) {
-    const m = await getMedia(img.localId);
-    if (m?.blob) return URL.createObjectURL(m.blob);
-  }
-  const remoteId = img?.remoteId || img?.localId;
-  if (remoteId && navigator.onLine && /^https?:\/\//.test(remoteId)) {
-    try {
-      const blob = await (await fetch(remoteId)).blob();
-      await saveMedia({ id: img.localId || remoteId, obsId, name: img.name || '', mime: blob.type, blob, remoteId });
-      return URL.createObjectURL(blob);
-    } catch {
-      /* offline / Storage object not reachable — nothing to show */
-    }
-  }
-  return null;
+export async function getImageObjectUrl(img: AssetImage): Promise<string | null> {
+  if (!img?.localId) return null;
+  const m = await getMedia(img.localId);
+  return m?.blob ? URL.createObjectURL(m.blob) : null;
 }

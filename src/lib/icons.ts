@@ -52,19 +52,17 @@ const PATHS = {
   sparkles: '<path d="M10 2.5c.9 4.3 1.3 4.7 5.5 5.5-4.2.8-4.6 1.2-5.5 5.5-.9-4.3-1.3-4.7-5.5-5.5 4.2-.8 4.6-1.2 5.5-5.5Z" fill="currentColor" stroke="none"/><path d="M18 13c.5 2.2.7 2.4 2.8 2.8-2.1.4-2.3.6-2.8 2.8-.5-2.2-.7-2.4-2.8-2.8 2.1-.4 2.3-.6 2.8-2.8Z" fill="currentColor" stroke="none"/>',
   users: '<circle cx="9" cy="8.2" r="3.2"/><path d="M3 19.3c0-3.4 2.7-5.6 6-5.6s6 2.2 6 5.6"/><circle cx="16.7" cy="9" r="2.6"/><path d="M15 13.8c2.6.5 4.3 2.4 4.5 5.4"/>',
   table: '<rect x="3.5" y="4.5" width="17" height="15" rx="1.5"/><path d="M3.5 9.5h17M9 9.5v10M15 9.5v10"/>',
-
-  /* ---- tag icons: bird-family pictograms for the tag color/icon picker ---- */
-  tagRaptor: '<path d="M2 11c3-2.5 6.5-2 9 .8"/><path d="M22 11c-3-2.5-6.5-2-9 .8"/><circle cx="12" cy="12.3" r="1.6"/><path d="M12 13.9v6"/><path d="M9 20.2c1-.9 2-1.3 3-1.3s2 .4 3 1.3"/>',
-  tagOwl: '<path d="M6.5 9.5c0-3.6 2.5-6 5.5-6s5.5 2.4 5.5 6c0 4-2 7.5-5.5 7.5s-5.5-3.5-5.5-7.5Z"/><circle cx="9.3" cy="9.5" r="2"/><circle cx="14.7" cy="9.5" r="2"/><circle cx="9.3" cy="9.5" r=".7" fill="currentColor" stroke="none"/><circle cx="14.7" cy="9.5" r=".7" fill="currentColor" stroke="none"/><path d="M12 11.5l-1 1.8h2l-1 1.8"/><path d="M8 4.5 6.5 3M16 4.5 17.5 3"/>',
-  tagHeron: '<path d="M9 21v-6.5c0-1 .3-1.6 1-2.3l1.5-1.5"/><path d="M11.5 10.7c-1.2-1.2-1.2-3 0-4.2 1.2-1.2 3-1.2 3.5 0 .4 1-.3 2-1.3 2.2"/><path d="M13.7 8.7 17 7.5"/><circle cx="12.3" cy="7.6" r=".5" fill="currentColor" stroke="none"/><path d="M9 21v-3.5"/>',
-  tagDuck: '<path d="M4 14.5c0-3 2.5-5.5 6-5.5 3 0 5.5 1.7 6.3 4.3h1.2c.9 0 1.5.5 1.5 1.2s-.6 1.2-1.5 1.2h-.7c-.8 1.8-2.7 3-5.3 3-3.8 0-6.5-1.5-6.5-3.5"/><circle cx="8.5" cy="11.3" r=".6" fill="currentColor" stroke="none"/><path d="M3 19c1.3-1 2.7-1 4 0s2.7 1 4 0 2.7-1 4 0 2.7 1 4 0"/>',
-  tagSongbird: '<ellipse cx="12" cy="12.5" rx="5.5" ry="4"/><circle cx="16.5" cy="8.5" r="2.6"/><path d="M18.7 8.1 21 8.7 18.7 9.3Z" fill="currentColor" stroke="none"/><circle cx="17.2" cy="7.9" r=".5" fill="currentColor" stroke="none"/><path d="M7 14.3c-1.3.2-2.5.9-3.2 2"/><path d="M9 17v2M14 17v2"/><path d="M4 20.5h16"/>',
-  tagGull: '<path d="M2.5 12c2.5-3 5-3.3 7-1 1.3-2.6 3.7-2.6 5 0 2-2.3 4.5-2 7 1-2.5-1-4.3-.6-5.7 1-1-1.7-2.6-1.7-3.6 0-1.7-2-4-1.7-6.3 0-1.4-1.6-3.2-2-4.4-1Z"/>',
-  tagWoodpecker: '<path d="M6 21V3"/><circle cx="12" cy="9" r="3"/><path d="M9.4 8.3 6.2 9Z" fill="currentColor" stroke="none"/><path d="M12 12c-1 2-1 5.5 0 8"/><circle cx="13" cy="8" r=".5" fill="currentColor" stroke="none"/><path d="M10 5.7c.4-1 1.4-1.6 2.5-1.5"/>',
-  tagDove: '<ellipse cx="11" cy="14" rx="7" ry="5"/><circle cx="17" cy="9" r="2.7"/><path d="M19.3 8.6 22 9.2 19.3 9.8Z" fill="currentColor" stroke="none"/><circle cx="17.6" cy="8.4" r=".5" fill="currentColor" stroke="none"/><path d="M7 12c-1.5.3-2.7 1.2-3.3 2.5"/>',
-  tagShorebird: '<ellipse cx="12" cy="12" rx="4.5" ry="3.5"/><path d="M16 11 19.5 9.5"/><circle cx="14.5" cy="10.7" r=".5" fill="currentColor" stroke="none"/><path d="M9.5 15.3 8.5 20M13 15.3 12.5 20"/>',
-  tagGeneric: '<ellipse cx="10" cy="15" rx="6.5" ry="4.5"/><circle cx="16" cy="9.5" r="3.2"/><path d="M18.8 9 22 9.8 18.8 10.6Z" fill="currentColor" stroke="none"/><circle cx="16.8" cy="8.7" r=".6" fill="currentColor" stroke="none"/><path d="M4 13.5 2.5 10.5"/><path d="M8 19.3V22M12 19.3V22"/>',
   info: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="7.7" r=".9" fill="currentColor" stroke="none"/><path d="M12 11v6"/>',
+
+  /* ---- asset-type pictograms ---- */
+  bolt: '<path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z" fill="currentColor" stroke="none"/>',
+  pole: '<path d="M12 2v20"/><path d="M6 6h12M7 11h10M8 16h8"/>',
+  transformer: '<rect x="6" y="7" width="12" height="12" rx="2.4"/><path d="M9.5 7V3.5M14.5 7V3.5M12 19v3.5"/>',
+  panel: '<rect x="5" y="3" width="14" height="18" rx="1.6"/><path d="M9 8h2M13 8h2M9 13h2M13 13h2"/>',
+  meter: '<circle cx="12" cy="13" r="7.2"/><path d="m12 13 3-4"/><path d="M8.5 4h7"/>',
+  switchgear: '<rect x="7" y="4" width="10" height="16" rx="1.6"/><path d="M12 8v3M10 15h4"/>',
+  generator: '<rect x="4" y="8" width="16" height="10" rx="1.6"/><circle cx="9" cy="13" r="1.6"/><path d="m14.6 10.5-2.4 3.3h2.4l-2.4 3.3"/>',
+  wrench: '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3.4 17.6l3 3 5.9-5.9a4 4 0 0 0 5.4-5.4l-2.8 2.8-2.6-.6-.6-2.6 2.8-2.8Z"/>',
 } as const;
 
 export type IconName = keyof typeof PATHS;

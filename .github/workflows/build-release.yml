@@ -2,7 +2,7 @@ name: Build & Release
 
 on:
   push:
-    branches: [claude/bird-observation-pwa-kqedtw, main]
+    branches: [claude/electrical-assets-map-app-6k27ot, main]
     paths-ignore:
       - '**.md'
   workflow_dispatch:
@@ -38,14 +38,10 @@ jobs:
         run: |
           latest=$(git tag -l 'v*' --sort=-v:refname | head -1)
           if [ -z "$latest" ]; then
-            next="2.0.0"
+            next="1.0.0"
           else
             IFS=. read -r major minor patch <<< "${latest#v}"
-            if [ "$major" -lt 2 ]; then
-              next="2.0.0"
-            else
-              next="$major.$minor.$((patch + 1))"
-            fi
+            next="$major.$minor.$((patch + 1))"
           fi
           echo "version=$next" >> "$GITHUB_OUTPUT"
           echo "Next version: v$next (previous: ${latest:-none})"
@@ -60,7 +56,7 @@ jobs:
           VER="${{ steps.ver.outputs.version }}"
           echo "{\"version\": \"$VER\", \"builtAt\": \"$(date -u +%FT%TZ)\", \"commit\": \"$GITHUB_SHA\"}" > dist/version.json
           cd dist
-          zip -qr "../birds-app-v$VER.zip" .
+          zip -qr "../electric-assets-map-v$VER.zip" .
           ls -la ../*.zip
 
       - name: Upload Pages build
@@ -79,8 +75,8 @@ jobs:
           git tag "v$VER"
           git push origin "v$VER"
           NOTES=$(printf 'בנייה אוטומטית (Vite + TypeScript, PWA offline-first) מ-commit %s.\n\nהאפליקציה מותקנת מ-GitHub Pages; ה-ZIP הוא ה-build הסטטי (dist) לפריסה בכל אחסון סטטי עם HTTPS.' "${GITHUB_SHA::7}")
-          gh release create "v$VER" "birds-app-v$VER.zip" \
-            --title "יומן צפרות v$VER" \
+          gh release create "v$VER" "electric-assets-map-v$VER.zip" \
+            --title "ניהול נכסי חשמל v$VER" \
             --notes "$NOTES"
 
   deploy-pages:
