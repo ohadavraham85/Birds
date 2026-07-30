@@ -1,7 +1,7 @@
 /* views/detail.ts — מסך פרטי נכס: תצוגה מלאה (כולל גלריית תמונות) ויומן
  * תחזוקה עם הוספת רשומות חדשות. */
 
-import { getAsset, deleteAsset, listMaintenanceForAsset, saveMaintenance, deleteMaintenance } from '../db/repository';
+import { getAsset, deleteAsset, listMaintenanceForAsset, saveMaintenance, deleteMaintenance, listMarkersForAsset, getDiagram } from '../db/repository';
 import { toast, confirmDialog, showImageModal } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
 import { getImageObjectUrl } from '../lib/media';
@@ -36,11 +36,28 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+async function linkedDiagramsHtml(assetId: string): Promise<string> {
+  const markers = await listMarkersForAsset(assetId);
+  if (!markers.length) return '';
+  const diagrams = await Promise.all(markers.map((m) => getDiagram(m.diagramId)));
+  const rows = diagrams
+    .filter((d): d is NonNullable<typeof d> => !!d)
+    .map((d) => `<button type="button" class="activity-row linked-diagram-row" data-id="${d.id}">${icon('blueprint')} <span>${escapeHtml(d.name)}</span></button>`)
+    .join('');
+  if (!rows) return '';
+  return `
+    <div class="settings-card">
+      <h3>${icon('blueprint')} תרשימים מקושרים</h3>
+      <div class="activity-list">${rows}</div>
+    </div>`;
+}
+
 async function assetHtml(a: Asset): Promise<string> {
   const t = ASSET_TYPE_META[a.type];
   const s = ASSET_STATUS_META[a.status];
   const photos = await Promise.all((a.images ?? []).map(async (img) => ({ img, url: await getImageObjectUrl(img) })));
   const logs = await listMaintenanceForAsset(a.id);
+  const diagramsHtml = await linkedDiagramsHtml(a.id);
 
   return `
     <div class="settings-card">
@@ -57,6 +74,8 @@ async function assetHtml(a: Asset): Promise<string> {
         <button class="btn btn-danger" id="detail-delete">${icon('trash')} מחיקת נכס</button>
       </div>
     </div>
+
+    ${diagramsHtml}
 
     <div class="settings-card">
       <h3>${icon('wrench')} יומן תחזוקה</h3>
@@ -105,6 +124,9 @@ function wire(body: HTMLElement): void {
   body.querySelector('#maint-list')?.addEventListener('click', (e) => void onMaintListClick(e));
   body.querySelectorAll<HTMLImageElement>('.photo-cell img').forEach((img) => {
     img.addEventListener('click', () => showImageModal(img.dataset.full || img.src));
+  });
+  body.querySelectorAll<HTMLButtonElement>('.linked-diagram-row').forEach((btn) => {
+    btn.addEventListener('click', () => navigate('diagram', { viewId: btn.dataset.id! }));
   });
 }
 

@@ -1793,3 +1793,95 @@ a.media-link-icon:hover { color: var(--accent-700); }
 .maint-row-main { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .maint-row p { margin: 0; font-size: .92rem; }
 .maint-del { position: absolute; top: 8px; left: 8px; }
+
+/* ---------- diagrams: list ---------- */
+
+.diagram-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-top: 10px; }
+.diagram-card {
+  position: relative; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+  overflow: hidden; cursor: pointer; text-align: right; display: flex; flex-direction: column;
+}
+.diagram-card:hover { border-color: var(--accent-600); }
+.diagram-card-thumb {
+  height: 130px; background: var(--accent-50); display: flex; align-items: center; justify-content: center;
+  color: var(--accent-600);
+}
+.diagram-card-thumb img { width: 100%; height: 100%; object-fit: contain; }
+.diagram-card-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+.diagram-card-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+.diagram-card-del {
+  position: absolute; top: 6px; left: 6px; width: 30px; height: 30px; padding: 0;
+  border-radius: 50%; background: rgba(0,0,0,.55); color: #fff; border: 0;
+}
+
+.badge-soft {
+  display: inline-flex; align-items: center; font-size: .74rem; font-weight: 600;
+  padding: 2px 9px; border-radius: 999px; background: var(--accent-100); color: var(--accent-900);
+}
+.badge-soft.badge-missing { background: var(--accent-50); color: var(--ink-soft); }
+
+/* ---------- diagrams: create modal (upload slots) ---------- */
+
+.diagram-upload-slots { display: flex; flex-direction: column; gap: 12px; margin-bottom: 4px; }
+.diagram-upload-slot {
+  border: 1.5px solid var(--line); border-radius: var(--radius); padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.diagram-upload-slot-label { font-weight: 600; color: var(--accent-900); font-size: .9rem; }
+.diagram-upload-slot-body {
+  height: 90px; border-radius: 8px; background: var(--accent-50); display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+.diagram-upload-slot-body img { width: 100%; height: 100%; object-fit: contain; }
+
+/* ---------- PDF page picker ---------- */
+
+.pdf-page-picker { max-width: 640px; }
+.pdf-page-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; max-height: 60vh; overflow-y: auto; }
+.pdf-page-cell {
+  border: 1.5px solid var(--line); border-radius: 8px; padding: 4px; background: var(--card);
+  display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; font: inherit;
+}
+.pdf-page-cell:hover { border-color: var(--accent-600); background: var(--accent-50); }
+.pdf-page-cell img { width: 100%; border-radius: 4px; }
+.pdf-page-cell span { font-size: .78rem; color: var(--ink-soft); }
+
+/* ---------- diagram viewer ---------- */
+
+.diagram-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.diagram-page-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.diagram-page-tab {
+  border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; background: var(--card);
+  font: inherit; font-size: .85rem; cursor: pointer; color: var(--ink);
+}
+.diagram-page-tab.active { background: var(--accent-700); color: #fff; border-color: var(--accent-700); }
+.diagram-page-tab-missing { color: var(--accent-700); border-style: dashed; }
+
+.diagram-viewport {
+  position: relative; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--accent-50); max-height: 60vh; touch-action: pan-x pan-y;
+}
+.diagram-canvas { position: relative; }
+.diagram-canvas img { display: block; width: 100%; height: 100%; user-select: none; }
+.diagram-marker {
+  position: absolute; transform: translate(-50%, -50%); width: 30px; height: 30px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; border: 2px solid #fff; color: #fff;
+  box-shadow: var(--shadow-lg); padding: 0; cursor: pointer;
+}
+.diagram-marker .icon { width: 15px; height: 15px; }
+
+.diagram-zoom-controls {
+  display: flex; gap: 8px; justify-content: center; margin-top: 10px;
+}
+
+/* ---------- asset picker modal (link asset to a diagram cell) ---------- */
+
+.asset-picker { display: flex; flex-direction: column; gap: 10px; }
+.asset-picker-list { display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow-y: auto; }
+.asset-picker-row {
+  display: flex; align-items: center; gap: 8px; width: 100%; text-align: right;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--card); padding: 10px 12px;
+  cursor: pointer; font: inherit;
+}
+.asset-picker-row:hover { background: var(--accent-50); }
+.asset-picker-row .hint { margin-inline-start: auto; }

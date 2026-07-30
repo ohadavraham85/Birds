@@ -63,6 +63,7 @@ const PATHS = {
   switchgear: '<rect x="7" y="4" width="10" height="16" rx="1.6"/><path d="M12 8v3M10 15h4"/>',
   generator: '<rect x="4" y="8" width="16" height="10" rx="1.6"/><circle cx="9" cy="13" r="1.6"/><path d="m14.6 10.5-2.4 3.3h2.4l-2.4 3.3"/>',
   wrench: '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3.4 17.6l3 3 5.9-5.9a4 4 0 0 0 5.4-5.4l-2.8 2.8-2.6-.6-.6-2.6 2.8-2.8Z"/>',
+  blueprint: '<rect x="3" y="3.5" width="18" height="17" rx="1.6"/><circle cx="7.5" cy="8" r="1.6"/><circle cx="16.5" cy="8" r="1.6"/><circle cx="12" cy="16.5" r="1.6"/><path d="M9 8h6M8.2 9.3 11.2 15M15.8 9.3 12.8 15"/>',
 } as const;
 
 export type IconName = keyof typeof PATHS;

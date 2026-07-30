@@ -12,6 +12,7 @@
   "dependencies": {
     "dexie": "^4.0.10",
     "leaflet": "^1.9.4",
+    "pdfjs-dist": "^4.10.38",
     "workbox-cacheable-response": "^7.4.1",
     "workbox-core": "^7.4.1",
     "workbox-expiration": "^7.4.1",

@@ -66,3 +66,54 @@ export interface SettingRow<T = unknown> {
   key: string;
   value: T;
 }
+
+/* ---------- diagrams ---------- */
+
+export const DIAGRAM_PAGE_KINDS = ['one-line', 'front-view'] as const;
+export type DiagramPageKind = (typeof DIAGRAM_PAGE_KINDS)[number];
+
+/** One rasterized sheet (one-line diagram or front-view/cabinet layout)
+ * belonging to a Diagram. `localId` links to a blob in the diagramMedia
+ * store — same pattern as AssetImage/MediaRecord for asset photos. */
+export interface DiagramPage {
+  id: string;
+  kind: DiagramPageKind;
+  localId: string;
+  /** Natural pixel size of the stored image — lets marker (x, y) be stored
+   * as fractions (0..1) independent of display zoom. */
+  width: number;
+  height: number;
+}
+
+/** An uploaded switchboard/site drawing (e.g. a Schneider Electric one-line
+ * + front-view sheet pair) shared across the app — any number of existing
+ * assets can be linked to a cubicle/cell on it via DiagramMarker. */
+export interface Diagram {
+  id: string;
+  name: string;
+  pages: DiagramPage[];
+  notes?: string;
+  deleted: boolean;
+  updatedAt: string;
+}
+
+/** Links an existing Asset to a point (cubicle/cell) on one page of a
+ * Diagram. (x, y) are fractions of the page image's width/height. */
+export interface DiagramMarker {
+  id: string;
+  diagramId: string;
+  pageId: string;
+  assetId: string;
+  x: number;
+  y: number;
+  label?: string;
+  deleted: boolean;
+  updatedAt: string;
+}
+
+/** Original-quality diagram page image blob. */
+export interface DiagramMediaRecord {
+  id: string;
+  mime: string;
+  blob: Blob;
+}

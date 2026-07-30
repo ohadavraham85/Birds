@@ -3,7 +3,7 @@
  * reads always come from the local store. */
 
 import { db } from './database';
-import type { Asset, MaintenanceLog, MediaRecord } from '../types';
+import type { Asset, MaintenanceLog, MediaRecord, Diagram, DiagramMarker, DiagramMediaRecord } from '../types';
 
 /* ---------- change notifications ---------- */
 
@@ -150,11 +150,86 @@ export async function setSetting<T = unknown>(key: string, value: T): Promise<vo
   await db.settings.put({ key, value });
 }
 
+/* ---------- diagrams ---------- */
+
+export async function saveDiagram(diagram: Diagram): Promise<Diagram> {
+  diagram.updatedAt = now();
+  await db.diagrams.put(diagram);
+  emitChange();
+  return diagram;
+}
+
+export function getDiagram(id: string): Promise<Diagram | undefined> {
+  return db.diagrams.get(id);
+}
+
+/** All non-deleted diagrams. */
+export async function listDiagrams(): Promise<Diagram[]> {
+  const all = await db.diagrams.toArray();
+  return all.filter((d) => !d.deleted);
+}
+
+/** Soft-deletes the diagram, hard-deletes its markers and page images
+ * (nothing local-only needs a tombstone for those — there is no sync). */
+export async function deleteDiagram(id: string): Promise<void> {
+  const diagram = await db.diagrams.get(id);
+  if (!diagram) return;
+  const markers = await listMarkersForDiagram(id);
+  for (const m of markers) await db.diagramMarkers.delete(m.id);
+  for (const page of diagram.pages) await db.diagramMedia.delete(page.localId);
+  diagram.deleted = true;
+  diagram.updatedAt = now();
+  await db.diagrams.put(diagram);
+  emitChange();
+}
+
+/* ---------- diagram markers ---------- */
+
+export async function saveDiagramMarker(marker: DiagramMarker): Promise<DiagramMarker> {
+  marker.updatedAt = now();
+  await db.diagramMarkers.put(marker);
+  emitChange();
+  return marker;
+}
+
+export async function listMarkersForDiagram(diagramId: string): Promise<DiagramMarker[]> {
+  const all = await db.diagramMarkers.where('diagramId').equals(diagramId).toArray();
+  return all.filter((m) => !m.deleted);
+}
+
+/** Every diagram+page a given asset is linked from — used by the asset
+ * detail screen to show "linked diagrams". */
+export async function listMarkersForAsset(assetId: string): Promise<DiagramMarker[]> {
+  const all = await db.diagramMarkers.where('assetId').equals(assetId).toArray();
+  return all.filter((m) => !m.deleted);
+}
+
+export async function deleteDiagramMarker(id: string): Promise<void> {
+  await db.diagramMarkers.delete(id);
+  emitChange();
+}
+
+/* ---------- diagram media ---------- */
+
+export async function saveDiagramMedia(media: DiagramMediaRecord): Promise<DiagramMediaRecord> {
+  await db.diagramMedia.put(media);
+  return media;
+}
+export function getDiagramMedia(id: string): Promise<DiagramMediaRecord | undefined> {
+  return db.diagramMedia.get(id);
+}
+export async function deleteDiagramMedia(id: string): Promise<void> {
+  await db.diagramMedia.delete(id);
+}
+
 /* ---------- data reset ---------- */
 
 export async function clearAllData(): Promise<void> {
   await db.assets.clear();
   await db.maintenance.clear();
   await db.media.clear();
+  await db.diagrams.clear();
+  await db.diagramMarkers.clear();
+  await db.diagramMedia.clear();
   emitChange();
 }

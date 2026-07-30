@@ -18,6 +18,8 @@ import * as mapView from './views/map';
 import * as tableView from './views/table';
 import * as detailView from './views/detail';
 import * as settingsView from './views/settings';
+import * as diagramsView from './views/diagrams';
+import * as diagramView from './views/diagram';
 
 const VIEWS: Record<string, View> = {
   home: homeView,
@@ -26,10 +28,12 @@ const VIEWS: Record<string, View> = {
   list: tableView,
   detail: detailView,
   settings: settingsView,
+  diagrams: diagramsView,
+  diagram: diagramView,
 };
 
 /** Views reachable from the bottom tab bar (order matters). */
-const TAB_VIEWS = ['home', 'list', 'map'];
+const TAB_VIEWS = ['home', 'list', 'map', 'diagrams'];
 
 /** Views where the floating "+" (add asset) button appears. */
 const FAB_VIEWS = ['home', 'list'];
