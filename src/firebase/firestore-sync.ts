@@ -170,6 +170,27 @@ export async function forceResyncListsFromCloud(): Promise<{ species: number; lo
   return counts;
 }
 
+/** Retries uploading local photos/files to Storage. The automatic upload
+ * sweep only ever runs once per device (as part of the one-time initial
+ * sync) — so on a household that enabled Storage *after* that first sync
+ * already ran (e.g. just upgraded off the free Spark plan), any photos/files
+ * saved before then never got a chance to upload and won't retry on their
+ * own. Safe to call any time: already-uploaded photos are skipped (matched
+ * by remoteId); files have no such flag, so they're simply re-pushed. */
+export async function retryMediaUploads(): Promise<{ observations: number; files: number }> {
+  if (!activeCode) throw new Error('סנכרון Firebase אינו מופעל');
+  let observations = 0;
+  for (const o of await listObservationsRaw()) {
+    try { await pushObservationMedia(o); observations++; } catch (err) { console.warn('Firebase: photo retry skipped', o.id, err); }
+  }
+  let files = 0;
+  for (const f of await listFilesRaw()) {
+    if (f.deleted) continue;
+    try { await pushFile(f); files++; } catch (err) { console.warn('Firebase: file retry skipped', f.id, err); }
+  }
+  return { observations, files };
+}
+
 export function stopFirebaseSync(): void {
   unsubs.forEach((u) => u());
   unsubs = [];

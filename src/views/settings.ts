@@ -13,7 +13,7 @@ import {
   listFiles, saveFile, getFile, deleteFile,
 } from '../db/repository';
 import type { DuplicateGroup } from '../db/repository';
-import { getFirebaseSyncCode, configureFirebaseSync, onFirebaseSyncStatus, isFirebaseSyncActive, forceResyncListsFromCloud, type FirebaseSyncStatus } from '../firebase/firestore-sync';
+import { getFirebaseSyncCode, configureFirebaseSync, onFirebaseSyncStatus, isFirebaseSyncActive, forceResyncListsFromCloud, retryMediaUploads, type FirebaseSyncStatus } from '../firebase/firestore-sync';
 import {
   notificationsSupported, permissionState, requestPermission,
   isEnabled, setEnabled, isMigrationEnabled, setMigrationEnabled, isOnThisDayEnabled, setOnThisDayEnabled,
@@ -270,6 +270,12 @@ function syncHtml(fbCode: string): string {
             מהענן — זה דורס את המצב המקומי שלהן במכשיר הזה בלי תנאי.
           </p>
           <button class="btn btn-sm" id="s-fb-resync">${icon('refresh')} סנכרון מחדש של הרשימות מהענן</button>
+          <p style="font-size:.85rem;color:var(--ink-soft);margin:12px 0 0">
+            אם הפעלתם את Firebase Storage אחרי הסנכרון הראשוני (למשל שדרוג
+            מהתוכנית החינמית), תמונות ישנות שנשמרו קודם לא יעלו לענן באופן
+            אוטומטי — הכפתור הזה מנסה שוב להעלות את כל התמונות והקבצים המקומיים.
+          </p>
+          <button class="btn btn-sm" id="s-fb-retry-media">${icon('upload')} ניסיון חוזר להעלאת תמונות וקבצים</button>
         </div>` : ''}
     </div>
 
@@ -305,6 +311,7 @@ function wireSync(): void {
   input(container, '#s-restore').addEventListener('change', (e) => void onRestore(e));
   input(container, '#s-csv-import').addEventListener('change', (e) => void onImportCsv(e));
   container.querySelector('#s-fb-resync')?.addEventListener('click', () => void onForceResync());
+  container.querySelector('#s-fb-retry-media')?.addEventListener('click', () => void onRetryMediaUploads());
 
   unsubStatus = onFirebaseSyncStatus((s) => {
     const el = container.querySelector<HTMLElement>('#s-fb-status');
@@ -1246,6 +1253,19 @@ async function onForceResync(): Promise<void> {
     toast(`הרשימות סונכרנו מחדש (${n.species} מינים, ${n.locations} מיקומים, ${n.tags} תגיות, ${n.observers} צופים)`);
   } catch (err) {
     toast('סנכרון מחדש נכשל: ' + (err as Error).message, true, 6000);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function onRetryMediaUploads(): Promise<void> {
+  const btn = qs<HTMLButtonElement>(container, '#s-fb-retry-media');
+  btn.disabled = true;
+  try {
+    const n = await retryMediaUploads();
+    toast(`הניסיון החוזר הושלם (${n.observations} תצפיות, ${n.files} קבצים נבדקו)`);
+  } catch (err) {
+    toast('הניסיון החוזר נכשל: ' + (err as Error).message, true, 6000);
   } finally {
     btn.disabled = false;
   }
