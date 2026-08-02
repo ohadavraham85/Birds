@@ -71,6 +71,10 @@ const PATHS = {
 export type IconName = keyof typeof PATHS;
 
 export function icon(name: IconName, extraClass = ''): string {
+  // A plain emoji, not a hand-drawn line shape — after repeated attempts at
+  // an abstract bird glyph read as unclear, this is the one universally
+  // unambiguous option (rendered by the OS's own emoji font, full color).
+  if (name === 'bird') return `<span class="icon icon-emoji${extraClass ? ' ' + extraClass : ''}" role="img" aria-label="ציפור">🐦</span>`;
   return `<svg class="icon${extraClass ? ' ' + extraClass : ''}" viewBox="0 0 24 24" aria-hidden="true">${PATHS[name]}</svg>`;
 }
 
