@@ -185,9 +185,8 @@
   stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0;
 }
 .icon.icon-lg { width: 1.3em; height: 1.3em; }
-.icon.icon-emoji {
-  width: auto; height: auto; font-size: 1.15em; line-height: 1;
-  fill: initial; stroke: none;
+.icon.icon-logo {
+  object-fit: contain; border-radius: 50%; fill: initial; stroke: none;
 }
 
 button, .tab, .cal-day, input, select, textarea, .obs-card, .sp-card, .btn {
