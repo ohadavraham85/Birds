@@ -71,10 +71,10 @@ const PATHS = {
 export type IconName = keyof typeof PATHS;
 
 export function icon(name: IconName, extraClass = ''): string {
-  // A plain emoji, not a hand-drawn line shape — after repeated attempts at
-  // an abstract bird glyph read as unclear, this is the one universally
-  // unambiguous option (rendered by the OS's own emoji font, full color).
-  if (name === 'bird') return `<span class="icon icon-emoji${extraClass ? ' ' + extraClass : ''}" role="img" aria-label="ציפור">🐦</span>`;
+  // Reuses the app's own owl artwork (public/icons/icon.svg) rather than a
+  // drawn glyph or emoji — after repeated attempts at an abstract bird icon
+  // read as unclear, this is the app's own established visual identity.
+  if (name === 'bird') return `<img src="${import.meta.env.BASE_URL}icons/icon.svg" class="icon icon-logo${extraClass ? ' ' + extraClass : ''}" alt="ציפור">`;
   return `<svg class="icon${extraClass ? ' ' + extraClass : ''}" viewBox="0 0 24 24" aria-hidden="true">${PATHS[name]}</svg>`;
 }
 
