@@ -13,7 +13,7 @@ import { ref, uploadBytes, getDownloadURL, getBytes } from 'firebase/storage';
 import { firebaseDb, firebaseStorage } from './app';
 import {
   onMutation, getSetting, setSetting,
-  listObservationsRaw, putObservationRaw, getObservation,
+  listObservationsRaw, putObservationRaw, getObservation, normalizeObservation,
   listSpeciesRows, putSpeciesRaw, getSpeciesRaw,
   listLocationRows, putLocationRaw, getLocationRaw,
   listProjectRows, putProjectRaw, getProjectRaw,
@@ -425,7 +425,10 @@ async function pushObservationMedia(obs: Observation): Promise<void> {
 async function mergeRemoteObservation(remote: Observation): Promise<void> {
   const local = await getObservation(remote.id);
   if (local && new Date(local.updatedAt) >= new Date(remote.updatedAt)) return;
-  await withSuppressedPush(() => putObservationRaw(remote));
+  // A doc pushed before the tags feature existed (never edited since) has no
+  // `tags` field at all — heal it on the way in so the stored local copy is
+  // correct too, not just reads (see repository.ts's normalizeObservation).
+  await withSuppressedPush(() => putObservationRaw(normalizeObservation(remote)));
 }
 
 async function mergeRemoteSpecies(remote: SpeciesRow): Promise<void> {
