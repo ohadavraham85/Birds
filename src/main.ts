@@ -26,6 +26,7 @@ import * as tableView from './views/table';
 import * as cardsView from './views/cards';
 import * as detailView from './views/detail';
 import * as speciesView from './views/species';
+import * as galleryView from './views/gallery';
 import * as calendarView from './views/calendar';
 import * as settingsView from './views/settings';
 
@@ -37,12 +38,13 @@ const VIEWS: Record<string, View> = {
   cards: cardsView,
   detail: detailView,
   species: speciesView,
+  gallery: galleryView,
   calendar: calendarView,
   settings: settingsView,
 };
 
 /** Views reachable from the bottom tab bar (order matters). */
-const TAB_VIEWS = ['home', 'cards', 'calendar', 'map', 'species'];
+const TAB_VIEWS = ['home', 'cards', 'calendar', 'map', 'species', 'gallery'];
 
 /** The universal "root" screen: default landing view, and where the generic
  * top-bar back button and other screens' explicit back actions return to. */

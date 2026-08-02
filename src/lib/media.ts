@@ -3,7 +3,7 @@
  * Storage download URL (remoteId), it downloads and caches it. */
 
 import { getMedia, saveMedia } from '../db/repository';
-import type { ObservationImage } from '../types';
+import type { ObservationImage, MediaRecord } from '../types';
 
 export async function getImageObjectUrl(img: ObservationImage, obsId = ''): Promise<string | null> {
   if (img?.localId) {
@@ -15,6 +15,23 @@ export async function getImageObjectUrl(img: ObservationImage, obsId = ''): Prom
     try {
       const blob = await (await fetch(remoteId)).blob();
       await saveMedia({ id: img.localId || remoteId, obsId, name: img.name || '', mime: blob.type, blob, remoteId });
+      return URL.createObjectURL(blob);
+    } catch {
+      /* offline / Storage object not reachable — nothing to show */
+    }
+  }
+  return null;
+}
+
+/** Same resolution as getImageObjectUrl, but starting from a MediaRecord
+ * directly — for the Gallery tab, which reads the media table itself rather
+ * than going through an observation's ObservationImage references. */
+export async function getMediaObjectUrl(media: MediaRecord): Promise<string | null> {
+  if (media.blob?.size) return URL.createObjectURL(media.blob);
+  if (media.remoteId && navigator.onLine) {
+    try {
+      const blob = await (await fetch(media.remoteId)).blob();
+      await saveMedia({ ...media, blob });
       return URL.createObjectURL(blob);
     } catch {
       /* offline / Storage object not reachable — nothing to show */

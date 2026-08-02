@@ -779,8 +779,9 @@ export async function mergeProjectNames(variants: string[], canonical: string): 
 /* ---------- media ---------- */
 
 export async function saveMedia(media: MediaRecord): Promise<MediaRecord> {
-  await db.media.put(media);
-  return media;
+  const rec = media.addedAt ? media : { ...media, addedAt: now() };
+  await db.media.put(rec);
+  return rec;
 }
 export function getMedia(id: string): Promise<MediaRecord | undefined> {
   return db.media.get(id);
@@ -790,6 +791,51 @@ export function mediaForObservation(obsId: string): Promise<MediaRecord[]> {
 }
 export async function deleteMedia(id: string): Promise<void> {
   await db.media.delete(id);
+}
+
+/** Every photo blob ever saved — every observation's photo (past and
+ * present, camera-captured or bulk photo-imported) already lives in this
+ * same table, so the Gallery tab is just this list rendered as a grid; no
+ * separate migration step is needed to "bring legacy photos into" it. Rows
+ * with `obsId === ''` are photos uploaded straight into the Gallery that
+ * haven't been attached to an observation yet. */
+export function listAllMedia(): Promise<MediaRecord[]> {
+  return db.media.toArray();
+}
+
+/** Deletes a photo blob and, if it was attached to an observation, also
+ * removes the dangling reference from that observation's species entry —
+ * so the Gallery's delete action can be used on any photo, associated or
+ * not, without leaving a broken image behind in the journal. */
+export async function deleteMediaAndUnlink(id: string): Promise<void> {
+  const media = await db.media.get(id);
+  await db.media.delete(id);
+  if (!media?.obsId) return;
+  const obs = await getObservation(media.obsId);
+  if (!obs) return;
+  let changed = false;
+  const entries = entriesOf(obs).map((e) => {
+    if (!e.images?.some((i) => i.localId === id)) return e;
+    changed = true;
+    return { ...e, images: e.images.filter((i) => i.localId !== id) };
+  });
+  if (changed) await saveObservation({ ...obs, entries, updatedAt: '' });
+}
+
+/** Attaches an already-saved ("orphan") gallery photo to an observation's
+ * first species entry — the same slot the bulk photo-import flow uses — and
+ * claims it (sets its `obsId`) so it stops showing as unassociated. A no-op
+ * if the photo is already attached to this observation. */
+export async function associateMediaWithObservation(mediaId: string, obsId: string): Promise<void> {
+  const media = await db.media.get(mediaId);
+  const obs = await getObservation(obsId);
+  const entry = obs && entriesOf(obs)[0];
+  if (!media || !entry) return;
+  if (!media.obsId) await db.media.put({ ...media, obsId });
+  const images = entry.images ?? [];
+  if (images.some((i) => i.localId === mediaId)) return;
+  const entries = entriesOf(obs).map((e) => (e === entry ? { ...e, images: [...images, { localId: mediaId, name: media.name }] } : e));
+  await saveObservation({ ...obs, entries, updatedAt: '' });
 }
 
 /* ---------- settings ---------- */

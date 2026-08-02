@@ -52,26 +52,45 @@ const birdIcon = L.divIcon({
 
 /** Round photo-thumbnail marker for a location with at least one photographed
  * observation — falls back to the plain bird badge (above) everywhere else,
- * per the same divIcon shape/anchors so it drops in without shifting the pin. */
+ * per the same divIcon shape/anchors so it drops in without shifting the pin.
+ * Sized a bit larger than the plain badge (44px vs 30px) so the photo itself
+ * is recognizable and easy to tap. */
 function thumbIcon(url: string): L.DivIcon {
   return L.divIcon({
     className: 'bird-div-icon',
     html: `<div class="bird-marker-thumb"><img src="${url}" alt=""></div>`,
-    iconSize: [34, 34],
-    iconAnchor: [17, 17],
-    tooltipAnchor: [0, -18],
-    popupAnchor: [0, -19],
+    iconSize: [44, 44],
+    iconAnchor: [22, 22],
+    tooltipAnchor: [0, -23],
+    popupAnchor: [0, -24],
   });
 }
 
-/** First image found scanning history newest-first — used so a location's
- * marker shows its most recently photographed observation, if any. */
-function firstImageFor(history: Observation[]): ObservationImage | null {
+/** First image found scanning history newest-first, together with the
+ * observation it belongs to — so a location's marker shows its most
+ * recently photographed observation, and the popup can name its species. */
+function firstImageFor(history: Observation[]): { img: ObservationImage; obs: Observation } | null {
   for (const o of history) {
     const imgs = allImages(o);
-    if (imgs.length) return imgs[0]!;
+    if (imgs.length) return { img: imgs[0]!, obs: o };
   }
   return null;
+}
+
+/** Enlarged photo + location name (+ species, if known) shown when a
+ * photo-thumbnail marker is tapped, with a way to still reach the full
+ * location history (what tapping a plain badge marker opens directly). */
+function buildPhotoPopup(url: string, locationName: string, species: string, onOpenHistory: () => void): HTMLElement {
+  const el = document.createElement('div');
+  el.className = 'map-photo-popup';
+  el.innerHTML = `
+    <img src="${url}" alt="">
+    <div class="map-photo-popup-loc">${escapeHtml(locationName)}</div>
+    ${species ? `<div class="map-photo-popup-species">${escapeHtml(species)}</div>` : ''}
+    <button type="button" class="btn btn-sm map-photo-popup-more">כל התצפיות במיקום זה</button>
+  `;
+  el.querySelector('.map-photo-popup-more')!.addEventListener('click', onOpenHistory);
+  return el;
 }
 
 export function init(el: HTMLElement): void {
@@ -277,10 +296,26 @@ export async function activate(): Promise<void> {
     const marker = L.marker([first.lat!, first.lng!], { icon: birdIcon });
     const label = (first.locationName || 'מיקום ללא שם') + (count > 1 ? ` (${count})` : '');
     const key = groupKey(first);
-    marker.on('click', () => openLocationSheet(label, historyFor(key), { lat: first.lat!, lng: first.lng!, locationName: first.locationName }));
+    const history = historyFor(key);
+    const openHistory = (): void => openLocationSheet(label, history, { lat: first.lat!, lng: first.lng!, locationName: first.locationName });
+    // A marker with a bound popup already opens it on click, on its own,
+    // as a Leaflet default — calling openPopup() explicitly here too would
+    // race that default handler and immediately close what it just opened.
+    // So a photo marker (bound below, once its thumbnail is ready) is left
+    // alone; only a plain badge marker (never bound) needs this to do
+    // anything, and only for it does the location sheet make sense anyway.
+    let hasPhoto = false;
+    marker.on('click', () => { if (!hasPhoto) openHistory(); });
     marker.addTo(markersLayer!);
-    const img = firstImageFor(historyFor(key));
-    if (img) void getImageObjectUrl(img).then((url) => { if (url) marker.setIcon(thumbIcon(url)); });
+    const found = firstImageFor(history);
+    if (found) {
+      void getImageObjectUrl(found.img, found.obs.id).then((url) => {
+        if (!url) return;
+        marker.setIcon(thumbIcon(url));
+        hasPhoto = true;
+        marker.bindPopup(buildPhotoPopup(url, first.locationName || 'מיקום ללא שם', speciesLabel(found.obs), () => { marker.closePopup(); openHistory(); }));
+      });
+    }
   }
 
   tracksLayer!.clearLayers();
