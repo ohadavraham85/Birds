@@ -67,6 +67,7 @@ export function init(el: HTMLElement): void {
       <button class="btn" id="sp-add">${icon('plus')} הוספה</button>
     </div>
     <p class="sp-summary" id="sp-summary"></p>
+    <button type="button" class="btn btn-sm" id="sp-copy-missing">${icon('document')} העתקת רשימת מינים ללא פרטים</button>
     <div id="sp-list" class="sp-cards"></div>
   `;
   wireViewModeToggle(container, 'sp-view-mode', (mode) => { displayMode = mode; render(); });
@@ -78,6 +79,7 @@ export function init(el: HTMLElement): void {
     render();
   });
   qs(container, '#sp-add').addEventListener('click', () => void onAdd());
+  qs(container, '#sp-copy-missing').addEventListener('click', () => void onCopyMissingDetails());
   input(container, '#sp-new').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); void onAdd(); } });
   qs(container, '#sp-list').addEventListener('click', onListClick);
   qs(container, '#sp-list').addEventListener('change', (e) => void onDescriptionChange(e));
@@ -420,6 +422,21 @@ async function onDescriptionChange(e: Event): Promise<void> {
   descriptions[name] = ta.value;
   await setSpeciesDescription(name, ta.value);
   toast('התיאור נשמר');
+}
+
+/** Copies every species name lacking English/scientific/family details to
+ * the clipboard, one per line — an exact, unambiguous text list (as opposed
+ * to a screenshot, which risks a transcription error for compound Hebrew
+ * bird names) to hand off for filling in the reference data. */
+async function onCopyMissingDetails(): Promise<void> {
+  const missing = names.filter((n) => !detailsFor(n).en).sort((a, b) => a.localeCompare(b, 'he'));
+  if (!missing.length) { toast('לכל המינים ברשימה יש כבר פרטים מלאים'); return; }
+  try {
+    await navigator.clipboard.writeText(missing.join('\n'));
+    toast(`הועתקו ${missing.length} שמות מינים ללא פרטים ללוח`);
+  } catch {
+    toast('ההעתקה ללוח נכשלה — ייתכן שהדפדפן חוסם הרשאת גישה', true, 5000);
+  }
 }
 
 async function onAdd(): Promise<void> {
