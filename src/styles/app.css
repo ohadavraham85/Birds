@@ -549,19 +549,32 @@ label.notif-toggle-row.track-toggle-row input[type="checkbox"]:checked { backgro
  * "who/where/when this observation is" from the species list itself. */
 .form-header-card {
   background: var(--accent-50);
-  border: 2px solid var(--accent-300);
+  border: 2px solid var(--accent-600);
   border-radius: var(--radius);
   box-shadow: 0 4px 14px rgba(0, 0, 0, .1);
   padding: 6px 6px 2px;
-  margin-bottom: 20px;
+  margin-bottom: 34px;
 }
 .form-header-card .field-frame {
   border: 0; box-shadow: none; background: transparent;
   margin-bottom: 0; padding: 10px 10px;
 }
-.form-header-card .field-frame + .field-frame { border-top: 1px dashed var(--accent-300); }
+.form-header-card .field-frame + .field-frame { border-top: 1px dashed var(--accent-100); }
 .form-header-card .track-toggle-row,
 .form-header-card .track-status { margin-inline: 10px; }
+
+/* The species section is its own visually heavy zone too — a tinted
+ * background + thicker accent border marks a hard boundary from the header
+ * card above it, distinct from the plain white notes/media-link frames below. */
+.field-frame.species-frame {
+  background: var(--accent-50);
+  border: 2px solid var(--accent-600);
+  padding: 16px 16px 18px;
+}
+.species-frame > .field > label {
+  font-size: 1.05rem;
+  margin-bottom: 12px;
+}
 
 /* ---------- observation form: compact datetime row + location row with pin icon ---------- */
 
@@ -705,7 +718,7 @@ textarea { min-height: 130px; resize: vertical; white-space: pre-wrap; line-heig
  * within the wrap's own width via absolute positioning, and this row's
  * species-name combo dropdown (.combo-list) must be able to render below
  * the row without being clipped. */
-.sp-swipe-wrap { position: relative; border-radius: 10px; margin-bottom: 10px; }
+.sp-swipe-wrap { position: relative; border-radius: 10px; margin-bottom: 16px; }
 .sp-swipe-wrap:last-child { margin-bottom: 0; }
 .sp-swipe-front { position: relative; z-index: 1; touch-action: pan-y; }
 .sp-swipe-delete {
@@ -719,11 +732,11 @@ textarea { min-height: 130px; resize: vertical; white-space: pre-wrap; line-heig
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
+  padding: 12px 14px;
+  border: 1.5px solid var(--accent-600);
   border-radius: 10px;
   background: var(--card);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, .06);
+  box-shadow: 0 2px 7px rgba(0, 0, 0, .1);
 }
 .sp-entry-main { display: flex; gap: 5px; align-items: center; }
 .sp-entry-main .sp-combo { flex: 1; min-width: 0; }
@@ -781,7 +794,7 @@ textarea { min-height: 130px; resize: vertical; white-space: pre-wrap; line-heig
 /* ---------- observation form: map-pin location button ---------- */
 
 .location-pin-btn { display: inline-flex; align-items: center; gap: 8px; }
-.location-pin-btn.locked { color: var(--accent-700); border-color: var(--accent-300); }
+.location-pin-btn.locked { color: var(--accent-700); border-color: var(--accent-100); }
 
 /* ---------- bulk-edit modal (table view) ---------- */
 
@@ -1384,7 +1397,7 @@ a.media-link-icon:hover { color: var(--accent-700); }
   border-radius: 999px; padding: 4px 10px; font-size: .8rem; cursor: pointer;
 }
 .species-list .sp-row.loc-row .loc-pick-coords.locked {
-  color: var(--accent-700); border-color: var(--accent-300); background: var(--accent-50);
+  color: var(--accent-700); border-color: var(--accent-100); background: var(--accent-50);
 }
 
 .tag-new-row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; align-items: center; }

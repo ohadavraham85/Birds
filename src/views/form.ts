@@ -175,7 +175,7 @@ export function init(el: HTMLElement): void {
         </div>
       </div>
 
-      <div class="field-frame">
+      <div class="field-frame species-frame">
         <div class="field">
           <label>מיני הציפור</label>
           <div id="species-rows"></div>
