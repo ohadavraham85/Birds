@@ -143,7 +143,7 @@ export interface TrackReportPin {
 
 /** A GPS track recorded automatically while a NEW observation's form was
  * open, from the moment it was opened until it was saved. Keyed 1:1 by the
- * observation's id. Local-only for now — not yet part of Firebase sync. */
+ * observation's id. */
 export interface ObservationTrack {
   id: string; // == Observation.id
   points: TrackPoint[];
@@ -159,6 +159,9 @@ export interface ObservationTrack {
    * track is saved, so the observation itself can show its route without
    * initializing a full Leaflet map per card. */
   previewImage?: string;
+  /** Soft-delete tombstone so the deletion propagates on sync — the heavy
+   * fields (points/segments/previewImage/reportPins) are cleared once set. */
+  deleted?: boolean;
   updatedAt: string;
 }
 

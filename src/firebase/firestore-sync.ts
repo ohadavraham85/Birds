@@ -20,10 +20,11 @@ import {
   listTagRows, putTagRaw, getTagRaw,
   listObserverRows, putObserverRaw, getObserverRaw,
   listFilesRaw, putFileRaw, getFile,
+  listTracksRaw, putTrackRaw, getTrack,
   getMedia,
   type MutationEntity, type MutationOp,
 } from '../db/repository';
-import type { Observation, SpeciesRow, LocationRow, ProjectRow, TagRow, ObserverRow, StoredFile } from '../types';
+import type { Observation, SpeciesRow, LocationRow, ProjectRow, TagRow, ObserverRow, StoredFile, ObservationTrack } from '../types';
 
 const COLLECTION_BY_ENTITY: Record<MutationEntity, string> = {
   observation: 'observations',
@@ -33,6 +34,7 @@ const COLLECTION_BY_ENTITY: Record<MutationEntity, string> = {
   file: 'files',
   tag: 'tags',
   observer: 'observers',
+  track: 'tracks',
 };
 
 /** The `files` Firestore collection only ever holds this shape — the blob
@@ -44,6 +46,21 @@ interface StoredFileMeta {
   kind: StoredFile['kind'];
   mime: string;
   createdAt: string;
+  updatedAt: string;
+  deleted: boolean;
+}
+
+/** The `tracks` Firestore collection only holds this lightweight shape —
+ * the heavy fields (points/segments/reportPins/previewImage) live in
+ * Storage as a JSON blob, same split as files/photos. A GPS track can have
+ * thousands of points (one every ~2s for a multi-hour walk), which would
+ * risk Firestore's 1MB document size limit if stored inline. */
+interface TrackMeta {
+  id: string;
+  startedAt: string;
+  endedAt: string;
+  durationMs: number;
+  distanceMeters: number;
   updatedAt: string;
   deleted: boolean;
 }
@@ -91,12 +108,13 @@ let pendingProjects = false;
 let pendingFiles = false;
 let pendingTags = false;
 let pendingObservers = false;
+let pendingTracks = false;
 
 /** Recomputes the derived state from the last-known pending-writes flags and
  * live connectivity — called whenever either changes. */
 function recomputeStatus(): void {
   if (!activeCode) { setStatus({ state: 'disabled', pending: false }); return; }
-  const pending = pendingObs || pendingSpecies || pendingLocations || pendingProjects || pendingFiles || pendingTags || pendingObservers;
+  const pending = pendingObs || pendingSpecies || pendingLocations || pendingProjects || pendingFiles || pendingTags || pendingObservers || pendingTracks;
   if (!navigator.onLine) { setStatus({ state: 'offline', pending }); return; }
   setStatus({ state: pending ? 'syncing' : 'idle', pending, lastSync: pending ? status.lastSync : new Date().toISOString() });
 }
@@ -177,7 +195,7 @@ export async function forceResyncListsFromCloud(): Promise<{ species: number; lo
  * saved before then never got a chance to upload and won't retry on their
  * own. Safe to call any time: already-uploaded photos are skipped (matched
  * by remoteId); files have no such flag, so they're simply re-pushed. */
-export async function retryMediaUploads(): Promise<{ observations: number; files: number }> {
+export async function retryMediaUploads(): Promise<{ observations: number; files: number; tracks: number }> {
   if (!activeCode) throw new Error('סנכרון Firebase אינו מופעל');
   let observations = 0;
   for (const o of await listObservationsRaw()) {
@@ -188,7 +206,12 @@ export async function retryMediaUploads(): Promise<{ observations: number; files
     if (f.deleted) continue;
     try { await pushFile(f); files++; } catch (err) { console.warn('Firebase: file retry skipped', f.id, err); }
   }
-  return { observations, files };
+  let tracks = 0;
+  for (const t of await listTracksRaw()) {
+    if (t.deleted) continue;
+    try { await pushTrack(t); tracks++; } catch (err) { console.warn('Firebase: track retry skipped', t.id, err); }
+  }
+  return { observations, files, tracks };
 }
 
 export function stopFirebaseSync(): void {
@@ -197,7 +220,7 @@ export function stopFirebaseSync(): void {
   stopMutationListener?.();
   stopMutationListener = null;
   activeCode = null;
-  pendingObs = pendingSpecies = pendingLocations = pendingProjects = pendingFiles = pendingTags = pendingObservers = false;
+  pendingObs = pendingSpecies = pendingLocations = pendingProjects = pendingFiles = pendingTags = pendingObservers = pendingTracks = false;
   setStatus({ state: 'disabled', pending: false, message: undefined });
 }
 
@@ -244,6 +267,9 @@ async function startFirebaseSync(code: string): Promise<void> {
         }
         for (const f of await listFilesRaw()) {
           try { await pushFile(f); } catch (err) { console.warn('Firebase: file sync skipped', err); }
+        }
+        for (const t of await listTracksRaw()) {
+          try { await pushTrack(t); } catch (err) { console.warn('Firebase: track sync skipped', err); }
         }
       });
       await setSetting(seedFlagKey, true);
@@ -303,6 +329,14 @@ async function startFirebaseSync(code: string): Promise<void> {
     });
     recomputeStatus();
   }, onSnapError));
+  unsubs.push(onSnapshot(collection(db, 'households', code, 'tracks'), { includeMetadataChanges: true }, (snap: QuerySnapshot<DocumentData>) => {
+    pendingTracks = snap.metadata.hasPendingWrites;
+    snap.docChanges().forEach((change) => {
+      if (change.type === 'removed') return;
+      void mergeRemoteTrack(change.doc.data() as TrackMeta);
+    });
+    recomputeStatus();
+  }, onSnapError));
   unsubs.push(onSnapshot(collection(db, 'households', code, 'observers'), { includeMetadataChanges: true }, (snap: QuerySnapshot<DocumentData>) => {
     pendingObservers = snap.metadata.hasPendingWrites;
     snap.docChanges().forEach((change) => {
@@ -322,6 +356,10 @@ async function handleLocalMutation(entity: MutationEntity, id: string, _op: Muta
   try {
     if (entity === 'file') {
       await pushFile(payload as StoredFile);
+      return;
+    }
+    if (entity === 'track') {
+      await pushTrack(payload as ObservationTrack);
       return;
     }
     await pushDoc(COLLECTION_BY_ENTITY[entity], id, payload);
@@ -461,5 +499,65 @@ async function mergeRemoteFile(remote: StoredFileMeta): Promise<void> {
     // Blob not uploaded yet (metadata can arrive slightly ahead of the
     // Storage write) or offline — will retry on the next remote update.
     console.warn('Firebase: could not download file', remote.id, err);
+  }
+}
+
+/** Uploads a track's heavy fields (points/segments/reportPins/previewImage)
+ * to Storage as a single JSON blob, and pushes its lightweight metadata to
+ * Firestore — same split as files/photos, and for the same reason: a
+ * multi-hour recording's point array could otherwise exceed Firestore's
+ * 1MB document limit. A deleted tombstone has nothing to upload. */
+async function pushTrack(track: ObservationTrack): Promise<void> {
+  if (!activeCode) return;
+  const meta: TrackMeta = {
+    id: track.id, startedAt: track.startedAt, endedAt: track.endedAt,
+    durationMs: track.durationMs, distanceMeters: track.distanceMeters,
+    updatedAt: track.updatedAt, deleted: !!track.deleted,
+  };
+  if (!track.deleted) {
+    try {
+      const path = `households/${activeCode}/tracks/${track.id}`;
+      const json = JSON.stringify({
+        points: track.points, segments: track.segments,
+        reportPins: track.reportPins, previewImage: track.previewImage,
+      });
+      await uploadBytes(ref(firebaseStorage(), path), new Blob([json], { type: 'application/json' }));
+    } catch (err) {
+      // Storage not enabled yet, offline, etc. — leave this track for a
+      // later retry rather than pushing metadata other devices can't
+      // actually fetch the route data for yet.
+      console.warn('Firebase: could not upload track', track.id, err);
+      return;
+    }
+  }
+  await pushDoc('tracks', track.id, meta);
+}
+
+async function mergeRemoteTrack(remote: TrackMeta): Promise<void> {
+  const local = await getTrack(remote.id);
+  if (local && new Date(local.updatedAt) >= new Date(remote.updatedAt)) return;
+  if (remote.deleted) {
+    await withSuppressedPush(() => putTrackRaw({
+      id: remote.id, points: [], segments: [], startedAt: remote.startedAt, endedAt: remote.endedAt,
+      durationMs: remote.durationMs, distanceMeters: remote.distanceMeters, updatedAt: remote.updatedAt, deleted: true,
+    }));
+    return;
+  }
+  if (!activeCode) return;
+  try {
+    const path = `households/${activeCode}/tracks/${remote.id}`;
+    const bytes = await getBytes(ref(firebaseStorage(), path));
+    const data = JSON.parse(new TextDecoder().decode(bytes)) as
+      Pick<ObservationTrack, 'points' | 'segments' | 'reportPins' | 'previewImage'>;
+    await withSuppressedPush(() => putTrackRaw({
+      id: remote.id, points: data.points, segments: data.segments,
+      reportPins: data.reportPins, previewImage: data.previewImage,
+      startedAt: remote.startedAt, endedAt: remote.endedAt, durationMs: remote.durationMs,
+      distanceMeters: remote.distanceMeters, updatedAt: remote.updatedAt,
+    }));
+  } catch (err) {
+    // Blob not uploaded yet (metadata can arrive slightly ahead of the
+    // Storage write) or offline — will retry on the next remote update.
+    console.warn('Firebase: could not download track', remote.id, err);
   }
 }

@@ -1263,7 +1263,7 @@ async function onRetryMediaUploads(): Promise<void> {
   btn.disabled = true;
   try {
     const n = await retryMediaUploads();
-    toast(`הניסיון החוזר הושלם (${n.observations} תצפיות, ${n.files} קבצים נבדקו)`);
+    toast(`הניסיון החוזר הושלם (${n.observations} תצפיות, ${n.files} קבצים, ${n.tracks} מסלולים נבדקו)`);
   } catch (err) {
     toast('הניסיון החוזר נכשל: ' + (err as Error).message, true, 6000);
   } finally {

@@ -38,7 +38,7 @@ function emitChange(): void {
  * "something changed, re-render"). Sync backends that need to know exactly
  * which record changed (e.g. the Firebase sync engine) subscribe here
  * instead of re-scanning the whole database on every change. */
-export type MutationEntity = 'observation' | 'species' | 'location' | 'project' | 'file' | 'tag' | 'observer';
+export type MutationEntity = 'observation' | 'species' | 'location' | 'project' | 'file' | 'tag' | 'observer' | 'track';
 export type MutationOp = 'upsert' | 'delete';
 type MutationListener = (entity: MutationEntity, id: string, op: MutationOp, payload: unknown) => void;
 const mutationListeners = new Set<MutationListener>();
@@ -127,24 +127,50 @@ export async function deleteObservation(id: string): Promise<void> {
 
 /* ---------- GPS tracks (recorded while a new observation's form was open) ---------- */
 
-/** Local-only for now — not part of the mutation feed / Firebase sync. */
 export async function saveTrack(track: ObservationTrack): Promise<void> {
   track.updatedAt = now();
   await db.tracks.put(track);
   emitChange();
+  emitMutation('track', track.id, 'upsert', track);
 }
 
 export function getTrack(id: string): Promise<ObservationTrack | undefined> {
   return db.tracks.get(id);
 }
 
-export function listTracks(): Promise<ObservationTrack[]> {
+/** Excludes deleted tombstones. */
+export async function listTracks(): Promise<ObservationTrack[]> {
+  const all = await db.tracks.toArray();
+  return all.filter((t) => !t.deleted);
+}
+
+/** Everything including tombstones — used by the Firebase sync engine. */
+export function listTracksRaw(): Promise<ObservationTrack[]> {
   return db.tracks.toArray();
 }
 
-export async function deleteTrack(id: string): Promise<void> {
-  await db.tracks.delete(id);
+/** Write a row exactly as given (used by the Firebase sync engine to apply a remote merge). */
+export async function putTrackRaw(track: ObservationTrack): Promise<void> {
+  await db.tracks.put(track);
   emitChange();
+  emitMutation('track', track.id, track.deleted ? 'delete' : 'upsert', track);
+}
+
+/** Soft-delete: keeps a lightweight tombstone (so the deletion propagates on
+ * sync) but drops the heavy fields immediately, since a deleted track is
+ * already excluded from every listing and no longer needs the space. */
+export async function deleteTrack(id: string): Promise<void> {
+  const track = await db.tracks.get(id);
+  if (!track) return;
+  track.deleted = true;
+  track.points = [];
+  track.segments = [];
+  track.reportPins = undefined;
+  track.previewImage = undefined;
+  track.updatedAt = now();
+  await db.tracks.put(track);
+  emitChange();
+  emitMutation('track', id, 'delete', track);
 }
 
 /* ---------- stored files (Settings ← קבצים: PDF reports + external uploads) ---------- */
