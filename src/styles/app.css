@@ -1448,6 +1448,70 @@ a.media-link-icon:hover { color: var(--accent-700); }
 .photo-import-date { font-size: .85rem; }
 .photo-import-select { width: 100%; font-size: .85rem; padding: 6px 8px; }
 
+/* ---------- gallery tab ---------- */
+
+.gallery-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+.gallery-count { color: var(--ink-soft); font-size: .88rem; }
+.gallery-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px;
+}
+.gallery-tile {
+  position: relative; border: 0; padding: 0; cursor: pointer; background: var(--accent-50);
+  border-radius: 10px; overflow: hidden; aspect-ratio: 1; border: 1px solid var(--line);
+}
+.gallery-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.gallery-tile-badge {
+  position: absolute; top: 5px; left: 5px; width: 22px; height: 22px; border-radius: 50%;
+  background: rgba(0,0,0,.55); color: #fff; display: flex; align-items: center; justify-content: center;
+}
+.gallery-tile-badge .icon { width: 13px; height: 13px; }
+.gallery-empty { color: var(--ink-soft); text-align: center; margin-top: 40px; }
+
+.gallery-lightbox-backdrop {
+  position: fixed; inset: 0; background: rgba(10,14,11,.92); z-index: 3500;
+  display: flex; align-items: center; justify-content: center; animation: modal-fade .15s ease;
+}
+.gallery-lightbox {
+  position: relative; width: 100%; height: 100%; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; padding: 16px;
+}
+.gallery-lb-close {
+  position: absolute; top: calc(14px + env(safe-area-inset-top)); left: 14px; z-index: 2;
+  background: rgba(255,255,255,.15); color: #fff; border-radius: 50%; width: 40px; height: 40px;
+}
+.gallery-lb-imgwrap { flex: 1; width: 100%; display: flex; align-items: center; justify-content: center; min-height: 0; touch-action: pan-y; }
+.gallery-lb-img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 6px; }
+.gallery-lb-nav {
+  position: absolute; top: 50%; transform: translateY(-50%); z-index: 2;
+  background: rgba(255,255,255,.15); color: #fff; border: 0; border-radius: 50%;
+  width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.gallery-lb-nav .icon { width: 22px; height: 22px; }
+.gallery-lb-prev { right: 10px; }
+.gallery-lb-next { left: 10px; }
+.gallery-lb-info {
+  width: 100%; max-width: 480px; color: #fff; text-align: center;
+  padding: 14px 6px calc(6px + env(safe-area-inset-bottom));
+}
+.gallery-lb-meta { margin-bottom: 10px; display: flex; flex-direction: column; gap: 2px; }
+.gallery-lb-meta strong { font-size: 1.05rem; }
+.gallery-lb-meta span { color: rgba(255,255,255,.7); font-size: .85rem; }
+.gallery-lb-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+
+.photo-picker-modal .photo-picker-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px; margin: 12px 0;
+  max-height: 50vh; overflow-y: auto;
+}
+.photo-picker-tile {
+  border: 2px solid transparent; padding: 0; cursor: pointer; background: var(--accent-50);
+  border-radius: 8px; overflow: hidden; aspect-ratio: 1;
+}
+.photo-picker-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.photo-picker-tile.selected { border-color: var(--accent-700); }
+
+.gallery-assoc-modal .gallery-assoc-search { width: 100%; margin: 10px 0; }
+.gallery-assoc-modal .gallery-assoc-list { display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow-y: auto; }
+
 /* ---------- species tab ---------- */
 
 .sp-summary { color: var(--ink-soft); font-size: .88rem; margin: 4px 0 12px; }
@@ -1607,10 +1671,16 @@ a.media-link-icon:hover { color: var(--accent-700); }
 }
 .bird-marker-badge .icon { width: 15px; height: 15px; }
 .bird-marker-thumb {
-  width: 34px; height: 34px; border-radius: 50%; overflow: hidden;
+  width: 44px; height: 44px; border-radius: 50%; overflow: hidden;
   border: 2px solid #fff; box-shadow: 0 2px 5px rgba(27, 67, 50, .35);
 }
 .bird-marker-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.map-photo-popup { text-align: center; min-width: 160px; }
+.map-photo-popup img { width: 200px; max-width: 55vw; border-radius: 8px; display: block; margin: 0 auto 8px; object-fit: cover; }
+.map-photo-popup-loc { font-weight: 700; color: var(--accent-900); }
+.map-photo-popup-species { color: var(--ink-soft); font-size: .85rem; margin-top: 2px; }
+.map-photo-popup-more { margin-top: 8px; width: 100%; }
 
 /* ---------- home screen ---------- */
 

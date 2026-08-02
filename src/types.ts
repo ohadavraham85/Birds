@@ -165,7 +165,10 @@ export interface ObservationTrack {
   updatedAt: string;
 }
 
-/** Original-quality image blob, linked to an observation. */
+/** Original-quality image blob. `obsId` is '' for a photo uploaded straight
+ * into the Gallery tab that hasn't been attached to any observation yet
+ * ("orphan") — every photo added through the observation form itself always
+ * has a real `obsId` from the moment it's saved. */
 export interface MediaRecord {
   id: string;
   obsId: string;
@@ -173,6 +176,10 @@ export interface MediaRecord {
   mime: string;
   blob: Blob;
   remoteId?: string | null;
+  /** When this blob was first saved, ISO — used to sort the Gallery newest
+   * first. Optional only because rows saved before this field existed don't
+   * have it (they sort to the end, treated as oldest). */
+  addedAt?: string;
 }
 
 /** A file kept in Settings ← קבצים: either a PDF report archived automatically

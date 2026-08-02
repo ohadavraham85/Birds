@@ -10,6 +10,7 @@ import { toast, toLocalInputValue, fromLocalInputValue, safeHttpUrl, confirmDial
 import { haptic } from '../lib/haptics';
 import { escapeHtml } from '../lib/markdown';
 import { getImageObjectUrl } from '../lib/media';
+import { pickFromGallery } from '../lib/photo-picker';
 import { pickLocation } from '../lib/location-picker';
 import { wireCombo } from '../lib/combo';
 import { entriesOf, entryImages, speciesNames } from '../lib/observation';
@@ -946,6 +947,7 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
         <button type="button" class="btn btn-icon sp-edit-btn${hasNote ? ' has-content' : ''}" title="עריכת מין" aria-label="עריכת מין" aria-expanded="false">${icon('edit')}</button>
         <div class="bulk-select-menu sp-edit-menu" hidden>
           <button type="button" class="sp-menu-item sp-add-img">${icon('camera')} הוספת תמונה</button>
+          <button type="button" class="sp-menu-item sp-pick-gallery">${icon('grid')} בחירה מהגלריה</button>
           <button type="button" class="sp-menu-item sp-note-toggle">${icon('document')} הערה למין זה</button>
           <button type="button" class="sp-menu-item sp-split">${icon('openOut')} פתיחה כתצפית עצמאית</button>
           <button type="button" class="sp-menu-item sp-remove danger">${icon('trash')} הסרת מין</button>
@@ -1019,6 +1021,16 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
     }
     fileInput.value = '';
     void renderRowThumbs(row);
+  });
+
+  row.querySelector('.sp-pick-gallery')!.addEventListener('click', () => {
+    editMenu.hidden = true;
+    void pickFromGallery(obsId).then((picked) => {
+      if (!picked.length) return;
+      rowImages.get(row)!.kept.push(...picked);
+      void renderRowThumbs(row);
+      scheduleDraftSave();
+    });
   });
 
   const doRemove = (): void => {
