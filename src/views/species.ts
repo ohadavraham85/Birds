@@ -16,7 +16,7 @@ import { navigate } from '../main';
 import type { ViewParams } from './view';
 import type { SpeciesDetail, ObservationImage } from '../types';
 
-type SortMode = 'family' | 'alpha' | 'recent' | 'seen' | 'tag' | 'count';
+type SortMode = 'family' | 'alpha' | 'recent' | 'seen' | 'tag' | 'count' | 'details';
 type SortDir = 'asc' | 'desc';
 
 let container: HTMLElement;
@@ -50,6 +50,7 @@ export function init(el: HTMLElement): void {
       <select id="sp-group" class="filter-sel">
         <option value="family">קיבוץ לפי משפחה</option>
         <option value="seen">נצפה / לא נצפה</option>
+        <option value="details">עם פרטים / ללא פרטים</option>
         <option value="tag">קיבוץ לפי תגית</option>
         <option value="alpha">לפי א״ב</option>
         <option value="recent">לפי תצפית אחרונה</option>
@@ -224,17 +225,20 @@ function render(): void {
   const el = qs(container, '#sp-list');
   if (!list.length) { el.innerHTML = '<p style="color:var(--ink-soft)">אין מין תואם.</p>'; return; }
 
-  if (sortMode === 'family' || sortMode === 'seen' || sortMode === 'tag') {
+  if (sortMode === 'family' || sortMode === 'seen' || sortMode === 'tag' || sortMode === 'details') {
     const groups = new Map<string, string[]>();
     for (const n of list) {
       const keys = sortMode === 'family' ? [detailsFor(n).family || '(ללא משפחה)']
         : sortMode === 'seen' ? [counts[n] ? 'נצפה' : 'לא נצפה']
+        : sortMode === 'details' ? [detailsFor(n).en ? 'יש פרטים' : 'אין פרטים']
         : [...(tagsByName[n] ?? new Set(['(ללא תגית)']))];
       for (const key of keys) (groups.get(key) ?? groups.set(key, []).get(key)!).push(n);
     }
     const keys = sortMode === 'seen'
       ? (sortDir === 'asc' ? ['נצפה', 'לא נצפה'] : ['לא נצפה', 'נצפה']).filter((k) => groups.has(k))
-      : sortAlpha([...groups.keys()]);
+      : sortMode === 'details'
+        ? (sortDir === 'asc' ? ['אין פרטים', 'יש פרטים'] : ['יש פרטים', 'אין פרטים']).filter((k) => groups.has(k))
+        : sortAlpha([...groups.keys()]);
     el.innerHTML = keys.map((key) => {
       const items = sortAlpha(groups.get(key)!);
       const collapsed = collapsedGroups.has(key);
