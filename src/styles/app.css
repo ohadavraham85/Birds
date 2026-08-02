@@ -697,8 +697,12 @@ textarea { min-height: 130px; resize: vertical; white-space: pre-wrap; line-heig
 /* Each species row sits inside a swipe-capable wrapper (right-swipe or
  * long-press reveals a delete action at the leading edge) — the visible
  * card itself is .sp-entry (also .sp-swipe-front), individually bordered so
- * rows read as distinct items instead of one flat block. */
-.sp-swipe-wrap { position: relative; overflow: hidden; border-radius: 10px; margin-bottom: 10px; }
+ * rows read as distinct items instead of one flat block. No overflow:hidden
+ * here (unlike the journal's .swipe-item) — the delete action already stays
+ * within the wrap's own width via absolute positioning, and this row's
+ * species-name combo dropdown (.combo-list) must be able to render below
+ * the row without being clipped. */
+.sp-swipe-wrap { position: relative; border-radius: 10px; margin-bottom: 10px; }
 .sp-swipe-wrap:last-child { margin-bottom: 0; }
 .sp-swipe-front { position: relative; z-index: 1; touch-action: pan-y; }
 .sp-swipe-delete {
