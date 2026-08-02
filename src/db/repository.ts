@@ -75,8 +75,18 @@ export async function saveObservation(obs: Observation): Promise<Observation> {
   return obs;
 }
 
-export function getObservation(id: string): Promise<Observation | undefined> {
-  return db.observations.get(id);
+/** Some observations synced in from Firestore predate the tags feature (their
+ * document was written before `tags` existed and never edited since, so it
+ * has no such field at all) — every reader normalizes it to `[]` rather than
+ * `undefined`, so code that assumes `Observation.tags` is always an array
+ * (per its type) doesn't crash on this real-world legacy data. */
+export function normalizeObservation(o: Observation): Observation {
+  return o.tags ? o : { ...o, tags: [] };
+}
+
+export async function getObservation(id: string): Promise<Observation | undefined> {
+  const o = await db.observations.get(id);
+  return o && normalizeObservation(o);
 }
 
 /** Flips the favorite flag on one observation and pushes it through the same
@@ -97,12 +107,13 @@ export async function listObservations(): Promise<Observation[]> {
   const all = await db.observations.toArray();
   return all
     .filter((o) => !o.deleted)
+    .map(normalizeObservation)
     .sort((a, b) => (a.dateTime < b.dateTime ? 1 : -1));
 }
 
 /** Everything including tombstones — used by sync/backup. */
-export function listObservationsRaw(): Promise<Observation[]> {
-  return db.observations.toArray();
+export async function listObservationsRaw(): Promise<Observation[]> {
+  return (await db.observations.toArray()).map(normalizeObservation);
 }
 
 /** Write a row exactly as given (used by the Firebase sync engine to apply a remote merge). */
