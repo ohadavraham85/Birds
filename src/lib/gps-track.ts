@@ -23,6 +23,10 @@ let watchId: number | null = null;
 let points: TrackPoint[] = [];
 let startedAt = 0;
 let wakeLock: { release(): Promise<void> } | null = null;
+/** Set while a recording's GPS watch was torn down because the tab went to
+ * the background — tells the visibilitychange handler to re-arm it (rather
+ * than start a brand-new session) once the tab is foregrounded again. */
+let pausedForVisibility = false;
 
 export function haversineMeters(a: TrackPoint, b: TrackPoint): number {
   const R = 6371000;
@@ -110,9 +114,20 @@ function releaseWakeLock(): void {
 
 // The Wake Lock spec auto-releases the lock once the tab is hidden — grab it
 // again if we're still actively recording when the tab becomes visible.
+// Backgrounding also tears down the GPS watch itself (rather than relying on
+// the browser to silently stop delivering fixes) so no battery/CPU is spent
+// polling location while the app isn't in front of the user; startTracking()
+// re-arms it on return without resetting the points/timer already captured.
 if (typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && watchId != null) void acquireWakeLock();
+    if (document.visibilityState === 'visible') {
+      if (watchId != null) void acquireWakeLock();
+      if (pausedForVisibility) { pausedForVisibility = false; startTracking(); }
+    } else if (watchId != null) {
+      navigator.geolocation.clearWatch(watchId);
+      watchId = null;
+      pausedForVisibility = true;
+    }
   });
 }
 
@@ -138,6 +153,7 @@ export function startTracking(): void {
 /** Stops recording and returns the classified track (empty segments if fewer than 2 points were captured). */
 export function stopTracking(): { points: TrackPoint[]; segments: TrackSegment[]; startedAt: number; endedAt: number; distanceMeters: number } {
   if (watchId != null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+  pausedForVisibility = false;
   releaseWakeLock();
   const endedAt = Date.now();
   const captured = points;

@@ -65,6 +65,7 @@ const PATHS = {
   tagShorebird: '<ellipse cx="12" cy="12" rx="4.5" ry="3.5"/><path d="M16 11 19.5 9.5"/><circle cx="14.5" cy="10.7" r=".5" fill="currentColor" stroke="none"/><path d="M9.5 15.3 8.5 20M13 15.3 12.5 20"/>',
   tagGeneric: '<ellipse cx="10" cy="15" rx="6.5" ry="4.5"/><circle cx="16" cy="9.5" r="3.2"/><path d="M18.8 9 22 9.8 18.8 10.6Z" fill="currentColor" stroke="none"/><circle cx="16.8" cy="8.7" r=".6" fill="currentColor" stroke="none"/><path d="M4 13.5 2.5 10.5"/><path d="M8 19.3V22M12 19.3V22"/>',
   info: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="7.7" r=".9" fill="currentColor" stroke="none"/><path d="M12 11v6"/>',
+  openOut: '<rect x="4" y="4" width="9" height="9" rx="1.5"/><path d="M13 3h8v8"/><path d="M21 3 12 12"/>',
 } as const;
 
 export type IconName = keyof typeof PATHS;

@@ -6,7 +6,8 @@ import {
   saveObservation, getObservation, listObservations, listSpecies,
   saveMedia, mediaForObservation, deleteMedia, listLocationRows, listTagRows, addTag, listObserverRows, addObserver, saveTrack, getTrack,
 } from '../db/repository';
-import { toast, toLocalInputValue, fromLocalInputValue, safeHttpUrl } from '../lib/ui';
+import { toast, toLocalInputValue, fromLocalInputValue, safeHttpUrl, confirmDialog } from '../lib/ui';
+import { haptic } from '../lib/haptics';
 import { escapeHtml } from '../lib/markdown';
 import { getImageObjectUrl } from '../lib/media';
 import { pickLocation } from '../lib/location-picker';
@@ -28,6 +29,9 @@ interface PendingImage { id: string; file: File; url: string }
 interface RowImages { pending: PendingImage[]; kept: ObservationImage[] }
 
 const DEFAULT_TAG_COLORS = ['#2e7d32', '#1565c0', '#c62828', '#6a1b9a', '#ef6c00', '#00838f'];
+/** Auto-selected tag for every brand-new observation (still changeable) —
+ * created once on first use if this household doesn't have it yet. */
+const DEFAULT_TAG_NAME = 'כללי';
 
 let container: HTMLElement;
 let speciesCache: string[] = [];
@@ -47,6 +51,7 @@ let prefillTags: string[] | null = null;
 let prefillNotes: string | null = null;
 let resumeDraftRequested = false;
 let draftInterval: ReturnType<typeof setInterval> | null = null;
+let draftSaveDebounce: ReturnType<typeof setTimeout> | null = null;
 let obsId = '';
 let savedLocations = new Map<string, LocationRow>();
 let currentLat: number | null = null;
@@ -68,6 +73,19 @@ let reportPins: TrackReportPin[] = [];
 const pinnedSpeciesRows = new WeakSet<HTMLElement>();
 const rowImages = new WeakMap<HTMLElement, RowImages>();
 
+/* ---------- species row swipe/long-press-to-delete ---------- */
+
+const SPECIES_SWIPE_OPEN_PX = 84;
+const SPECIES_SWIPE_TAP_THRESHOLD = 8;
+let openSpeciesSwipeWrap: HTMLElement | null = null;
+
+function closeSpeciesSwipe(wrap: HTMLElement): void {
+  const front = wrap.querySelector<HTMLElement>('.sp-swipe-front');
+  if (front) front.style.transform = 'translateX(0)';
+  wrap.classList.remove('sp-swipe-open');
+  if (openSpeciesSwipeWrap === wrap) openSpeciesSwipeWrap = null;
+}
+
 /** Drops a report pin at the current live GPS position — a no-op unless a
  * recording is actively in progress (per the feature's own scope: pins are
  * only meaningful while GPS is actually tracking "here, right now"). */
@@ -85,70 +103,72 @@ export function init(el: HTMLElement): void {
     <div class="form-head">
       <button type="button" class="btn btn-sm" id="back-btn">→ חזרה</button>
       <h2 id="form-title">תצפית חדשה</h2>
-      <button type="button" class="btn btn-icon voice-dictate-btn emphasized" id="voice-dictate-btn" title="הכתבת תצפית בקול" aria-label="הכתבת תצפית בקול">${icon('mic')}</button>
     </div>
     <form id="obs-form" autocomplete="off">
-      <div class="field-frame">
-        <div class="field field-datetime-compact">
-          <label for="f-datetime">תאריך ושעה</label>
-          <div class="datetime-inline">
-            ${icon('clock')}
-            <input type="datetime-local" id="f-datetime" required>
-          </div>
-        </div>
-      </div>
-
-      <div class="field-frame">
-        <div class="field-row location-row">
-          <div class="field field-location-prominent">
-            <label for="f-location">מיקום התצפית</label>
-            <div class="combo with-arrow">
-              <input type="text" id="f-location">
-              <button type="button" class="combo-toggle" title="פתיחת הרשימה" aria-label="פתיחת הרשימה">▾</button>
-              <div class="combo-list" id="location-list" hidden></div>
+      <div class="form-header-card">
+        <div class="field-frame">
+          <div class="field field-datetime-compact">
+            <label for="f-datetime">תאריך ושעה</label>
+            <div class="datetime-inline">
+              ${icon('clock')}
+              <input type="datetime-local" id="f-datetime" required>
             </div>
           </div>
-          <button type="button" class="btn btn-icon location-pin-btn" id="pick-map-btn" title="בחירת מיקום על המפה" aria-label="בחירת מיקום על המפה">${icon('pin')}</button>
         </div>
-        <span class="hint" id="gps-status"></span>
-        <div class="track-status voice-status" id="voice-status" hidden>
-          <span class="track-dot"></span>
-          <span id="voice-interim">מקשיב...</span>
-        </div>
-      </div>
 
-      <label class="notif-toggle-row track-toggle-row" id="track-toggle-row" hidden>
-        <span>הקלטת מסלול GPS לתצפית זו</span>
-        <input type="checkbox" id="track-toggle">
-      </label>
-      <div class="track-status" id="track-status" hidden>
-        <span class="track-dot"></span>
-        <span>מקליט מסלול GPS · <span id="track-timer">00:00</span> · <span id="track-distance">0 מ'</span></span>
-      </div>
-
-      <div class="field-frame">
-        <div class="field-row two-up">
-          <div class="bulk-select" id="tags-select">
-            <button type="button" class="bulk-select-btn wrap-chips" id="tags-select-btn" aria-expanded="false">
-              <span class="select-chips" id="tags-select-label"><span class="select-placeholder">תגיות</span></span><span class="bulk-select-caret">▾</span>
-            </button>
-            <div class="bulk-select-menu" id="tags-select-menu" hidden>
-              <div id="tag-checks"></div>
-              <div class="tag-quick-add">
-                <input type="text" id="f-tag-new" aria-label="הוספת תגית חדשה">
-                <button type="button" class="btn btn-sm" id="f-tag-add">${icon('plus')} הוספה</button>
+        <div class="field-frame">
+          <div class="field-row location-row">
+            <div class="field field-location-prominent">
+              <label for="f-location">מיקום התצפית</label>
+              <div class="combo with-arrow">
+                <input type="text" id="f-location">
+                <button type="button" class="combo-toggle" title="פתיחת הרשימה" aria-label="פתיחת הרשימה">▾</button>
+                <div class="combo-list" id="location-list" hidden></div>
               </div>
             </div>
+            <button type="button" class="btn btn-icon location-pin-btn" id="pick-map-btn" title="בחירת מיקום על המפה" aria-label="בחירת מיקום על המפה">${icon('pin')}</button>
+            <button type="button" class="btn btn-icon voice-dictate-btn" id="voice-dictate-btn" title="הכתבת תצפית בקול" aria-label="הכתבת תצפית בקול">${icon('mic')}</button>
           </div>
-          <div class="bulk-select" id="observers-select">
-            <button type="button" class="bulk-select-btn wrap-chips" id="observers-select-btn" aria-expanded="false">
-              <span class="select-chips" id="observers-select-label"><span class="select-placeholder">צופים</span></span><span class="bulk-select-caret">▾</span>
-            </button>
-            <div class="bulk-select-menu" id="observers-select-menu" hidden>
-              <div id="observer-checks"></div>
-              <div class="tag-quick-add">
-                <input type="text" id="f-observer-new" aria-label="הוספת צופה חדש">
-                <button type="button" class="btn btn-sm" id="f-observer-add">${icon('plus')} הוספה</button>
+          <span class="hint" id="gps-status"></span>
+          <div class="track-status voice-status" id="voice-status" hidden>
+            <span class="track-dot"></span>
+            <span id="voice-interim">מקשיב...</span>
+          </div>
+        </div>
+
+        <label class="notif-toggle-row track-toggle-row" id="track-toggle-row" hidden>
+          <span>הקלטת מסלול GPS לתצפית זו</span>
+          <input type="checkbox" id="track-toggle">
+        </label>
+        <div class="track-status" id="track-status" hidden>
+          <span class="track-dot"></span>
+          <span>מקליט מסלול GPS · <span id="track-timer">00:00</span> · <span id="track-distance">0 מ'</span></span>
+        </div>
+
+        <div class="field-frame">
+          <div class="field-row two-up">
+            <div class="bulk-select" id="tags-select">
+              <button type="button" class="bulk-select-btn wrap-chips" id="tags-select-btn" aria-expanded="false">
+                <span class="select-chips" id="tags-select-label"><span class="select-placeholder">תגיות</span></span><span class="bulk-select-caret">▾</span>
+              </button>
+              <div class="bulk-select-menu" id="tags-select-menu" hidden>
+                <div id="tag-checks"></div>
+                <div class="tag-quick-add">
+                  <input type="text" id="f-tag-new" aria-label="הוספת תגית חדשה">
+                  <button type="button" class="btn btn-sm" id="f-tag-add">${icon('plus')} הוספה</button>
+                </div>
+              </div>
+            </div>
+            <div class="bulk-select" id="observers-select">
+              <button type="button" class="bulk-select-btn wrap-chips" id="observers-select-btn" aria-expanded="false">
+                <span class="select-chips" id="observers-select-label"><span class="select-placeholder">צופים</span></span><span class="bulk-select-caret">▾</span>
+              </button>
+              <div class="bulk-select-menu" id="observers-select-menu" hidden>
+                <div id="observer-checks"></div>
+                <div class="tag-quick-add">
+                  <input type="text" id="f-observer-new" aria-label="הוספת צופה חדש">
+                  <button type="button" class="btn btn-sm" id="f-observer-add">${icon('plus')} הוספה</button>
+                </div>
               </div>
             </div>
           </div>
@@ -202,6 +222,13 @@ export function init(el: HTMLElement): void {
     else stashTrack();
   });
   qs<HTMLFormElement>(container, '#obs-form').addEventListener('submit', (e) => void onSave(e));
+  // Delegated: covers every text/date/textarea field and the tags/observers
+  // checklists in one place, so a crash mid-edit never loses more than the
+  // debounce window (see scheduleDraftSave) — plus explicit calls at a few
+  // structural spots (add/remove species row, quick-add tag/observer) that
+  // don't fire a native input/change event on the form itself.
+  qs<HTMLFormElement>(container, '#obs-form').addEventListener('input', () => scheduleDraftSave());
+  qs<HTMLFormElement>(container, '#obs-form').addEventListener('change', () => scheduleDraftSave());
 }
 
 /** Called by the router right before navigating away from this view by any
@@ -379,11 +406,23 @@ function persistDraft(): void {
 
 function startDraftAutosave(): void {
   stopDraftAutosave();
-  draftInterval = setInterval(persistDraft, 3000);
+  // The interval is just a backstop for things that don't fire input/change
+  // (GPS points arriving passively while recording) — every actual field
+  // edit is saved immediately (debounced) via scheduleDraftSave() below, so
+  // a crash/reload never loses more than a fraction of a second of typing.
+  draftInterval = setInterval(persistDraft, 2000);
 }
 
 function stopDraftAutosave(): void {
   if (draftInterval) { clearInterval(draftInterval); draftInterval = null; }
+  if (draftSaveDebounce) { clearTimeout(draftSaveDebounce); draftSaveDebounce = null; }
+}
+
+/** Debounced immediate save, triggered by field edits (as opposed to the
+ * interval above, which only catches passively-arriving GPS points). */
+function scheduleDraftSave(): void {
+  if (draftSaveDebounce) clearTimeout(draftSaveDebounce);
+  draftSaveDebounce = setTimeout(() => { draftSaveDebounce = null; persistDraft(); }, 400);
 }
 
 /** Restores a previously auto-saved in-progress observation — fields plus
@@ -481,6 +520,7 @@ export async function activate(): Promise<void> {
     return;
   }
 
+  await ensureDefaultTag();
   resetForm(!prefillCoords);
   if (prefillEntries) setEntries(prefillEntries);
   else if (prefillSpecies) setEntries([{ species: prefillSpecies, quantity: 1 }]);
@@ -514,6 +554,15 @@ export async function activate(): Promise<void> {
   resumeDraftRequested = false;
 }
 
+/** Creates the default "כללי" tag once per household, if it doesn't exist
+ * yet — never overwrites an existing one (so a user who recolors/renames it
+ * isn't fought on every new observation). */
+async function ensureDefaultTag(): Promise<void> {
+  if (availableTags.some((t) => t.name === DEFAULT_TAG_NAME)) return;
+  await addTag(DEFAULT_TAG_NAME, DEFAULT_TAG_COLORS[0]!, 'tagGeneric');
+  availableTags = await listTagRows();
+}
+
 function resetForm(locate = true): void {
   editId = null;
   obsId = crypto.randomUUID();
@@ -522,7 +571,7 @@ function resetForm(locate = true): void {
   setEntries([{ species: '', quantity: 1 }]);
   qs(container, '#form-title').textContent = 'תצפית חדשה';
   qs(container, '#save-btn').innerHTML = `${icon('save')} שמירת התצפית`;
-  selectedTags = new Set();
+  selectedTags = new Set(availableTags.some((t) => t.name === DEFAULT_TAG_NAME) ? [DEFAULT_TAG_NAME] : []);
   renderTagPicker();
   selectedObservers = new Set();
   renderObserverPicker();
@@ -596,7 +645,7 @@ function renderTagPicker(): void {
     ? availableTags.map((t) => `
       <label class="filter-modal-check">
         <input type="checkbox" class="f-tag-check" value="${escapeHtml(t.name)}" ${selectedTags.has(t.name) ? 'checked' : ''}>
-        <span>${icon(t.icon)} ${escapeHtml(t.name)}</span>
+        <span>${escapeHtml(t.name)}</span>
       </label>`).join('')
     : '<p class="hint" style="padding:2px 0">אין עדיין תגיות — אפשר להוסיף אחת למטה.</p>';
   updateTagsSelectLabel();
@@ -607,7 +656,7 @@ function updateTagsSelectLabel(): void {
   el.innerHTML = selectedTags.size
     ? [...selectedTags].map((name) => {
       const t = availableTags.find((x) => x.name === name);
-      return selectChipHtml(name, t?.color || colorForName(name), t ? icon(t.icon) : '');
+      return selectChipHtml(name, t?.color || colorForName(name));
     }).join('')
     : '<span class="select-placeholder">תגיות</span>';
 }
@@ -658,6 +707,7 @@ async function onQuickAddObserver(): Promise<void> {
   selectedObservers.add(name);
   inp.value = '';
   renderObserverPicker();
+  scheduleDraftSave();
 }
 
 async function onQuickAddTag(): Promise<void> {
@@ -671,6 +721,7 @@ async function onQuickAddTag(): Promise<void> {
   selectedTags.add(name);
   inp.value = '';
   renderTagPicker();
+  scheduleDraftSave();
 }
 
 /* ---------- location ---------- */
@@ -692,6 +743,7 @@ function applyLocationName(name: string): void {
     coordsLocked = false;
   }
   updateLocationPinUI();
+  scheduleDraftSave();
 }
 
 function updateLocationPinUI(): void {
@@ -768,10 +820,116 @@ function setEntries(entries: SpeciesEntry[]): void {
   for (const e of entries) addSpeciesRow(e, false);
 }
 
+/** Wires a right-swipe (or long-press) gesture on a species row's card that
+ * reveals a delete action at the leading edge — mirrors lib/swipe-actions.ts
+ * but single-action (delete only) and also opens on long-press, since a
+ * species row doesn't have its own "open detail" tap target to protect. */
+function wireSpeciesSwipe(front: HTMLElement, wrap: HTMLElement): void {
+  const LONG_PRESS_MS = 500;
+  let startX = 0;
+  let startY = 0;
+  let dx = 0;
+  let dragging = false;
+  let decided: 'h' | 'v' | null = null;
+  let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const openSwipe = (): void => {
+    front.style.transition = '';
+    front.style.transform = `translateX(${SPECIES_SWIPE_OPEN_PX}px)`;
+    if (openSpeciesSwipeWrap && openSpeciesSwipeWrap !== wrap) closeSpeciesSwipe(openSpeciesSwipeWrap);
+    wrap.classList.add('sp-swipe-open');
+    openSpeciesSwipeWrap = wrap;
+    haptic();
+  };
+
+  front.addEventListener('pointerdown', (e: PointerEvent) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if ((e.target as HTMLElement).closest('button, a, input, select, textarea')) return;
+    startX = e.clientX; startY = e.clientY; dx = 0; dragging = true; decided = null;
+    front.setPointerCapture(e.pointerId);
+    front.style.transition = 'none';
+    longPressTimer = setTimeout(() => {
+      longPressTimer = null;
+      if (dragging && !decided) { dragging = false; openSwipe(); }
+    }, LONG_PRESS_MS);
+  });
+  front.addEventListener('pointermove', (e: PointerEvent) => {
+    if (!dragging) return;
+    const moveX = e.clientX - startX;
+    const moveY = e.clientY - startY;
+    if (!decided) {
+      if (Math.abs(moveX) < SPECIES_SWIPE_TAP_THRESHOLD && Math.abs(moveY) < SPECIES_SWIPE_TAP_THRESHOLD) return;
+      if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+      decided = Math.abs(moveX) > Math.abs(moveY) ? 'h' : 'v';
+    }
+    if (decided !== 'h' || moveX < 0) return;
+    e.preventDefault();
+    dx = Math.min(SPECIES_SWIPE_OPEN_PX, moveX);
+    front.style.transform = `translateX(${dx}px)`;
+  });
+  const endDrag = (): void => {
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+    if (!dragging) return;
+    dragging = false;
+    front.style.transition = '';
+    if (decided !== 'h') {
+      front.style.transform = wrap.classList.contains('sp-swipe-open') ? `translateX(${SPECIES_SWIPE_OPEN_PX}px)` : 'translateX(0)';
+      return;
+    }
+    if (dx < SPECIES_SWIPE_OPEN_PX / 2) { closeSpeciesSwipe(wrap); return; }
+    openSwipe();
+  };
+  front.addEventListener('pointerup', endDrag);
+  front.addEventListener('pointercancel', endDrag);
+  front.addEventListener('click', (e) => {
+    if (decided === 'h') { e.stopPropagation(); e.preventDefault(); return; }
+    if (wrap.classList.contains('sp-swipe-open')) { closeSpeciesSwipe(wrap); e.stopPropagation(); e.preventDefault(); }
+  });
+}
+
+/** Opens a fresh new-observation form pre-filled with one species, copying
+ * this observation's date/time/location/tags — with the option to also
+ * remove that species from here (persisting the removal immediately if this
+ * is an already-saved observation, so it doesn't linger duplicated). */
+async function onSplitSpeciesToStandalone(species: string, quantity: number, note: string, removeFromHere: () => void): Promise<void> {
+  if (!species) { toast('יש לבחור מין לפני פתיחתו כתצפית נפרדת', true); return; }
+  const datePart = input(container, '#f-datetime').value.split('T')[0];
+  const locationName = input(container, '#f-location').value.trim();
+  const lat = currentLat;
+  const lng = currentLng;
+  const tags = [...selectedTags];
+
+  const remove = await confirmDialog(`להסיר את "${species}" מהתצפית הנוכחית לאחר פתיחתה כתצפית נפרדת?`, 'הסרה מכאן');
+  if (remove) {
+    if (editId) {
+      const obs = await getObservation(editId);
+      if (obs) {
+        const remaining = entriesOf(obs).filter((e) => !(e.species === species && e.quantity === quantity && (e.note || '') === note));
+        if (remaining.length) await saveObservation({ ...obs, entries: remaining, updatedAt: '' });
+      }
+    }
+    removeFromHere();
+  }
+
+  navigate('form', {
+    prefillEntries: [note ? { species, quantity, note } : { species, quantity }],
+    date: datePart,
+    ...(lat != null && lng != null ? { lat, lng } : {}),
+    locationName: locationName || undefined,
+    prefillTags: tags,
+  });
+}
+
 function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
   const rows = qs(container, '#species-rows');
+  const wrap = document.createElement('div');
+  wrap.className = 'sp-swipe-wrap';
+  const deleteAction = document.createElement('button');
+  deleteAction.type = 'button';
+  deleteAction.className = 'sp-swipe-delete';
+  deleteAction.innerHTML = `${icon('trash')}<span>מחיקה</span>`;
   const row = document.createElement('div');
-  row.className = 'sp-entry';
+  row.className = 'sp-entry sp-swipe-front';
   const hasNote = !!entry.note?.trim();
   row.innerHTML = `
     <div class="sp-entry-main">
@@ -789,6 +947,7 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
         <div class="bulk-select-menu sp-edit-menu" hidden>
           <button type="button" class="sp-menu-item sp-add-img">${icon('camera')} הוספת תמונה</button>
           <button type="button" class="sp-menu-item sp-note-toggle">${icon('document')} הערה למין זה</button>
+          <button type="button" class="sp-menu-item sp-split">${icon('openOut')} פתיחה כתצפית עצמאית</button>
           <button type="button" class="sp-menu-item sp-remove danger">${icon('trash')} הסרת מין</button>
         </div>
       </div>
@@ -799,7 +958,8 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
     </div>
     <div class="sp-thumbs"></div>
   `;
-  rows.appendChild(row);
+  wrap.append(deleteAction, row);
+  rows.appendChild(wrap);
   rowImages.set(row, { pending: [], kept: entry.images ? [...entry.images] : [] });
   // A row created with a species already filled in (editing, draft-restore,
   // voice dictation) isn't a fresh live report — never let it drop a pin.
@@ -861,21 +1021,31 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
     void renderRowThumbs(row);
   });
 
-  row.querySelector('.sp-remove')!.addEventListener('click', () => {
+  const doRemove = (): void => {
     editMenu.hidden = true;
     if (container.querySelectorAll('#species-rows .sp-entry').length > 1) {
       disposeEditMenu();
-      row.remove();
+      wrap.remove();
     } else {
-      row.querySelector<HTMLInputElement>('.sp-input')!.value = '';
+      spInput.value = '';
       noteInput.value = '';
       secondRow.hidden = true;
       editBtn.classList.remove('has-content');
       qtyInput.value = '1';
       rowImages.set(row, { pending: [], kept: [] });
       pinnedSpeciesRows.delete(row);
+      closeSpeciesSwipe(wrap);
       void renderRowThumbs(row);
     }
+    scheduleDraftSave();
+  };
+  row.querySelector('.sp-remove')!.addEventListener('click', doRemove);
+  deleteAction.addEventListener('click', () => { haptic(); doRemove(); });
+  wireSpeciesSwipe(row, wrap);
+
+  row.querySelector('.sp-split')!.addEventListener('click', () => {
+    editMenu.hidden = true;
+    void onSplitSpeciesToStandalone(spInput.value.trim(), Math.max(1, parseInt(qtyInput.value, 10) || 1), noteInput.value.trim(), doRemove);
   });
 
   void renderRowThumbs(row);

@@ -30,10 +30,10 @@ import { icon, type IconName } from '../lib/icons';
 import { readExifDate } from '../lib/exif';
 import { primarySpecies } from '../lib/observation';
 import {
-  THEMES, ACCENTS, FONT_COLORS, FONT_SIZES, FONT_WEIGHTS,
-  currentTheme, currentAccent, currentFontColor, currentFontSize, currentFontWeight,
-  setTheme, setAccent, setFontColor, setFontSize, setFontWeight,
-  type ThemeId, type AccentId, type FontColorId, type FontSizeId, type FontWeightId,
+  THEMES, ACCENTS, FONT_COLORS, FONT_SIZES, FONT_WEIGHTS, DISPLAY_MODES,
+  currentTheme, currentAccent, currentFontColor, currentFontSize, currentFontWeight, currentDisplayMode,
+  setTheme, setAccent, setFontColor, setFontSize, setFontWeight, setDisplayMode,
+  type ThemeId, type AccentId, type FontColorId, type FontSizeId, type FontWeightId, type DisplayModeId,
 } from '../lib/theme';
 import type { Observation, LocationRow, TagRow, TagIconName, ObserverRow } from '../types';
 import { TAG_ICON_NAMES } from '../types';
@@ -150,7 +150,7 @@ export async function activate(): Promise<void> {
       <button type="button" class="btn btn-sm" id="settings-back">→ הגדרות</button>
       <h2>${icon(meta.icon)} ${meta.title}</h2>
     </div>
-    ${activeCategory === 'appearance' ? appearanceHtml(activeTheme, activeAccent, activeFontColor, activeFontSize, activeFontWeight) : ''}
+    ${activeCategory === 'appearance' ? appearanceHtml(activeTheme, activeAccent, activeFontColor, activeFontSize, activeFontWeight, currentDisplayMode()) : ''}
     ${activeCategory === 'sync' ? syncHtml(fbCode) : ''}
     ${activeCategory === 'notifications' ? notificationsHtml(notifSupported, notifPermission, notifEnabled, notifMigration, notifOnThisDay, notifInactivity) : ''}
     ${activeCategory === 'lists' ? listsHtml() : ''}
@@ -174,7 +174,7 @@ export async function activate(): Promise<void> {
 
 /* ---------- עיצוב ---------- */
 
-function appearanceHtml(activeTheme: ThemeId, activeAccent: AccentId, activeFontColor: FontColorId, activeFontSize: FontSizeId, activeFontWeight: FontWeightId): string {
+function appearanceHtml(activeTheme: ThemeId, activeAccent: AccentId, activeFontColor: FontColorId, activeFontSize: FontSizeId, activeFontWeight: FontWeightId, activeDisplayMode: DisplayModeId): string {
   return `
     <div class="settings-card">
       <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
@@ -223,6 +223,11 @@ function appearanceHtml(activeTheme: ThemeId, activeAccent: AccentId, activeFont
         </div>
       </div>
 
+      <h4>תצוגה (נייד/מחשב)</h4>
+      <div class="seg-toggle" id="s-display-mode-picker">
+        ${DISPLAY_MODES.map((d) => `<button type="button" class="seg-btn${d.id === activeDisplayMode ? ' active' : ''}" data-display-mode="${d.id}">${escapeHtml(d.label)}</button>`).join('')}
+      </div>
+
       <h4>תצוגה מקדימה</h4>
       <div class="appearance-preview">
         <div class="appearance-preview-card">
@@ -242,6 +247,7 @@ function wireAppearance(): void {
   qs(container, '#s-font-color-picker').addEventListener('click', onFontColorPick);
   qs(container, '#s-font-size-picker').addEventListener('click', onFontSizePick);
   qs(container, '#s-font-weight-picker').addEventListener('click', onFontWeightPick);
+  qs(container, '#s-display-mode-picker').addEventListener('click', onDisplayModePick);
 }
 
 /* ---------- סנכרון וגיבוי ---------- */
@@ -1089,7 +1095,7 @@ async function renderTagManageList(): Promise<void> {
       const isRenaming = renamingTag === r.name;
       return `
       <div class="tag-row" data-name="${escapeHtml(r.name)}">
-        <span class="tag-swatch" style="background:${escapeHtml(r.color)}">${icon(r.icon)}</span>
+        <span class="tag-swatch" style="background:${escapeHtml(r.color)}"></span>
         ${isRenaming
           ? `<input type="text" class="rename-input" value="${escapeHtml(r.name)}">
              <input type="color" class="tag-edit-color" value="${escapeHtml(r.color)}" title="צבע">`
@@ -1225,6 +1231,9 @@ function onFontSizePick(e: Event): void {
 }
 function onFontWeightPick(e: Event): void {
   pickSeg('#s-font-weight-picker', e, (btn) => setFontWeight(btn.dataset.fontWeight as FontWeightId));
+}
+function onDisplayModePick(e: Event): void {
+  pickSeg('#s-display-mode-picker', e, (btn) => setDisplayMode(btn.dataset.displayMode as DisplayModeId));
 }
 
 async function onSaveFirebaseSync(): Promise<void> {
