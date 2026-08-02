@@ -11,14 +11,15 @@ import L from '../lib/leaflet-setup';
 import { listObservations, listTracks, getSetting, setSetting } from '../db/repository';
 import { toast } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
-import { speciesLabel } from '../lib/observation';
+import { speciesLabel, allImages } from '../lib/observation';
+import { getImageObjectUrl } from '../lib/media';
 import { icon } from '../lib/icons';
 import { qs } from '../lib/dom';
 import { navigate } from '../main';
 import { createMapLayers, loadMapLayerState, setMapLayerPref, applyMapLayerState, type MapLayerState, type MapLayers } from '../lib/map-layers';
 import { TRACK_SEGMENT_COLOR } from '../lib/track-preview';
 import { addDirectionArrows, addReportPins } from '../lib/track-map';
-import type { Observation, ObservationTrack } from '../types';
+import type { Observation, ObservationTrack, ObservationImage } from '../types';
 
 let container: HTMLElement;
 let map: L.Map | undefined;
@@ -48,6 +49,30 @@ const birdIcon = L.divIcon({
   tooltipAnchor: [0, -16],
   popupAnchor: [0, -17],
 });
+
+/** Round photo-thumbnail marker for a location with at least one photographed
+ * observation — falls back to the plain bird badge (above) everywhere else,
+ * per the same divIcon shape/anchors so it drops in without shifting the pin. */
+function thumbIcon(url: string): L.DivIcon {
+  return L.divIcon({
+    className: 'bird-div-icon',
+    html: `<div class="bird-marker-thumb"><img src="${url}" alt=""></div>`,
+    iconSize: [34, 34],
+    iconAnchor: [17, 17],
+    tooltipAnchor: [0, -18],
+    popupAnchor: [0, -19],
+  });
+}
+
+/** First image found scanning history newest-first — used so a location's
+ * marker shows its most recently photographed observation, if any. */
+function firstImageFor(history: Observation[]): ObservationImage | null {
+  for (const o of history) {
+    const imgs = allImages(o);
+    if (imgs.length) return imgs[0]!;
+  }
+  return null;
+}
 
 export function init(el: HTMLElement): void {
   container = el;
@@ -254,6 +279,8 @@ export async function activate(): Promise<void> {
     const key = groupKey(first);
     marker.on('click', () => openLocationSheet(label, historyFor(key), { lat: first.lat!, lng: first.lng!, locationName: first.locationName }));
     marker.addTo(markersLayer!);
+    const img = firstImageFor(historyFor(key));
+    if (img) void getImageObjectUrl(img).then((url) => { if (url) marker.setIcon(thumbIcon(url)); });
   }
 
   tracksLayer!.clearLayers();

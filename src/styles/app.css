@@ -406,6 +406,13 @@ label.notif-toggle-row.track-toggle-row input[type="checkbox"]:checked { backgro
 .view { max-width: 860px; margin: 0 auto; padding: 16px; }
 .view-flush { max-width: none; padding: 0; height: 100%; }
 
+/* Manual display-mode override (Settings ← עיצוב) — 'auto' leaves the fluid
+ * layout above as-is; 'desktop'/'mobile' force a width regardless of the
+ * actual viewport, for someone who wants one look on any screen. */
+:root[data-display-mode="desktop"] .view:not(.view-flush) { max-width: 1180px; }
+:root[data-display-mode="desktop"] .row-2 { grid-template-columns: repeat(2, 1fr) !important; }
+:root[data-display-mode="mobile"] .view:not(.view-flush) { max-width: 480px; }
+
 .view h2 { color: var(--accent-900); margin: 4px 0 14px; font-size: 1.3rem; letter-spacing: -.01em; }
 .view h3 { color: var(--accent-700); margin: 18px 0 8px; font-size: 1.05rem; }
 
@@ -533,6 +540,26 @@ label.notif-toggle-row.track-toggle-row input[type="checkbox"]:checked { backgro
 .field-frame > .field:last-child,
 .field-frame > .field-row:last-child { margin-bottom: 0; }
 
+/* The form's top section (date/time, location, GPS-track toggle, tags/
+ * observers) reads as one elevated card, visually heavier than the plain
+ * .field-frame sections below it (species/notes/media link) — separates
+ * "who/where/when this observation is" from the species list itself. */
+.form-header-card {
+  background: var(--accent-50);
+  border: 2px solid var(--accent-300);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .1);
+  padding: 6px 6px 2px;
+  margin-bottom: 20px;
+}
+.form-header-card .field-frame {
+  border: 0; box-shadow: none; background: transparent;
+  margin-bottom: 0; padding: 10px 10px;
+}
+.form-header-card .field-frame + .field-frame { border-top: 1px dashed var(--accent-300); }
+.form-header-card .track-toggle-row,
+.form-header-card .track-status { margin-inline: 10px; }
+
 /* ---------- observation form: compact datetime row + location row with pin icon ---------- */
 
 .field-datetime-compact .datetime-inline {
@@ -555,15 +582,6 @@ label.notif-toggle-row.track-toggle-row input[type="checkbox"]:checked { backgro
 
 .field-row.two-up { display: flex; gap: 8px; margin-bottom: 14px; }
 .field-row.two-up > * { flex: 1 1 50%; min-width: 0; }
-
-/* Recording button lives in the form header, next to the title — emphasized
- * (filled accent, larger) since it's a primary action, not a minor icon. */
-.form-head .voice-dictate-btn.emphasized {
-  background: var(--accent-700); border-color: var(--accent-700); color: #fff;
-  width: 40px; height: 40px; padding: 0; flex-shrink: 0;
-}
-.form-head .voice-dictate-btn.emphasized .icon { width: 20px; height: 20px; }
-.form-head .voice-dictate-btn.emphasized.recording { background: var(--danger); border-color: var(--danger); }
 
 input[type="text"], input[type="number"], input[type="datetime-local"],
 input[type="password"], textarea, select {
@@ -676,15 +694,30 @@ textarea { min-height: 130px; resize: vertical; white-space: pre-wrap; line-heig
 
 /* ---------- multi-species rows ---------- */
 
+/* Each species row sits inside a swipe-capable wrapper (right-swipe or
+ * long-press reveals a delete action at the leading edge) — the visible
+ * card itself is .sp-entry (also .sp-swipe-front), individually bordered so
+ * rows read as distinct items instead of one flat block. */
+.sp-swipe-wrap { position: relative; overflow: hidden; border-radius: 10px; margin-bottom: 10px; }
+.sp-swipe-wrap:last-child { margin-bottom: 0; }
+.sp-swipe-front { position: relative; z-index: 1; touch-action: pan-y; }
+.sp-swipe-delete {
+  position: absolute; top: 0; bottom: 0; left: 0; width: 84px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  border: 0; color: #fff; font-size: .74rem; font-weight: 600; cursor: pointer;
+  background: var(--danger); border-radius: 10px 0 0 10px;
+}
+
 .sp-entry {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin-bottom: 12px;
-  padding-bottom: 10px;
-  border-bottom: 1px dashed var(--line);
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .06);
 }
-.sp-entry:last-of-type { border-bottom: 0; }
 .sp-entry-main { display: flex; gap: 5px; align-items: center; }
 .sp-entry-main .sp-combo { flex: 1; min-width: 0; }
 
@@ -1142,7 +1175,6 @@ a.media-link-icon:hover { color: var(--accent-700); }
   padding: 2px 10px; font-size: .78rem; font-weight: 600; color: #fff;
   background: var(--tag-color); border: 0; cursor: pointer;
 }
-.tag-badge .icon { width: 13px; height: 13px; stroke: #fff; }
 .tag-badge-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .observer-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; color: var(--ink-soft); font-size: .85rem; }
 .obs-tile-badge { align-self: flex-start; font-size: .68rem; padding: 1px 8px; margin-top: 0; }
@@ -1554,6 +1586,11 @@ a.media-link-icon:hover { color: var(--accent-700); }
   font-size: 16px; line-height: 1;
 }
 .bird-marker-badge .icon { width: 15px; height: 15px; }
+.bird-marker-thumb {
+  width: 34px; height: 34px; border-radius: 50%; overflow: hidden;
+  border: 2px solid #fff; box-shadow: 0 2px 5px rgba(27, 67, 50, .35);
+}
+.bird-marker-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
 /* ---------- home screen ---------- */
 

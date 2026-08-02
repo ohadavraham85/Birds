@@ -2,20 +2,19 @@
  * observation is shown (journal cards/tiles, table rows, detail view).
  * Clicking a badge anywhere instantly filters the journal to that tag. */
 
-import { icon } from './icons';
 import { escapeHtml } from './markdown';
 import { getTagInfo } from './tags-cache';
 import { navigate } from '../main';
 
-/** One badge per tag name. A tag that no longer exists in the master list
- * (stale legacy value) still renders, with a neutral fallback color/icon,
- * so it doesn't just silently vanish from the observation. */
+/** One badge per tag name, plain colored text (no icon — see tag icon
+ * removal). A tag that no longer exists in the master list (stale legacy
+ * value) still renders, with a neutral fallback color, so it doesn't just
+ * silently vanish from the observation. */
 export function tagBadgesHtml(tags: string[], extraClass = ''): string {
   return tags.map((name) => {
     const info = getTagInfo(name);
     const color = info?.color || '#607d8b';
-    const iconName = info?.icon || 'tagGeneric';
-    return `<button type="button" class="tag-badge${extraClass ? ' ' + extraClass : ''}" data-tag-badge="${escapeHtml(name)}" style="--tag-color:${escapeHtml(color)}" title="סינון לפי תגית זו">${icon(iconName)}${escapeHtml(name)}</button>`;
+    return `<button type="button" class="tag-badge${extraClass ? ' ' + extraClass : ''}" data-tag-badge="${escapeHtml(name)}" style="--tag-color:${escapeHtml(color)}" title="סינון לפי תגית זו">${escapeHtml(name)}</button>`;
   }).join('');
 }
 

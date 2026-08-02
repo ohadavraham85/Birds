@@ -53,12 +53,24 @@ export const FONT_WEIGHTS = [
 ] as const;
 export type FontWeightId = (typeof FONT_WEIGHTS)[number]['id'];
 
+/** Layout width/density. 'auto' just lets the existing fluid CSS respond to
+ * the viewport (phone vs. desktop browser window); 'mobile'/'desktop' force
+ * one layout regardless of actual screen size, for someone who prefers a
+ * narrow single-column feel on a wide monitor or vice versa. */
+export const DISPLAY_MODES = [
+  { id: 'auto', label: 'אוטומטי (לפי המכשיר)' },
+  { id: 'mobile', label: 'נייד' },
+  { id: 'desktop', label: 'מחשב' },
+] as const;
+export type DisplayModeId = (typeof DISPLAY_MODES)[number]['id'];
+
 const KEYS = {
   theme: 'birds-theme',
   accent: 'birds-accent',
   fontColor: 'birds-font-color',
   fontSize: 'birds-font-size',
   fontWeight: 'birds-font-weight',
+  displayMode: 'birds-display-mode',
 } as const;
 
 function readId<T extends string>(key: string, valid: readonly { id: T }[], fallback: T): T {
@@ -81,6 +93,9 @@ export function currentFontSize(): FontSizeId {
 export function currentFontWeight(): FontWeightId {
   return readId(KEYS.fontWeight, FONT_WEIGHTS, 'regular');
 }
+export function currentDisplayMode(): DisplayModeId {
+  return readId(KEYS.displayMode, DISPLAY_MODES, 'auto');
+}
 
 function applyAll(): void {
   const root = document.documentElement;
@@ -89,6 +104,7 @@ function applyAll(): void {
   root.setAttribute('data-font-color', currentFontColor());
   root.setAttribute('data-font-size', currentFontSize());
   root.setAttribute('data-font-weight', currentFontWeight());
+  root.setAttribute('data-display-mode', currentDisplayMode());
 }
 
 export function setTheme(v: ThemeId): void { localStorage.setItem(KEYS.theme, v); applyAll(); }
@@ -96,6 +112,7 @@ export function setAccent(v: AccentId): void { localStorage.setItem(KEYS.accent,
 export function setFontColor(v: FontColorId): void { localStorage.setItem(KEYS.fontColor, v); applyAll(); }
 export function setFontSize(v: FontSizeId): void { localStorage.setItem(KEYS.fontSize, v); applyAll(); }
 export function setFontWeight(v: FontWeightId): void { localStorage.setItem(KEYS.fontWeight, v); applyAll(); }
+export function setDisplayMode(v: DisplayModeId): void { localStorage.setItem(KEYS.displayMode, v); applyAll(); }
 
 /** Call once at startup — idempotent with the inline head snippet in index.html. */
 export function initTheme(): void {

@@ -13,6 +13,7 @@ import { hydrateIcons, icon, type IconName } from './lib/icons';
 import { initFirebaseSyncFromSettings, onFirebaseSyncStatus, type FirebaseSyncStatus } from './firebase/firestore-sync';
 import { checkAndNotify } from './lib/notifications';
 import { refreshTagsCache } from './lib/tags-cache';
+import { haptic } from './lib/haptics';
 import { isPatternLockEnabled, renderLockScreen } from './lib/pattern-lock';
 import type { View, ViewParams } from './views/view';
 
@@ -188,6 +189,30 @@ function setupClock(): void {
   setInterval(tick, 1000);
 }
 
+/** Short haptic pulse on interactive taps app-wide — delegated at the
+ * document level (capture phase) so every button/checkbox/tag badge gets
+ * feedback for free, current and future, instead of threading a call
+ * through each view. Typing gets a lighter, throttled pulse so it doesn't
+ * turn into a buzz on every keystroke. */
+function setupHaptics(): void {
+  document.addEventListener('click', (e) => {
+    if ((e.target as HTMLElement).closest('button, .btn, [role="button"], .tab, .tag-badge')) haptic();
+  }, true);
+  document.addEventListener('change', (e) => {
+    const t = e.target as HTMLElement;
+    if (t.matches('input[type="checkbox"], input[type="radio"], select')) haptic();
+  }, true);
+  let lastTypingHaptic = 0;
+  document.addEventListener('input', (e) => {
+    const t = e.target as HTMLElement;
+    if (!t.matches('input[type="text"], input[type="number"], input[type="search"], input[type="url"], input[type="datetime-local"], textarea')) return;
+    const now = Date.now();
+    if (now - lastTypingHaptic < 150) return;
+    lastTypingHaptic = now;
+    haptic(4);
+  }, true);
+}
+
 function setupStatusIndicator(): void {
   const dot = qs(document.body, '#net-status');
   const pill = qs(document.body, '#sync-pill');
@@ -228,6 +253,7 @@ async function init(): Promise<void> {
   setupNav();
   setupStatusIndicator();
   setupClock();
+  setupHaptics();
 
   // register the Workbox service worker (auto-updates on new deploys)
   registerSW({ immediate: true });

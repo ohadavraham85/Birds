@@ -9,6 +9,7 @@
  * drives both. */
 
 import { icon } from './icons';
+import { haptic } from './haptics';
 
 const OPEN_PX = 84;
 const TAP_THRESHOLD = 8;
@@ -104,6 +105,7 @@ export function wrapSwipeActions(card: HTMLElement, handlers: SwipeActionHandler
     wrap.classList.toggle('swipe-open-edit', dx > 0);
     wrap.classList.toggle('swipe-open-delete', dx < 0);
     openWrapper = wrap;
+    haptic();
   };
   front.addEventListener('pointerup', endDrag);
   front.addEventListener('pointercancel', endDrag);
