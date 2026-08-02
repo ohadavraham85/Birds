@@ -372,6 +372,11 @@ async function pushObservationMedia(obs: Observation): Promise<void> {
     }
   }
   if (touched) {
+    // Without bumping updatedAt, other devices' last-write-wins merge check
+    // (local.updatedAt >= remote.updatedAt) silently rejects this re-push
+    // forever — the photo's new download URL would never actually reach
+    // them, even though the upload itself succeeded.
+    obs.updatedAt = new Date().toISOString();
     await withSuppressedPush(async () => {
       await putObservationRaw(obs);
       await pushDoc('observations', obs.id, obs);
