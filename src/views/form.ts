@@ -4,7 +4,7 @@
 
 import {
   saveObservation, getObservation, listObservations, listSpecies,
-  saveMedia, mediaForObservation, deleteMedia, listLocationRows, listTagRows, addTag, listObserverRows, addObserver, saveTrack, getTrack,
+  saveMedia, getMedia, mediaForObservation, deleteMedia, listLocationRows, listTagRows, addTag, listObserverRows, addObserver, saveTrack, getTrack,
 } from '../db/repository';
 import { toast, toLocalInputValue, fromLocalInputValue, safeHttpUrl, confirmDialog } from '../lib/ui';
 import { haptic } from '../lib/haptics';
@@ -51,6 +51,7 @@ let prefillDate: string | null = null;
 let prefillEntries: { species: string; quantity: number; note?: string }[] | null = null;
 let prefillTags: string[] | null = null;
 let prefillNotes: string | null = null;
+let prefillMediaId: string | null = null;
 let resumeDraftRequested = false;
 let draftInterval: ReturnType<typeof setInterval> | null = null;
 let draftSaveDebounce: ReturnType<typeof setTimeout> | null = null;
@@ -490,6 +491,7 @@ export function setParams(params: ViewParams): void {
   prefillEntries = params?.prefillEntries?.length ? params.prefillEntries : null;
   prefillTags = params?.prefillTags?.length ? params.prefillTags : null;
   prefillNotes = params?.prefillNotes || null;
+  prefillMediaId = params?.prefillMediaId || null;
   resumeDraftRequested = params?.resumeDraft || false;
 }
 
@@ -544,6 +546,7 @@ export async function activate(): Promise<void> {
     renderTagPicker();
   }
   if (prefillNotes) qs<HTMLTextAreaElement>(container, '#f-notes').value = prefillNotes;
+  if (prefillMediaId) await attachPrefillMedia(prefillMediaId);
   prefillSpecies = null;
   prefillCoords = null;
   prefillLocationName = null;
@@ -551,9 +554,25 @@ export async function activate(): Promise<void> {
   prefillEntries = null;
   prefillTags = null;
   prefillNotes = null;
+  prefillMediaId = null;
 
   if (resumeDraftRequested) resumeFromDraft();
   resumeDraftRequested = false;
+}
+
+/** Claims an "orphan" Gallery photo (not yet attached to any observation)
+ * for this brand-new draft and attaches it as the first species row's
+ * photo — used by the Gallery's "תצפית חדשה" action, the mirror of
+ * pickFromGallery() but starting from the photo side instead of the form. */
+async function attachPrefillMedia(mediaId: string): Promise<void> {
+  const media = await getMedia(mediaId);
+  if (!media || media.obsId) return; // gone, or already claimed elsewhere
+  await saveMedia({ ...media, obsId });
+  const row = container.querySelector<HTMLElement>('#species-rows .sp-entry');
+  if (!row) return;
+  rowImages.get(row)!.kept.push({ localId: media.id, name: media.name });
+  await renderRowThumbs(row);
+  scheduleDraftSave();
 }
 
 /** Creates the default "כללי" tag once per household, if it doesn't exist

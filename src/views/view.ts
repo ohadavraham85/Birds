@@ -36,6 +36,9 @@ export interface ViewParams {
   prefillTags?: string[];
   /** From the AI smart-voice flow: pre-fills the general notes field. */
   prefillNotes?: string;
+  /** From the Gallery's "תצפית חדשה" action on an unassociated photo: the
+   * media id to claim and attach as the first species row's photo. */
+  prefillMediaId?: string;
 }
 
 export interface View {
