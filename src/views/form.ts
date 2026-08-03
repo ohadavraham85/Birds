@@ -11,6 +11,7 @@ import { haptic } from '../lib/haptics';
 import { escapeHtml } from '../lib/markdown';
 import { getImageObjectUrl } from '../lib/media';
 import { pickFromGallery } from '../lib/photo-picker';
+import { resolvePhotoDate } from '../lib/exif';
 import { pickLocation } from '../lib/location-picker';
 import { wireCombo } from '../lib/combo';
 import { entriesOf, entryImages, speciesNames } from '../lib/observation';
@@ -1128,7 +1129,11 @@ async function onSave(e: Event): Promise<void> {
     const st = rowImages.get(row)!;
     const images: ObservationImage[] = [...st.kept];
     for (const p of st.pending) {
-      await saveMedia({ id: p.id, obsId, name: p.file.name || 'image', mime: p.file.type, blob: p.file });
+      const { date, source } = await resolvePhotoDate(p.file);
+      await saveMedia({
+        id: p.id, obsId, name: p.file.name || 'image', mime: p.file.type, blob: p.file,
+        takenAt: date.toISOString(), takenAtSource: source,
+      });
       images.push({ localId: p.id, name: p.file.name || 'image' });
     }
     images.forEach((i) => i.localId && keptIds.add(i.localId));

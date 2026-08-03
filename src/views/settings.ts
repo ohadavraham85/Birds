@@ -1527,7 +1527,10 @@ async function onPhotoImportConfirm(): Promise<void> {
     const obs = await getObservation(row.obsId!);
     if (!obs) continue;
     const mediaId = crypto.randomUUID();
-    await saveMedia({ id: mediaId, obsId: obs.id, name: row.file.name || 'image', mime: row.file.type, blob: row.file });
+    await saveMedia({
+      id: mediaId, obsId: obs.id, name: row.file.name || 'image', mime: row.file.type, blob: row.file,
+      takenAt: row.date.toISOString(), takenAtSource: row.dateSource,
+    });
     const entries = obs.entries?.length ? obs.entries : [{ species: '', quantity: 1 }];
     entries[0].images = [...(entries[0].images || []), { localId: mediaId, name: row.file.name || 'image' }];
     obs.entries = entries;

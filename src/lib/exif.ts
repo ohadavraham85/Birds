@@ -70,6 +70,15 @@ function parseTiff(view: DataView, tiffStart: number): Date | null {
   return null;
 }
 
+/** The photo's real capture date where knowable, with a marker of how
+ * confident that is — EXIF when the file has it, otherwise the file's own
+ * last-modified timestamp (much rougher: e.g. a WhatsApp re-save or a photo
+ * copied between devices changes this without the picture having changed). */
+export async function resolvePhotoDate(file: File): Promise<{ date: Date; source: 'exif' | 'file' }> {
+  const exifDate = await readExifDate(file);
+  return exifDate ? { date: exifDate, source: 'exif' } : { date: new Date(file.lastModified), source: 'file' };
+}
+
 export async function readExifDate(file: File): Promise<Date | null> {
   try {
     const buf = await file.slice(0, 131072).arrayBuffer();
