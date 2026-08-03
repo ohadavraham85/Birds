@@ -1459,7 +1459,6 @@ a.media-link-icon:hover { color: var(--accent-700); }
 .gallery-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
 .gallery-count { color: var(--ink-soft); font-size: .88rem; }
 .gallery-toolbar-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-#gallery-detail-btn.active, #gallery-select-btn.active { background: var(--accent-700); color: #fff; }
 .gallery-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px;
 }

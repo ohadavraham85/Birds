@@ -3,9 +3,9 @@
  * ישירות) בתצוגת רשת אחת, ללא צורך בייבוא/הגירה נפרד — כולן כבר יושבות
  * באותה טבלת media. לחיצה על תמונה פותחת דפדוף במסך מלא (עם החלקה בין
  * תמונות והגדלה בצביטת שתי אצבעות); תמונה שהועלתה ישירות כאן ("יתומה", ללא
- * תצפית) אפשר לשייך לתצפית קיימת מתוך מסך הצפייה. כפתור "פרטים" מציג את שם
- * המין מתחת לכל תמונה משויכת, וכפתור "בחירה" מאפשר לסמן כמה תמונות ולשייך
- * או למחוק אותן יחד. */
+ * תצפית) אפשר לשייך לתצפית קיימת מתוך מסך הצפייה. שם המין מוצג תמיד מתחת
+ * לכל תמונה משויכת, ולחיצה ארוכה על תמונה נכנסת לבחירה מרובה כדי לשייך או
+ * למחוק כמה תמונות יחד. */
 
 import { listAllMedia, deleteMediaAndUnlink, saveMedia, associateMediaWithObservation, listObservations, getObservation, findMediaByHash } from '../db/repository';
 import { getMediaObjectUrl, hashBlob } from '../lib/media';
@@ -26,15 +26,17 @@ function takenLabel(m: MediaRecord): string | null {
   return `צולמה ב-${fmtDateTime(m.takenAt)}${approx}`;
 }
 
+const LONG_PRESS_MS = 500;
+const LONG_PRESS_MOVE_TOLERANCE = 10;
+
 let container: HTMLElement;
 let items: MediaRecord[] = [];
 let lightboxIndex = -1;
 let closeLightbox: (() => void) | null = null;
 
-/** Whether tiles show a species/status caption below the thumbnail. */
-let showDetails = false;
-/** Multi-select mode: tap toggles selection instead of opening the lightbox,
- * and a bulk toolbar offers associating or deleting every selected photo at once. */
+/** Multi-select mode: entered by long-pressing a tile — tap then toggles
+ * selection instead of opening the lightbox, and a bulk toolbar offers
+ * associating or deleting every selected photo at once. */
 let selectionMode = false;
 let selectedIds = new Set<string>();
 
@@ -44,8 +46,6 @@ export function init(el: HTMLElement): void {
     <div class="gallery-toolbar">
       <span class="gallery-count" id="gallery-count"></span>
       <div class="gallery-toolbar-actions">
-        <button type="button" class="btn btn-icon" id="gallery-detail-btn" title="הצגת פרטים מתחת לתמונות" aria-label="הצגת פרטים מתחת לתמונות">${icon('list')}</button>
-        <button type="button" class="btn btn-icon" id="gallery-select-btn" title="בחירה מרובה" aria-label="בחירה מרובה">${icon('check')}</button>
         <button type="button" class="btn btn-primary" id="gallery-upload-btn">${icon('upload')} העלאת תמונות</button>
       </div>
       <input type="file" id="gallery-upload-input" accept="image/*" multiple hidden>
@@ -57,22 +57,12 @@ export function init(el: HTMLElement): void {
       <span class="spacer"></span>
       <button type="button" class="btn btn-sm" id="gallery-bulk-cancel">ביטול</button>
     </div>
-    <div class="gallery-grid" id="gallery-grid"></div>
+    <div class="gallery-grid gallery-grid-detail" id="gallery-grid"></div>
     <p class="gallery-empty" id="gallery-empty" hidden>אין עדיין תמונות. אפשר להעלות כאן, או להוסיף תמונות דרך טופס התצפית.</p>
   `;
   qs(container, '#gallery-upload-btn').addEventListener('click', () => qs(container, '#gallery-upload-input').click());
   qs<HTMLInputElement>(container, '#gallery-upload-input').addEventListener('change', (e) => void onUpload(e));
 
-  qs(container, '#gallery-detail-btn').addEventListener('click', () => {
-    showDetails = !showDetails;
-    renderGrid();
-  });
-
-  qs(container, '#gallery-select-btn').addEventListener('click', () => {
-    selectionMode = !selectionMode;
-    if (!selectionMode) selectedIds.clear();
-    renderGrid();
-  });
   qs(container, '#gallery-bulk-cancel').addEventListener('click', () => {
     selectionMode = false;
     selectedIds.clear();
@@ -120,11 +110,8 @@ function renderGrid(): void {
   const grid = qs(container, '#gallery-grid');
   qs(container, '#gallery-empty').hidden = items.length > 0;
   qs(container, '#gallery-count').textContent = items.length ? `${items.length} תמונות` : '';
-  qs(container, '#gallery-detail-btn').classList.toggle('active', showDetails);
-  qs(container, '#gallery-select-btn').classList.toggle('active', selectionMode);
   qs(container, '#gallery-bulk-toolbar').hidden = !selectionMode;
   qs(container, '#gallery-bulk-count').textContent = selectionMode ? `${selectedIds.size} נבחרו` : '';
-  grid.classList.toggle('gallery-grid-detail', showDetails);
   grid.innerHTML = '';
   items.forEach((m, i) => {
     // A plain <button> can't host the nested "i" info button (invalid HTML —
@@ -152,14 +139,43 @@ function renderGrid(): void {
     tile.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
     });
+    attachLongPress(tile, () => {
+      if (selectionMode) return;
+      selectionMode = true;
+      selectedIds.add(m.id);
+      renderGrid();
+    });
     tile.querySelector('.gallery-tile-info')!.addEventListener('click', (e) => {
       e.stopPropagation();
       showPhotoInfo(m);
     });
     grid.appendChild(tile);
     void getMediaObjectUrl(m).then((url) => { if (url) tile.querySelector('img')!.src = url; });
-    if (showDetails) void captionFor(m).then((text) => { tile.querySelector('.gallery-tile-caption')!.textContent = text; });
+    void captionFor(m).then((text) => { tile.querySelector('.gallery-tile-caption')!.textContent = text; });
   });
+}
+
+/** Fires `onLongPress` after a ~500ms hold that doesn't move much and isn't
+ * released early — same gesture/thresholds as the journal's long-press
+ * multi-select (cards.ts), so entering selection mode feels consistent
+ * across the app. */
+function attachLongPress(el: HTMLElement, onLongPress: () => void): void {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let startX = 0;
+  let startY = 0;
+  const clear = (): void => { if (timer) { clearTimeout(timer); timer = null; } };
+  el.addEventListener('pointerdown', (e: PointerEvent) => {
+    startX = e.clientX;
+    startY = e.clientY;
+    clear();
+    timer = setTimeout(() => { timer = null; onLongPress(); }, LONG_PRESS_MS);
+  });
+  el.addEventListener('pointermove', (e: PointerEvent) => {
+    if (!timer) return;
+    if (Math.abs(e.clientX - startX) > LONG_PRESS_MOVE_TOLERANCE || Math.abs(e.clientY - startY) > LONG_PRESS_MOVE_TOLERANCE) clear();
+  });
+  el.addEventListener('pointerup', clear);
+  el.addEventListener('pointercancel', clear);
 }
 
 /** Toggles one tile's selection without rebuilding the whole grid (which
