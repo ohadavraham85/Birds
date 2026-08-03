@@ -190,6 +190,10 @@ export interface MediaRecord {
    * file-modified-date fallback — shown alongside it so the user knows how
    * much to trust it. */
   takenAtSource?: 'exif' | 'file';
+  /** SHA-256 hex digest of the blob's bytes — used to detect a re-upload of
+   * a photo already in the Gallery before saving a duplicate row. Optional
+   * only because rows saved before this field existed don't have it. */
+  contentHash?: string;
 }
 
 /** A file kept in Settings ← קבצים: either a PDF report archived automatically

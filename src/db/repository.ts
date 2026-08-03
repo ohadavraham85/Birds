@@ -822,20 +822,29 @@ export async function deleteMediaAndUnlink(id: string): Promise<void> {
   if (changed) await saveObservation({ ...obs, entries, updatedAt: '' });
 }
 
-/** Attaches an already-saved ("orphan") gallery photo to an observation's
- * first species entry — the same slot the bulk photo-import flow uses — and
- * claims it (sets its `obsId`) so it stops showing as unassociated. A no-op
- * if the photo is already attached to this observation. */
-export async function associateMediaWithObservation(mediaId: string, obsId: string): Promise<void> {
+/** Attaches an already-saved ("orphan") gallery photo to one of an
+ * observation's species entries (`entryIndex`, defaulting to the first — the
+ * same slot the bulk photo-import flow uses) and claims it (sets its
+ * `obsId`) so it stops showing as unassociated. A no-op if the photo is
+ * already attached to this observation. */
+export async function associateMediaWithObservation(mediaId: string, obsId: string, entryIndex = 0): Promise<void> {
   const media = await db.media.get(mediaId);
   const obs = await getObservation(obsId);
-  const entry = obs && entriesOf(obs)[0];
+  const entries = obs ? entriesOf(obs) : [];
+  const entry = entries[entryIndex];
   if (!media || !entry) return;
   if (!media.obsId) await db.media.put({ ...media, obsId });
   const images = entry.images ?? [];
   if (images.some((i) => i.localId === mediaId)) return;
-  const entries = entriesOf(obs).map((e) => (e === entry ? { ...e, images: [...images, { localId: mediaId, name: media.name }] } : e));
-  await saveObservation({ ...obs, entries, updatedAt: '' });
+  const newEntries = entries.map((e, i) => (i === entryIndex ? { ...e, images: [...images, { localId: mediaId, name: media.name }] } : e));
+  await saveObservation({ ...obs!, entries: newEntries, updatedAt: '' });
+}
+
+/** Finds an already-saved media row with the exact same content hash, if
+ * any — used by the Gallery's upload button to skip saving a duplicate
+ * blob when the same photo is uploaded again. */
+export async function findMediaByHash(hash: string): Promise<MediaRecord | undefined> {
+  return db.media.where('contentHash').equals(hash).first();
 }
 
 /* ---------- settings ---------- */
