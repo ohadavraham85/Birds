@@ -30,7 +30,14 @@ const LONG_PRESS_MS = 500;
 const LONG_PRESS_MOVE_TOLERANCE = 10;
 
 let container: HTMLElement;
+/** Every photo ever loaded, before the with/without-observation filter. */
+let allItems: MediaRecord[] = [];
+/** The subset actually shown in the grid and browsable in the lightbox —
+ * `allItems` filtered by `assocFilter`. */
 let items: MediaRecord[] = [];
+/** Which photos to show: all, only ones attached to an observation, or only
+ * unassociated ("orphan") ones. */
+let assocFilter: 'all' | 'assoc' | 'orphan' = 'all';
 let lightboxIndex = -1;
 let closeLightbox: (() => void) | null = null;
 
@@ -50,6 +57,11 @@ export function init(el: HTMLElement): void {
       </div>
       <input type="file" id="gallery-upload-input" accept="image/*" multiple hidden>
     </div>
+    <div class="seg-toggle" id="gallery-assoc-filter">
+      <button type="button" class="seg-btn active" data-filter="all">הכל</button>
+      <button type="button" class="seg-btn" data-filter="assoc">עם תצפית</button>
+      <button type="button" class="seg-btn" data-filter="orphan">ללא תצפית</button>
+    </div>
     <div class="bulk-toolbar" id="gallery-bulk-toolbar" hidden>
       <span id="gallery-bulk-count"></span>
       <button type="button" class="btn btn-sm btn-primary" id="gallery-bulk-assoc">${icon('link')} שיוך לתצפית</button>
@@ -62,6 +74,17 @@ export function init(el: HTMLElement): void {
   `;
   qs(container, '#gallery-upload-btn').addEventListener('click', () => qs(container, '#gallery-upload-input').click());
   qs<HTMLInputElement>(container, '#gallery-upload-input').addEventListener('change', (e) => void onUpload(e));
+
+  qs(container, '#gallery-assoc-filter').addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('.seg-btn');
+    if (!btn) return;
+    assocFilter = btn.dataset.filter as 'all' | 'assoc' | 'orphan';
+    qs(container, '#gallery-assoc-filter').querySelectorAll('.seg-btn').forEach((el) => el.classList.toggle('active', el === btn));
+    selectionMode = false;
+    selectedIds.clear();
+    applyFilter();
+    renderGrid();
+  });
 
   qs(container, '#gallery-bulk-cancel').addEventListener('click', () => {
     selectionMode = false;
@@ -121,9 +144,18 @@ async function ensureHashBackfill(): Promise<void> {
 
 export async function activate(): Promise<void> {
   void ensureHashBackfill();
-  items = (await listAllMedia()).sort((a, b) => (b.addedAt || '').localeCompare(a.addedAt || ''));
+  allItems = (await listAllMedia()).sort((a, b) => (b.addedAt || '').localeCompare(a.addedAt || ''));
   await buildOwnerIndex();
+  applyFilter();
   renderGrid();
+}
+
+/** Recomputes `items` (the browsable/rendered subset) from `allItems` per
+ * the current with/without-observation filter. */
+function applyFilter(): void {
+  items = assocFilter === 'all' ? allItems
+    : assocFilter === 'assoc' ? allItems.filter((m) => !!m.obsId)
+    : allItems.filter((m) => !m.obsId);
 }
 
 /** localId -> the observation/species entry that references it, for every
@@ -159,7 +191,11 @@ function captionFor(m: MediaRecord): string {
 
 function renderGrid(): void {
   const grid = qs(container, '#gallery-grid');
-  qs(container, '#gallery-empty').hidden = items.length > 0;
+  const empty = qs(container, '#gallery-empty');
+  empty.hidden = items.length > 0;
+  empty.textContent = allItems.length === 0
+    ? 'אין עדיין תמונות. אפשר להעלות כאן, או להוסיף תמונות דרך טופס התצפית.'
+    : 'אין תמונות שתואמות את הסינון הנוכחי.';
   qs(container, '#gallery-count').textContent = items.length ? `${items.length} תמונות` : '';
   qs(container, '#gallery-bulk-toolbar').hidden = !selectionMode;
   qs(container, '#gallery-bulk-count').textContent = selectionMode ? `${selectedIds.size} נבחרו` : '';
