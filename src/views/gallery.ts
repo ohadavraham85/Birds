@@ -7,7 +7,7 @@
  * לכל תמונה משויכת, ולחיצה ארוכה על תמונה נכנסת לבחירה מרובה כדי לשייך או
  * למחוק כמה תמונות יחד. */
 
-import { listAllMedia, deleteMediaAndUnlink, saveMedia, associateMediaWithObservation, listObservations, getObservation, findMediaByHash, getSetting, setSetting } from '../db/repository';
+import { listAllMedia, deleteMediaAndUnlink, saveMedia, associateMediaWithObservation, listObservations, findMediaByHash, getSetting, setSetting } from '../db/repository';
 import { getMediaObjectUrl, hashBlob } from '../lib/media';
 import { resolvePhotoDate } from '../lib/exif';
 import { toast, confirmDialog, showModal, fmtDateTime } from '../lib/ui';
@@ -122,13 +122,38 @@ async function ensureHashBackfill(): Promise<void> {
 export async function activate(): Promise<void> {
   void ensureHashBackfill();
   items = (await listAllMedia()).sort((a, b) => (b.addedAt || '').localeCompare(a.addedAt || ''));
+  await buildOwnerIndex();
   renderGrid();
 }
 
-/** Caption shown under a tile in detail mode — the species it's attached to,
- * or its association status when it has none. */
-async function captionFor(m: MediaRecord): Promise<string> {
-  const owner = await ownerInfo(m);
+/** localId -> the observation/species entry that references it, for every
+ * image currently attached to a live observation. Built once per activation
+ * from a single listObservations() scan, instead of a separate getObservation()
+ * call per associated tile — with a real photo library (100+ items, mostly
+ * associated) that per-tile lookup was firing that many concurrent IndexedDB
+ * reads on every Gallery render, which is what made opening the tab feel
+ * stuck. A media row's `obsId` only ever points to a live observation —
+ * deleteObservation() always hard-deletes its media alongside it — so
+ * listObservations()'s already-filters-deleted result is equivalent to the
+ * old per-row getObservation() lookup for every real case. */
+let ownerIndex = new Map<string, { obs: Observation; species: string }>();
+
+async function buildOwnerIndex(): Promise<void> {
+  const index = new Map<string, { obs: Observation; species: string }>();
+  for (const obs of await listObservations()) {
+    for (const entry of entriesOf(obs)) {
+      for (const img of entry.images ?? []) {
+        if (img.localId) index.set(img.localId, { obs, species: entry.species });
+      }
+    }
+  }
+  ownerIndex = index;
+}
+
+/** Caption shown under a tile — the species it's attached to, or its
+ * association status when it has none. */
+function captionFor(m: MediaRecord): string {
+  const owner = ownerInfo(m);
   return owner ? (owner.species || speciesLabel(owner.obs) || 'תצפית') : 'לא משויכת';
 }
 
@@ -177,7 +202,7 @@ function renderGrid(): void {
     });
     grid.appendChild(tile);
     void getMediaObjectUrl(m).then((url) => { if (url) tile.querySelector('img')!.src = url; });
-    void captionFor(m).then((text) => { tile.querySelector('.gallery-tile-caption')!.textContent = text; });
+    tile.querySelector('.gallery-tile-caption')!.textContent = captionFor(m);
   });
 }
 
@@ -216,14 +241,11 @@ function toggleSelect(id: string, tile: HTMLElement): void {
 }
 
 /** The observation (if any) a photo is attached to, and the species name of
- * the specific entry that holds it — found by scanning entries for the
- * localId, since a MediaRecord only stores which observation, not which row. */
-async function ownerInfo(m: MediaRecord): Promise<{ obs: Observation; species: string } | null> {
+ * the specific entry that holds it — looked up from the batch-built
+ * ownerIndex (see buildOwnerIndex) rather than a per-call DB query. */
+function ownerInfo(m: MediaRecord): { obs: Observation; species: string } | null {
   if (!m.obsId) return null;
-  const obs = await getObservation(m.obsId);
-  if (!obs) return null;
-  const entry = entriesOf(obs).find((e) => e.images?.some((i) => i.localId === m.id));
-  return { obs, species: entry?.species || '' };
+  return ownerIndex.get(m.id) || null;
 }
 
 function openLightbox(index: number): void {
@@ -270,7 +292,7 @@ function openLightbox(index: number): void {
 
     const info = box.querySelector<HTMLElement>('.gallery-lb-info')!;
     const taken = takenLabel(m);
-    const owner = await ownerInfo(m);
+    const owner = ownerInfo(m);
     if (owner) {
       info.innerHTML = `
         <div class="gallery-lb-meta">
