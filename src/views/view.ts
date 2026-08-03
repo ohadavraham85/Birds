@@ -14,7 +14,8 @@ export interface ViewParams {
   filterLocation?: string;
   /** Clicking a tag badge anywhere jumps here, filtering to that one tag. */
   filterTag?: string;
-  /** Drill-down from the stats tab: opens the calendar in year view for this year. */
+  /** Drill-down from the stats tab: opens the journal's embedded calendar
+   * view (see views/cards.ts) in year view, for this year. */
   year?: number;
   /** Drill-down from the home screen's stats tiles: pre-applies a date-range
    * filter (YYYY-MM-DD, inclusive) matching whichever range is currently

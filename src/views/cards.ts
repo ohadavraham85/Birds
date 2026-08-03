@@ -18,6 +18,7 @@ import { icon } from '../lib/icons';
 import { viewModeToggleHtml, wireViewModeToggle, syncViewModeToggle, type ViewDisplayMode } from '../lib/view-mode';
 import { qs, input, select } from '../lib/dom';
 import { navigate } from '../main';
+import * as calendarPanel from './calendar';
 import type { Observation } from '../types';
 import type { ViewParams } from './view';
 
@@ -46,28 +47,38 @@ let filterTo = '';
  * offer, now that the table is no longer directly reachable from the menu. */
 let selectionMode = false;
 let selectedIds = new Set<string>();
+/** Calendar-as-display-mode: folded into the journal (instead of its own tab)
+ * to keep the tab bar from getting crowded — toggled independently of
+ * `displayMode` since it replaces the whole toolbar/feed with calendar.ts's
+ * own UI rather than just changing how the observation list renders. */
+let calendarMode = false;
+let calendarMounted = false;
+let pendingCalendarYear: number | undefined;
 
 export function init(el: HTMLElement): void {
   container = el;
   container.innerHTML = `
     <h2>יומן תצפית</h2>
     <div class="filter-bar">
-      <input type="search" id="j-q" class="filter-search" placeholder="חיפוש (מין, מיקום, תגית, הערות)...">
-      <select id="j-group" class="filter-sel">
-        <option value="none">ללא קיבוץ</option>
-        <option value="day">קיבוץ לפי יום</option>
-        <option value="month">קיבוץ לפי חודש</option>
-        <option value="location">קיבוץ לפי מיקום</option>
-        <option value="tag">קיבוץ לפי תגית</option>
-      </select>
-      <button type="button" class="btn btn-icon j-filter-btn" id="j-filter-btn" title="סינון מתקדם" aria-label="סינון מתקדם">
-        ${icon('filter')}<span class="filter-badge" id="j-filter-badge" hidden></span>
-      </button>
-      <button type="button" class="btn btn-icon j-starred-btn" id="j-starred-btn" title="הצגת מועדפים בלבד" aria-label="הצגת מועדפים בלבד">${icon('star')}</button>
-      <button type="button" class="btn btn-icon" id="j-sort-btn" title="היפוך סדר כרונולוגי" aria-label="היפוך סדר כרונולוגי">${icon('sortArrows')}</button>
-      <button type="button" class="btn btn-icon" id="j-expand-all" title="פתיחת כל הקבוצות" aria-label="פתיחת כל הקבוצות">${icon('chevronsDown')}</button>
-      <button type="button" class="btn btn-icon" id="j-collapse-all" title="סגירת כל הקבוצות" aria-label="סגירת כל הקבוצות">${icon('chevronsUp')}</button>
-      ${viewModeToggleHtml('j-view-mode', { includeTable: true })}
+      <div class="filter-bar-list-controls" id="j-list-controls">
+        <input type="search" id="j-q" class="filter-search" placeholder="חיפוש (מין, מיקום, תגית, הערות)...">
+        <select id="j-group" class="filter-sel">
+          <option value="none">ללא קיבוץ</option>
+          <option value="day">קיבוץ לפי יום</option>
+          <option value="month">קיבוץ לפי חודש</option>
+          <option value="location">קיבוץ לפי מיקום</option>
+          <option value="tag">קיבוץ לפי תגית</option>
+        </select>
+        <button type="button" class="btn btn-icon j-filter-btn" id="j-filter-btn" title="סינון מתקדם" aria-label="סינון מתקדם">
+          ${icon('filter')}<span class="filter-badge" id="j-filter-badge" hidden></span>
+        </button>
+        <button type="button" class="btn btn-icon j-starred-btn" id="j-starred-btn" title="הצגת מועדפים בלבד" aria-label="הצגת מועדפים בלבד">${icon('star')}</button>
+        <button type="button" class="btn btn-icon" id="j-sort-btn" title="היפוך סדר כרונולוגי" aria-label="היפוך סדר כרונולוגי">${icon('sortArrows')}</button>
+        <button type="button" class="btn btn-icon" id="j-expand-all" title="פתיחת כל הקבוצות" aria-label="פתיחת כל הקבוצות">${icon('chevronsDown')}</button>
+        <button type="button" class="btn btn-icon" id="j-collapse-all" title="סגירת כל הקבוצות" aria-label="סגירת כל הקבוצות">${icon('chevronsUp')}</button>
+        ${viewModeToggleHtml('j-view-mode', { includeTable: true })}
+      </div>
+      <button type="button" class="btn btn-icon" id="j-calendar-toggle" title="תצוגת לוח שנה" aria-label="תצוגת לוח שנה">${icon('calendar')}</button>
     </div>
     <div class="bulk-toolbar" id="j-bulk-toolbar" hidden>
       <span id="j-bulk-count"></span>
@@ -83,8 +94,10 @@ export function init(el: HTMLElement): void {
       <button type="button" class="btn btn-sm" id="j-bulk-cancel">ביטול</button>
     </div>
     <div id="cards-feed-wrap"></div>
+    <div id="j-calendar-panel" hidden></div>
   `;
   wireViewModeToggle(container, 'j-view-mode', (mode) => { displayMode = mode; render(); });
+  qs(container, '#j-calendar-toggle').addEventListener('click', () => { calendarMode = !calendarMode; render(); });
   input(container, '#j-q').addEventListener('input', (e) => { query = (e.target as HTMLInputElement).value; render(); });
   select(container, '#j-group').addEventListener('change', (e) => {
     groupBy = (e.target as HTMLSelectElement).value as GroupMode;
@@ -141,6 +154,10 @@ async function onBulkEditSelected(): Promise<void> {
 /** Drill-down from the stats tab / home screen: pre-applies exactly one of a
  * single-value filter, a date range, or a grouping mode, clearing the rest. */
 export function setParams(params: ViewParams): void {
+  if (params.year != null) {
+    calendarMode = true;
+    pendingCalendarYear = params.year;
+  }
   if (params.filterSpecies || params.filterLocation || params.filterTag) {
     selectedSpecies = params.filterSpecies ? new Set([params.filterSpecies]) : new Set();
     selectedLocations = params.filterLocation ? new Set([params.filterLocation]) : new Set();
@@ -308,6 +325,22 @@ function groupsOf(list: Observation[]): Map<string, { label: string; items: Obse
 }
 
 function render(): void {
+  qs(container, '#j-calendar-toggle').classList.toggle('active', calendarMode);
+  qs(container, '#j-list-controls').hidden = calendarMode;
+  qs(container, '#cards-feed-wrap').hidden = calendarMode;
+  const calendarPanelEl = qs(container, '#j-calendar-panel');
+  calendarPanelEl.hidden = !calendarMode;
+  if (calendarMode) {
+    qs(container, '#j-bulk-toolbar').hidden = true;
+    if (!calendarMounted) { calendarPanel.init(calendarPanelEl); calendarMounted = true; }
+    if (pendingCalendarYear != null) {
+      calendarPanel.setParams({ year: pendingCalendarYear });
+      pendingCalendarYear = undefined;
+    }
+    void calendarPanel.activate();
+    return;
+  }
+
   input(container, '#j-q').value = query;
   select(container, '#j-group').value = groupBy;
   const filterCount = selectedTags.size + selectedLocations.size + selectedSpecies.size;

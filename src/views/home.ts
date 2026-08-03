@@ -768,7 +768,7 @@ function onClick(e: Event): void {
   if (kind === 'species') navigate('cards', { filterSpecies: value });
   else if (kind === 'location') navigate('cards', { filterLocation: value });
   else if (kind === 'tag') navigate('cards', { filterTag: value });
-  else if (kind === 'year') navigate('calendar', { year: Number(value) });
+  else if (kind === 'year') navigate('cards', { year: Number(value) });
   else if (kind === 'family') navigate('species');
 }
 
