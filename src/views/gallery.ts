@@ -7,7 +7,7 @@
  * לכל תמונה משויכת, ולחיצה ארוכה על תמונה נכנסת לבחירה מרובה כדי לשייך או
  * למחוק כמה תמונות יחד. */
 
-import { listAllMedia, deleteMediaAndUnlink, saveMedia, associateMediaWithObservation, listObservations, getObservation, findMediaByHash } from '../db/repository';
+import { listAllMedia, deleteMediaAndUnlink, saveMedia, associateMediaWithObservation, listObservations, getObservation, findMediaByHash, getSetting, setSetting } from '../db/repository';
 import { getMediaObjectUrl, hashBlob } from '../lib/media';
 import { resolvePhotoDate } from '../lib/exif';
 import { toast, confirmDialog, showModal, fmtDateTime } from '../lib/ui';
@@ -77,6 +77,7 @@ async function onUpload(e: Event): Promise<void> {
   const files = input.files ? Array.from(input.files) : [];
   input.value = '';
   if (!files.length) return;
+  await ensureHashBackfill();
   let added = 0;
   let skipped = 0;
   for (const file of files) {
@@ -94,7 +95,32 @@ async function onUpload(e: Event): Promise<void> {
   await activate();
 }
 
+let hashBackfillDone = false;
+
+/** One-time (per device) backfill: hashes any photo already sitting in the
+ * media table without a `contentHash` — either uploaded before the
+ * duplicate-check existed, or added through a path that never computes one
+ * (form.ts, settings.ts's bulk import) — so the upload button's duplicate
+ * check has something to compare against for photos that predate it, not
+ * just ones uploaded after this fix shipped. Guarded by a persisted setting
+ * so it only ever runs once per device, not on every Gallery visit. */
+async function ensureHashBackfill(): Promise<void> {
+  if (hashBackfillDone) return;
+  if (await getSetting<boolean>('galleryHashBackfillDone', false)) { hashBackfillDone = true; return; }
+  for (const m of await listAllMedia()) {
+    if (m.contentHash || !m.blob) continue;
+    try {
+      await saveMedia({ ...m, contentHash: await hashBlob(m.blob) });
+    } catch {
+      /* unreadable blob — leave it without a hash rather than fail the whole backfill */
+    }
+  }
+  await setSetting('galleryHashBackfillDone', true);
+  hashBackfillDone = true;
+}
+
 export async function activate(): Promise<void> {
+  void ensureHashBackfill();
   items = (await listAllMedia()).sort((a, b) => (b.addedAt || '').localeCompare(a.addedAt || ''));
   renderGrid();
 }
