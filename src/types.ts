@@ -180,6 +180,16 @@ export interface MediaRecord {
    * first. Optional only because rows saved before this field existed don't
    * have it (they sort to the end, treated as oldest). */
   addedAt?: string;
+  /** When the photo was actually taken, ISO — read from EXIF where
+   * available, falling back to the source file's last-modified date.
+   * Distinct from `addedAt` (when the blob entered this app), and shown in
+   * the Gallery precisely so the original capture date — the thing that
+   * actually decides which observation a photo belongs to — isn't lost. */
+  takenAt?: string;
+  /** Whether `takenAt` came from real EXIF metadata or the much rougher
+   * file-modified-date fallback — shown alongside it so the user knows how
+   * much to trust it. */
+  takenAtSource?: 'exif' | 'file';
 }
 
 /** A file kept in Settings ← קבצים: either a PDF report archived automatically

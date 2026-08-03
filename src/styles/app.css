@@ -1463,8 +1463,16 @@ a.media-link-icon:hover { color: var(--accent-700); }
 .gallery-tile-badge {
   position: absolute; top: 5px; left: 5px; width: 22px; height: 22px; border-radius: 50%;
   background: rgba(0,0,0,.55); color: #fff; display: flex; align-items: center; justify-content: center;
+  pointer-events: none;
 }
 .gallery-tile-badge .icon { width: 13px; height: 13px; }
+.gallery-tile-info {
+  position: absolute; bottom: 5px; right: 5px; width: 24px; height: 24px; border-radius: 50%;
+  background: rgba(0,0,0,.55); color: #fff; border: 0; display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+.gallery-tile-info .icon { width: 14px; height: 14px; }
+.gallery-tile-info:hover { background: rgba(0,0,0,.75); }
 .gallery-empty { color: var(--ink-soft); text-align: center; margin-top: 40px; }
 
 .gallery-lightbox-backdrop {
@@ -1496,7 +1504,23 @@ a.media-link-icon:hover { color: var(--accent-700); }
 .gallery-lb-meta { margin-bottom: 10px; display: flex; flex-direction: column; gap: 2px; }
 .gallery-lb-meta strong { font-size: 1.05rem; }
 .gallery-lb-meta span { color: rgba(255,255,255,.7); font-size: .85rem; }
+.gallery-lb-taken {
+  display: flex; align-items: center; justify-content: center; gap: 4px;
+  color: rgba(255,255,255,.85) !important; margin-top: 4px;
+}
+.gallery-lb-taken .icon { width: 13px; height: 13px; flex-shrink: 0; }
 .gallery-lb-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+
+.gallery-assoc-taken {
+  display: flex; align-items: flex-start; gap: 6px; margin: 8px 0 0;
+  font-size: .85rem; color: var(--ink-soft); background: var(--accent-50);
+  border-radius: 8px; padding: 8px 10px;
+}
+.gallery-assoc-taken .icon { width: 15px; height: 15px; flex-shrink: 0; margin-top: 1px; }
+
+.photo-info-list { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 12px 0 0; }
+.photo-info-list dt { color: var(--ink-soft); font-size: .85rem; }
+.photo-info-list dd { margin: 0; font-weight: 600; }
 
 .photo-picker-modal .photo-picker-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px; margin: 12px 0;

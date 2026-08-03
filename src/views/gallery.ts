@@ -7,6 +7,7 @@
 
 import { listAllMedia, deleteMediaAndUnlink, saveMedia, associateMediaWithObservation, listObservations, getObservation } from '../db/repository';
 import { getMediaObjectUrl } from '../lib/media';
+import { resolvePhotoDate } from '../lib/exif';
 import { toast, confirmDialog, showModal, fmtDateTime } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
 import { speciesLabel, entriesOf } from '../lib/observation';
@@ -14,6 +15,14 @@ import { icon } from '../lib/icons';
 import { qs } from '../lib/dom';
 import { navigate } from '../main';
 import type { MediaRecord, Observation } from '../types';
+
+/** "צולם ב-..." line, or null if the photo has no known capture date at all
+ * (e.g. a very old row saved before this field existed). */
+function takenLabel(m: MediaRecord): string | null {
+  if (!m.takenAt) return null;
+  const approx = m.takenAtSource === 'file' ? ' (משוער לפי תאריך הקובץ)' : '';
+  return `צולמה ב-${fmtDateTime(m.takenAt)}${approx}`;
+}
 
 let container: HTMLElement;
 let items: MediaRecord[] = [];
@@ -41,7 +50,11 @@ async function onUpload(e: Event): Promise<void> {
   input.value = '';
   if (!files.length) return;
   for (const file of files) {
-    await saveMedia({ id: crypto.randomUUID(), obsId: '', name: file.name || 'image', mime: file.type, blob: file });
+    const { date, source } = await resolvePhotoDate(file);
+    await saveMedia({
+      id: crypto.randomUUID(), obsId: '', name: file.name || 'image', mime: file.type, blob: file,
+      takenAt: date.toISOString(), takenAtSource: source,
+    });
   }
   toast(`הועלו ${files.length} תמונות לגלריה`);
   await activate();
@@ -58,12 +71,27 @@ function renderGrid(): void {
   qs(container, '#gallery-count').textContent = items.length ? `${items.length} תמונות` : '';
   grid.innerHTML = '';
   items.forEach((m, i) => {
-    const tile = document.createElement('button');
-    tile.type = 'button';
+    // A plain <button> can't host the nested "i" info button (invalid HTML —
+    // the parser would auto-close it), so the tile itself is a div acting as
+    // a button, with the real info button nested inside it.
+    const tile = document.createElement('div');
     tile.className = 'gallery-tile';
+    tile.setAttribute('role', 'button');
+    tile.tabIndex = 0;
     tile.setAttribute('aria-label', m.name || 'תמונה');
-    tile.innerHTML = `<img alt="">${m.obsId ? `<span class="gallery-tile-badge" title="משויכת לתצפית">${icon('link')}</span>` : ''}`;
+    tile.innerHTML = `
+      <img alt="">
+      ${m.obsId ? `<span class="gallery-tile-badge" title="משויכת לתצפית">${icon('link')}</span>` : ''}
+      <button type="button" class="gallery-tile-info" title="מידע מקורי" aria-label="מידע מקורי על התמונה">${icon('info')}</button>
+    `;
     tile.addEventListener('click', () => openLightbox(i));
+    tile.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openLightbox(i); }
+    });
+    tile.querySelector('.gallery-tile-info')!.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showPhotoInfo(m);
+    });
     grid.appendChild(tile);
     void getMediaObjectUrl(m).then((url) => { if (url) tile.querySelector('img')!.src = url; });
   });
@@ -117,12 +145,14 @@ function openLightbox(index: number): void {
     void getMediaObjectUrl(m).then((url) => { if (url) img.src = url; });
 
     const info = box.querySelector<HTMLElement>('.gallery-lb-info')!;
+    const taken = takenLabel(m);
     const owner = await ownerInfo(m);
     if (owner) {
       info.innerHTML = `
         <div class="gallery-lb-meta">
           <strong>${escapeHtml(owner.species || speciesLabel(owner.obs) || 'תצפית')}</strong>
           <span>${escapeHtml(owner.obs.locationName || 'ללא מיקום')} · ${fmtDateTime(owner.obs.dateTime)}</span>
+          ${taken ? `<span class="gallery-lb-taken">${icon('info')} ${escapeHtml(taken)}</span>` : ''}
         </div>
         <div class="gallery-lb-actions">
           <button type="button" class="btn btn-sm gallery-lb-open">${icon('openOut')} פתיחת התצפית</button>
@@ -132,7 +162,10 @@ function openLightbox(index: number): void {
       info.querySelector('.gallery-lb-open')!.addEventListener('click', () => { close(); navigate('detail', { viewId: owner.obs.id }); });
     } else {
       info.innerHTML = `
-        <div class="gallery-lb-meta"><span>לא משויכת לתצפית</span></div>
+        <div class="gallery-lb-meta">
+          <span>לא משויכת לתצפית</span>
+          ${taken ? `<span class="gallery-lb-taken">${icon('info')} ${escapeHtml(taken)}</span>` : ''}
+        </div>
         <div class="gallery-lb-actions">
           <button type="button" class="btn btn-sm btn-primary gallery-lb-assoc">${icon('link')} שיוך לתצפית</button>
           <button type="button" class="btn btn-sm btn-danger gallery-lb-delete">${icon('trash')} מחיקה</button>
@@ -150,6 +183,23 @@ function openLightbox(index: number): void {
   void render();
 }
 
+/** Small read-only panel for the tile's "i" marker — the photo's preserved
+ * original metadata (capture date + source filename), reachable without
+ * leaving the grid or opening the full-screen lightbox. */
+function showPhotoInfo(m: MediaRecord): void {
+  const taken = takenLabel(m);
+  const wrap = document.createElement('div');
+  wrap.className = 'photo-info-modal';
+  wrap.innerHTML = `
+    <h3>מידע מקורי על התמונה</h3>
+    <dl class="photo-info-list">
+      <dt>תאריך צילום</dt><dd>${escapeHtml(taken ? taken.replace(/^צולמה ב-/, '') : 'לא ידוע')}</dd>
+      <dt>שם קובץ מקורי</dt><dd>${escapeHtml(m.name || 'לא ידוע')}</dd>
+    </dl>
+  `;
+  showModal(wrap);
+}
+
 async function onDelete(m: MediaRecord): Promise<void> {
   const ok = await confirmDialog('למחוק את התמונה לצמיתות?', 'מחיקה');
   if (!ok) return;
@@ -160,10 +210,20 @@ async function onDelete(m: MediaRecord): Promise<void> {
 
 async function onAssociate(m: MediaRecord): Promise<void> {
   const obsList = await listObservations();
+  // When the photo's capture date is known, lead with whichever observations
+  // happened closest to it — that's the whole point of keeping takenAt: it
+  // tells the user (and this list) which date the photo actually belongs to,
+  // instead of just offering the same newest-first order every time.
+  const takenMs = m.takenAt ? new Date(m.takenAt).getTime() : null;
+  if (takenMs != null) {
+    obsList.sort((a, b) => Math.abs(new Date(a.dateTime).getTime() - takenMs) - Math.abs(new Date(b.dateTime).getTime() - takenMs));
+  }
+  const taken = takenLabel(m);
   const wrap = document.createElement('div');
   wrap.className = 'gallery-assoc-modal';
   wrap.innerHTML = `
     <h3>שיוך תמונה לתצפית</h3>
+    ${taken ? `<p class="gallery-assoc-taken">${icon('info')} ${escapeHtml(taken)} — התצפיות הקרובות ביותר לתאריך זה מופיעות ראשונות</p>` : ''}
     <input type="search" class="gallery-assoc-search" placeholder="חיפוש לפי מין / מיקום...">
     <div class="gallery-assoc-list"></div>
   `;
