@@ -292,6 +292,7 @@ function openLightbox(index: number): void {
         </div>
         <div class="gallery-lb-actions">
           <button type="button" class="btn btn-sm btn-primary gallery-lb-assoc">${icon('link')} שיוך לתצפית</button>
+          <button type="button" class="btn btn-sm gallery-lb-new">${icon('plus')} תצפית חדשה</button>
           <button type="button" class="btn btn-sm btn-danger gallery-lb-delete">${icon('trash')} מחיקה</button>
         </div>
       `;
@@ -303,6 +304,10 @@ function openLightbox(index: number): void {
       info.querySelector('.gallery-lb-assoc')!.addEventListener('click', () => {
         close();
         openObservationPicker('שיוך תמונה לתצפית', taken, (obsId, entryIndex) => void doAssociateOne(m, obsId, entryIndex), m.takenAt);
+      });
+      info.querySelector('.gallery-lb-new')!.addEventListener('click', () => {
+        close();
+        navigate('form', { prefillMediaId: m.id });
       });
     }
     info.querySelector('.gallery-lb-delete')!.addEventListener('click', () => { close(); void onDelete(m); });
