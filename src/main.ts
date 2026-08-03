@@ -27,9 +27,11 @@ import * as cardsView from './views/cards';
 import * as detailView from './views/detail';
 import * as speciesView from './views/species';
 import * as galleryView from './views/gallery';
-import * as calendarView from './views/calendar';
 import * as settingsView from './views/settings';
 
+// Calendar is no longer a standalone routable view — it's folded into the
+// journal (views/cards.ts) as a display mode, which imports it directly, so
+// it isn't registered here at all.
 const VIEWS: Record<string, View> = {
   home: homeView,
   form: formView,
@@ -39,12 +41,11 @@ const VIEWS: Record<string, View> = {
   detail: detailView,
   species: speciesView,
   gallery: galleryView,
-  calendar: calendarView,
   settings: settingsView,
 };
 
 /** Views reachable from the bottom tab bar (order matters). */
-const TAB_VIEWS = ['home', 'cards', 'calendar', 'map', 'species', 'gallery'];
+const TAB_VIEWS = ['home', 'cards', 'map', 'species', 'gallery'];
 
 /** The universal "root" screen: default landing view, and where the generic
  * top-bar back button and other screens' explicit back actions return to. */
