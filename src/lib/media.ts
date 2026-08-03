@@ -5,6 +5,13 @@
 import { getMedia, saveMedia } from '../db/repository';
 import type { ObservationImage, MediaRecord } from '../types';
 
+/** SHA-256 hex digest of a blob's bytes — used to detect re-uploading a
+ * photo that's already saved (same content, regardless of file name). */
+export async function hashBlob(blob: Blob): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer());
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 export async function getImageObjectUrl(img: ObservationImage, obsId = ''): Promise<string | null> {
   if (img?.localId) {
     const m = await getMedia(img.localId);

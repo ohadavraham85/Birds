@@ -7,8 +7,8 @@
  * המין מתחת לכל תמונה משויכת, וכפתור "בחירה" מאפשר לסמן כמה תמונות ולשייך
  * או למחוק אותן יחד. */
 
-import { listAllMedia, deleteMediaAndUnlink, saveMedia, associateMediaWithObservation, listObservations, getObservation } from '../db/repository';
-import { getMediaObjectUrl } from '../lib/media';
+import { listAllMedia, deleteMediaAndUnlink, saveMedia, associateMediaWithObservation, listObservations, getObservation, findMediaByHash } from '../db/repository';
+import { getMediaObjectUrl, hashBlob } from '../lib/media';
 import { resolvePhotoDate } from '../lib/exif';
 import { toast, confirmDialog, showModal, fmtDateTime } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
@@ -16,7 +16,7 @@ import { speciesLabel, entriesOf } from '../lib/observation';
 import { icon } from '../lib/icons';
 import { qs } from '../lib/dom';
 import { navigate } from '../main';
-import type { MediaRecord, Observation } from '../types';
+import type { MediaRecord, Observation, SpeciesEntry } from '../types';
 
 /** "צולם ב-..." line, or null if the photo has no known capture date at all
  * (e.g. a very old row saved before this field existed). */
@@ -87,14 +87,20 @@ async function onUpload(e: Event): Promise<void> {
   const files = input.files ? Array.from(input.files) : [];
   input.value = '';
   if (!files.length) return;
+  let added = 0;
+  let skipped = 0;
   for (const file of files) {
+    const contentHash = await hashBlob(file);
+    if (await findMediaByHash(contentHash)) { skipped++; continue; }
     const { date, source } = await resolvePhotoDate(file);
     await saveMedia({
       id: crypto.randomUUID(), obsId: '', name: file.name || 'image', mime: file.type, blob: file,
-      takenAt: date.toISOString(), takenAtSource: source,
+      takenAt: date.toISOString(), takenAtSource: source, contentHash,
     });
+    added++;
   }
-  toast(`הועלו ${files.length} תמונות לגלריה`);
+  if (skipped) toast(added ? `הועלו ${added} תמונות, ${skipped} דולגו (כבר קיימות בגלריה)` : `${skipped} תמונות דולגו — כבר קיימות בגלריה`);
+  else toast(`הועלו ${added} תמונות לגלריה`);
   await activate();
 }
 
@@ -254,7 +260,7 @@ function openLightbox(index: number): void {
       // dialog rendered but unreachable behind it.
       info.querySelector('.gallery-lb-assoc')!.addEventListener('click', () => {
         close();
-        openObservationPicker('שיוך תמונה לתצפית', taken, (obsId) => void doAssociateOne(m, obsId), m.takenAt);
+        openObservationPicker('שיוך תמונה לתצפית', taken, (obsId, entryIndex) => void doAssociateOne(m, obsId, entryIndex), m.takenAt);
       });
     }
     info.querySelector('.gallery-lb-delete')!.addEventListener('click', () => { close(); void onDelete(m); });
@@ -301,17 +307,17 @@ async function onBulkDelete(): Promise<void> {
 async function onBulkAssociate(): Promise<void> {
   if (!selectedIds.size) return;
   const ids = [...selectedIds];
-  openObservationPicker(`שיוך ${ids.length} תמונות לתצפית`, null, (obsId) => void doAssociateMany(ids, obsId));
+  openObservationPicker(`שיוך ${ids.length} תמונות לתצפית`, null, (obsId, entryIndex) => void doAssociateMany(ids, obsId, entryIndex));
 }
 
-async function doAssociateOne(m: MediaRecord, obsId: string): Promise<void> {
-  await associateMediaWithObservation(m.id, obsId);
+async function doAssociateOne(m: MediaRecord, obsId: string, entryIndex: number): Promise<void> {
+  await associateMediaWithObservation(m.id, obsId, entryIndex);
   toast('התמונה שויכה לתצפית');
   await activate();
 }
 
-async function doAssociateMany(ids: string[], obsId: string): Promise<void> {
-  for (const id of ids) await associateMediaWithObservation(id, obsId);
+async function doAssociateMany(ids: string[], obsId: string, entryIndex: number): Promise<void> {
+  for (const id of ids) await associateMediaWithObservation(id, obsId, entryIndex);
   selectionMode = false;
   selectedIds.clear();
   toast(`${ids.length} תמונות שויכו לתצפית`);
@@ -322,8 +328,14 @@ async function doAssociateMany(ids: string[], obsId: string): Promise<void> {
  * bulk association flows. When `nearDate` is given (a single photo's own
  * capture date), leads with whichever observations happened closest to it —
  * skipped for the bulk flow, where several selected photos may have
- * unrelated capture dates and no single "nearest" ordering would make sense. */
-function openObservationPicker(title: string, hint: string | null, onPick: (obsId: string) => void, nearDate?: string): void {
+ * unrelated capture dates and no single "nearest" ordering would make sense.
+ *
+ * `onPick` receives both the chosen observation's id and which of its
+ * species entries to attach to. When the observation has only one entry
+ * that's picked automatically; with more than one, a second step (rendered
+ * into the same modal element, not a nested modal — see the z-index note in
+ * the lightbox's own assoc-button handler) asks which species to use. */
+function openObservationPicker(title: string, hint: string | null, onPick: (obsId: string, entryIndex: number) => void, nearDate?: string): void {
   void (async () => {
     const obsList = await listObservations();
     if (nearDate) {
@@ -332,31 +344,60 @@ function openObservationPicker(title: string, hint: string | null, onPick: (obsI
     }
     const wrap = document.createElement('div');
     wrap.className = 'gallery-assoc-modal';
-    wrap.innerHTML = `
-      <h3>${escapeHtml(title)}</h3>
-      ${hint ? `<p class="gallery-assoc-taken">${icon('info')} ${escapeHtml(hint)}${nearDate ? ' — התצפיות הקרובות ביותר לתאריך זה מופיעות ראשונות' : ''}</p>` : ''}
-      <input type="search" class="gallery-assoc-search" placeholder="חיפוש לפי מין / מיקום...">
-      <div class="gallery-assoc-list"></div>
-    `;
     const closeModal = showModal(wrap);
-    const list = qs(wrap, '.gallery-assoc-list');
 
-    const renderList = (filter: string): void => {
-      const f = filter.trim().toLowerCase();
-      const filtered = (f ? obsList.filter((o) => (speciesLabel(o) + ' ' + o.locationName).toLowerCase().includes(f)) : obsList).slice(0, 60);
-      list.innerHTML = '';
-      if (!filtered.length) { list.innerHTML = '<p class="map-sheet-empty">לא נמצאו תצפיות</p>'; return; }
-      for (const o of filtered) {
+    const renderObsStep = (): void => {
+      wrap.innerHTML = `
+        <h3>${escapeHtml(title)}</h3>
+        ${hint ? `<p class="gallery-assoc-taken">${icon('info')} ${escapeHtml(hint)}${nearDate ? ' — התצפיות הקרובות ביותר לתאריך זה מופיעות ראשונות' : ''}</p>` : ''}
+        <input type="search" class="gallery-assoc-search" placeholder="חיפוש לפי מין / מיקום...">
+        <div class="gallery-assoc-list"></div>
+      `;
+      const list = qs(wrap, '.gallery-assoc-list');
+      const renderList = (filter: string): void => {
+        const f = filter.trim().toLowerCase();
+        const filtered = (f ? obsList.filter((o) => (speciesLabel(o) + ' ' + o.locationName).toLowerCase().includes(f)) : obsList).slice(0, 60);
+        list.innerHTML = '';
+        if (!filtered.length) { list.innerHTML = '<p class="map-sheet-empty">לא נמצאו תצפיות</p>'; return; }
+        for (const o of filtered) {
+          const item = document.createElement('button');
+          item.type = 'button';
+          item.className = 'map-sheet-item';
+          item.innerHTML = `<span class="map-sheet-item-species">${escapeHtml(speciesLabel(o) || 'ללא מין')}</span><span class="map-sheet-item-date">${fmtDateTime(o.dateTime)}</span>`;
+          item.addEventListener('click', () => pickObservation(o));
+          list.appendChild(item);
+        }
+      };
+      renderList('');
+      qs<HTMLInputElement>(wrap, '.gallery-assoc-search').addEventListener('input', (e) => renderList((e.target as HTMLInputElement).value));
+    };
+
+    const pickObservation = (o: Observation): void => {
+      const entries = entriesOf(o);
+      if (entries.length <= 1) { closeModal(); onPick(o.id, 0); return; }
+      renderSpeciesStep(o, entries);
+    };
+
+    const renderSpeciesStep = (o: Observation, entries: SpeciesEntry[]): void => {
+      wrap.innerHTML = `
+        <h3>לאיזה מין לשייך?</h3>
+        <p class="gallery-assoc-taken">${escapeHtml(speciesLabel(o) ? `${o.locationName || 'ללא מיקום'} · ${fmtDateTime(o.dateTime)}` : '')}</p>
+        <div class="gallery-assoc-list"></div>
+        <button type="button" class="btn btn-sm gallery-assoc-back">${icon('chevronRight')} חזרה</button>
+      `;
+      const list = qs(wrap, '.gallery-assoc-list');
+      entries.forEach((entry, entryIndex) => {
         const item = document.createElement('button');
         item.type = 'button';
         item.className = 'map-sheet-item';
-        item.innerHTML = `<span class="map-sheet-item-species">${escapeHtml(speciesLabel(o) || 'ללא מין')}</span><span class="map-sheet-item-date">${fmtDateTime(o.dateTime)}</span>`;
-        item.addEventListener('click', () => { closeModal(); onPick(o.id); });
+        item.innerHTML = `<span class="map-sheet-item-species">${escapeHtml(entry.quantity > 1 ? `${entry.species} × ${entry.quantity}` : entry.species || 'ללא מין')}</span>`;
+        item.addEventListener('click', () => { closeModal(); onPick(o.id, entryIndex); });
         list.appendChild(item);
-      }
+      });
+      qs(wrap, '.gallery-assoc-back').addEventListener('click', renderObsStep);
     };
-    renderList('');
-    qs<HTMLInputElement>(wrap, '.gallery-assoc-search').addEventListener('input', (e) => renderList((e.target as HTMLInputElement).value));
+
+    renderObsStep();
   })();
 }
 

@@ -124,6 +124,15 @@ export class BirdsDatabase extends Dexie {
       observations: 'id, dateTime, updatedAt, synced, deleted, seqNo',
       observers: 'name, updatedAt',
     });
+    // v11: index media by contentHash, so the Gallery's upload button can
+    // detect (and skip) re-uploading a photo already saved.
+    this.version(11).stores({
+      ...stores, locations: 'name, updatedAt', projects: 'name, updatedAt', tracks: 'id, updatedAt',
+      files: 'id, kind, createdAt', tags: 'name, updatedAt',
+      observations: 'id, dateTime, updatedAt, synced, deleted, seqNo',
+      observers: 'name, updatedAt',
+      media: 'id, obsId, contentHash',
+    });
   }
 }
 
