@@ -38,7 +38,7 @@ function emitChange(): void {
  * "something changed, re-render"). Sync backends that need to know exactly
  * which record changed (e.g. the Firebase sync engine) subscribe here
  * instead of re-scanning the whole database on every change. */
-export type MutationEntity = 'observation' | 'species' | 'location' | 'project' | 'file' | 'tag' | 'observer' | 'track';
+export type MutationEntity = 'observation' | 'species' | 'location' | 'project' | 'file' | 'tag' | 'observer' | 'track' | 'media';
 export type MutationOp = 'upsert' | 'delete';
 type MutationListener = (entity: MutationEntity, id: string, op: MutationOp, payload: unknown) => void;
 const mutationListeners = new Set<MutationListener>();
@@ -781,6 +781,11 @@ export async function mergeProjectNames(variants: string[], canonical: string): 
 export async function saveMedia(media: MediaRecord): Promise<MediaRecord> {
   const rec = media.addedAt ? media : { ...media, addedAt: now() };
   await db.media.put(rec);
+  // A photo already tied to an observation is synced as part of that
+  // observation's own save (pushObservationMedia) — only a "orphan" Gallery
+  // upload (not yet attached to anything) needs its own mutation, since
+  // nothing else would otherwise ever tell Firebase it exists.
+  if (!rec.obsId) emitMutation('media', rec.id, 'upsert', rec);
   return rec;
 }
 export function getMedia(id: string): Promise<MediaRecord | undefined> {
@@ -810,6 +815,7 @@ export function listAllMedia(): Promise<MediaRecord[]> {
 export async function deleteMediaAndUnlink(id: string): Promise<void> {
   const media = await db.media.get(id);
   await db.media.delete(id);
+  if (media && !media.obsId) emitMutation('media', id, 'delete', { ...media, deleted: true });
   if (!media?.obsId) return;
   const obs = await getObservation(media.obsId);
   if (!obs) return;

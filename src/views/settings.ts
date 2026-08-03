@@ -13,7 +13,7 @@ import {
   listFiles, saveFile, getFile, deleteFile,
 } from '../db/repository';
 import type { DuplicateGroup } from '../db/repository';
-import { getFirebaseSyncCode, configureFirebaseSync, onFirebaseSyncStatus, isFirebaseSyncActive, forceResyncListsFromCloud, retryMediaUploads, type FirebaseSyncStatus } from '../firebase/firestore-sync';
+import { getFirebaseSyncCode, configureFirebaseSync, onFirebaseSyncStatus, isFirebaseSyncActive, forceResyncListsFromCloud, retryMediaUploads, pullAllObservationMedia, type FirebaseSyncStatus } from '../firebase/firestore-sync';
 import {
   notificationsSupported, permissionState, requestPermission,
   isEnabled, setEnabled, isMigrationEnabled, setMigrationEnabled, isOnThisDayEnabled, setOnThisDayEnabled,
@@ -282,6 +282,13 @@ function syncHtml(fbCode: string): string {
             אוטומטי — הכפתור הזה מנסה שוב להעלות את כל התמונות והקבצים המקומיים.
           </p>
           <button class="btn btn-sm" id="s-fb-retry-media">${icon('upload')} ניסיון חוזר להעלאת תמונות וקבצים</button>
+          <p style="font-size:.85rem;color:var(--ink-soft);margin:12px 0 0">
+            הורדת תמונה למכשיר קורית באופן אוטומטי רק כשפותחים ממש את התצפית
+            שהיא שייכת אליה — אם תמונות שהועלו במכשיר אחר לא מופיעות כאן
+            בגלריה, הכפתור הזה מוריד מהענן למכשיר הזה את כל התמונות שעדיין
+            חסרות לו.
+          </p>
+          <button class="btn btn-sm" id="s-fb-pull-media">${icon('download')} הורדת כל התמונות מהענן</button>
         </div>` : ''}
     </div>
 
@@ -318,6 +325,7 @@ function wireSync(): void {
   input(container, '#s-csv-import').addEventListener('change', (e) => void onImportCsv(e));
   container.querySelector('#s-fb-resync')?.addEventListener('click', () => void onForceResync());
   container.querySelector('#s-fb-retry-media')?.addEventListener('click', () => void onRetryMediaUploads());
+  container.querySelector('#s-fb-pull-media')?.addEventListener('click', () => void onPullAllMedia());
 
   unsubStatus = onFirebaseSyncStatus((s) => {
     const el = container.querySelector<HTMLElement>('#s-fb-status');
@@ -1272,11 +1280,27 @@ async function onRetryMediaUploads(): Promise<void> {
   btn.disabled = true;
   try {
     const n = await retryMediaUploads();
-    toast(`הניסיון החוזר הושלם (${n.observations} תצפיות, ${n.files} קבצים, ${n.tracks} מסלולים נבדקו)`);
+    toast(`הניסיון החוזר הושלם (${n.observations} תצפיות, ${n.files} קבצים, ${n.tracks} מסלולים, ${n.gallery} תמונות גלריה נבדקו)`);
   } catch (err) {
     toast('הניסיון החוזר נכשל: ' + (err as Error).message, true, 6000);
   } finally {
     btn.disabled = false;
+  }
+}
+
+async function onPullAllMedia(): Promise<void> {
+  const btn = qs<HTMLButtonElement>(container, '#s-fb-pull-media');
+  btn.disabled = true;
+  const original = btn.innerHTML;
+  btn.innerHTML = 'מוריד תמונות...';
+  try {
+    const n = await pullAllObservationMedia();
+    toast(n.downloaded ? `הורדו ${n.downloaded} תמונות מ-${n.observations} תצפיות` : 'כל התמונות כבר קיימות במכשיר זה');
+  } catch (err) {
+    toast('ההורדה נכשלה: ' + (err as Error).message, true, 6000);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = original;
   }
 }
 

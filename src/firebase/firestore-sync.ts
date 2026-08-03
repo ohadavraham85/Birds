@@ -21,10 +21,10 @@ import {
   listObserverRows, putObserverRaw, getObserverRaw,
   listFilesRaw, putFileRaw, getFile,
   listTracksRaw, putTrackRaw, getTrack,
-  getMedia,
+  getMedia, listAllMedia, saveMedia, deleteMediaAndUnlink,
   type MutationEntity, type MutationOp,
 } from '../db/repository';
-import type { Observation, SpeciesRow, LocationRow, ProjectRow, TagRow, ObserverRow, StoredFile, ObservationTrack } from '../types';
+import type { Observation, SpeciesRow, LocationRow, ProjectRow, TagRow, ObserverRow, StoredFile, ObservationTrack, MediaRecord } from '../types';
 
 const COLLECTION_BY_ENTITY: Record<MutationEntity, string> = {
   observation: 'observations',
@@ -35,6 +35,7 @@ const COLLECTION_BY_ENTITY: Record<MutationEntity, string> = {
   tag: 'tags',
   observer: 'observers',
   track: 'tracks',
+  media: 'media',
 };
 
 /** The `files` Firestore collection only ever holds this shape — the blob
@@ -46,6 +47,24 @@ interface StoredFileMeta {
   kind: StoredFile['kind'];
   mime: string;
   createdAt: string;
+  updatedAt: string;
+  deleted: boolean;
+}
+
+/** The `media` Firestore collection holds metadata only for "orphan" Gallery
+ * photos — ones uploaded straight into the Gallery tab and not (yet) tied to
+ * any observation. A photo already attached to an observation is synced as
+ * part of that observation's own document instead (see pushObservationMedia);
+ * this separate collection exists purely so a standalone upload has
+ * somewhere to announce itself, since nothing else references its id. */
+interface MediaMeta {
+  id: string;
+  name: string;
+  mime: string;
+  addedAt?: string;
+  takenAt?: string;
+  takenAtSource?: 'exif' | 'file';
+  contentHash?: string;
   updatedAt: string;
   deleted: boolean;
 }
@@ -109,12 +128,13 @@ let pendingFiles = false;
 let pendingTags = false;
 let pendingObservers = false;
 let pendingTracks = false;
+let pendingMedia = false;
 
 /** Recomputes the derived state from the last-known pending-writes flags and
  * live connectivity — called whenever either changes. */
 function recomputeStatus(): void {
   if (!activeCode) { setStatus({ state: 'disabled', pending: false }); return; }
-  const pending = pendingObs || pendingSpecies || pendingLocations || pendingProjects || pendingFiles || pendingTags || pendingObservers || pendingTracks;
+  const pending = pendingObs || pendingSpecies || pendingLocations || pendingProjects || pendingFiles || pendingTags || pendingObservers || pendingTracks || pendingMedia;
   if (!navigator.onLine) { setStatus({ state: 'offline', pending }); return; }
   setStatus({ state: pending ? 'syncing' : 'idle', pending, lastSync: pending ? status.lastSync : new Date().toISOString() });
 }
@@ -195,7 +215,7 @@ export async function forceResyncListsFromCloud(): Promise<{ species: number; lo
  * saved before then never got a chance to upload and won't retry on their
  * own. Safe to call any time: already-uploaded photos are skipped (matched
  * by remoteId); files have no such flag, so they're simply re-pushed. */
-export async function retryMediaUploads(): Promise<{ observations: number; files: number; tracks: number }> {
+export async function retryMediaUploads(): Promise<{ observations: number; files: number; tracks: number; gallery: number }> {
   if (!activeCode) throw new Error('סנכרון Firebase אינו מופעל');
   let observations = 0;
   for (const o of await listObservationsRaw()) {
@@ -211,7 +231,50 @@ export async function retryMediaUploads(): Promise<{ observations: number; files
     if (t.deleted) continue;
     try { await pushTrack(t); tracks++; } catch (err) { console.warn('Firebase: track retry skipped', t.id, err); }
   }
-  return { observations, files, tracks };
+  let gallery = 0;
+  for (const m of await listAllMedia()) {
+    if (m.obsId || m.remoteId) continue;
+    try { await pushMedia(m); gallery++; } catch (err) { console.warn('Firebase: gallery photo retry skipped', m.id, err); }
+  }
+  return { observations, files, tracks, gallery };
+}
+
+/** Downloads every observation photo that's referenced by a remote download
+ * URL (`ObservationImage.remoteId`) but has no local blob yet — the normal
+ * gap on any device that never happened to open the specific observation a
+ * photo belongs to, since photo downloads are otherwise lazy (only fetched
+ * the moment something tries to display that exact image). Lets a device
+ * catch its local Gallery up with everything the household has, on demand,
+ * without silently downloading a whole photo library on every sync. */
+export async function pullAllObservationMedia(): Promise<{ downloaded: number; observations: number }> {
+  if (!activeCode) throw new Error('סנכרון Firebase אינו מופעל');
+  let downloaded = 0;
+  let observations = 0;
+  for (const o of await listObservationsRaw()) {
+    if (o.deleted || !Array.isArray(o.entries)) continue;
+    let touched = false;
+    for (const entry of o.entries) {
+      if (!Array.isArray(entry.images)) continue;
+      for (const img of entry.images) {
+        const remoteId = img.remoteId;
+        if (!img.localId || !remoteId || !/^https?:\/\//.test(remoteId)) continue;
+        const existing = await getMedia(img.localId);
+        if (existing?.blob) continue;
+        try {
+          const blob = await (await fetch(remoteId)).blob();
+          await withSuppressedPush(() => saveMedia({
+            id: img.localId, obsId: o.id, name: img.name || '', mime: blob.type, blob, remoteId,
+          }));
+          downloaded++;
+          touched = true;
+        } catch (err) {
+          console.warn('Firebase: could not download photo', img.localId, err);
+        }
+      }
+    }
+    if (touched) observations++;
+  }
+  return { downloaded, observations };
 }
 
 export function stopFirebaseSync(): void {
@@ -220,7 +283,7 @@ export function stopFirebaseSync(): void {
   stopMutationListener?.();
   stopMutationListener = null;
   activeCode = null;
-  pendingObs = pendingSpecies = pendingLocations = pendingProjects = pendingFiles = pendingTags = pendingObservers = pendingTracks = false;
+  pendingObs = pendingSpecies = pendingLocations = pendingProjects = pendingFiles = pendingTags = pendingObservers = pendingTracks = pendingMedia = false;
   setStatus({ state: 'disabled', pending: false, message: undefined });
 }
 
@@ -270,6 +333,10 @@ async function startFirebaseSync(code: string): Promise<void> {
         }
         for (const t of await listTracksRaw()) {
           try { await pushTrack(t); } catch (err) { console.warn('Firebase: track sync skipped', err); }
+        }
+        for (const m of await listAllMedia()) {
+          if (m.obsId) continue; // covered by pushObservationMedia above
+          try { await pushMedia(m); } catch (err) { console.warn('Firebase: gallery photo sync skipped', err); }
         }
       });
       await setSetting(seedFlagKey, true);
@@ -345,6 +412,14 @@ async function startFirebaseSync(code: string): Promise<void> {
     });
     recomputeStatus();
   }, onSnapError));
+  unsubs.push(onSnapshot(collection(db, 'households', code, 'media'), { includeMetadataChanges: true }, (snap: QuerySnapshot<DocumentData>) => {
+    pendingMedia = snap.metadata.hasPendingWrites;
+    snap.docChanges().forEach((change) => {
+      if (change.type === 'removed') return;
+      void mergeRemoteMedia(change.doc.data() as MediaMeta);
+    });
+    recomputeStatus();
+  }, onSnapError));
 
   stopMutationListener = onMutation((entity, id, op, payload) => {
     if (suppressDepth > 0 || !activeCode) return;
@@ -360,6 +435,10 @@ async function handleLocalMutation(entity: MutationEntity, id: string, _op: Muta
     }
     if (entity === 'track') {
       await pushTrack(payload as ObservationTrack);
+      return;
+    }
+    if (entity === 'media') {
+      await pushMedia(payload as MediaRecord & { deleted?: boolean });
       return;
     }
     await pushDoc(COLLECTION_BY_ENTITY[entity], id, payload);
@@ -459,6 +538,63 @@ async function mergeRemoteObserver(remote: ObserverRow): Promise<void> {
   const local = await getObserverRaw(remote.name);
   if (local && new Date(local.updatedAt) >= new Date(remote.updatedAt)) return;
   await withSuppressedPush(() => putObserverRaw(remote));
+}
+
+/** Uploads an "orphan" Gallery photo's blob to Storage and pushes its
+ * metadata to Firestore's `media` collection, so a photo uploaded straight
+ * into the Gallery (not yet attached to any observation) actually reaches
+ * other devices — previously this only happened once a photo was linked to
+ * an observation. A photo that's already attached is skipped (`media.obsId`
+ * set) since it's synced as part of that observation's own document instead. */
+async function pushMedia(media: MediaRecord & { deleted?: boolean }): Promise<void> {
+  if (!activeCode || media.obsId) return;
+  if (!media.deleted && media.remoteId) return; // already uploaded
+  const meta: MediaMeta = {
+    id: media.id, name: media.name, mime: media.mime,
+    addedAt: media.addedAt, takenAt: media.takenAt, takenAtSource: media.takenAtSource,
+    contentHash: media.contentHash, updatedAt: new Date().toISOString(), deleted: !!media.deleted,
+  };
+  if (!media.deleted) {
+    if (!media.blob) return;
+    try {
+      const path = `households/${activeCode}/media/${media.id}`;
+      await uploadBytes(ref(firebaseStorage(), path), media.blob, { contentType: media.mime || 'application/octet-stream' });
+      const url = await getDownloadURL(ref(firebaseStorage(), path));
+      await withSuppressedPush(() => saveMedia({ ...media, remoteId: url }));
+    } catch (err) {
+      // Storage not enabled yet, offline, etc. — leave this photo for a
+      // later retry rather than pushing metadata pointing at a blob other
+      // devices can't actually fetch yet.
+      console.warn('Firebase: could not upload gallery photo', media.id, err);
+      return;
+    }
+  }
+  await pushDoc('media', media.id, meta);
+}
+
+async function mergeRemoteMedia(remote: MediaMeta): Promise<void> {
+  const local = await getMedia(remote.id);
+  if (remote.deleted) {
+    // Only remove it if this device still has it as an orphan too — if it's
+    // since been attached to an observation here, that association (and any
+    // future deletion of it) is this device's own business from now on.
+    if (local && !local.obsId) await withSuppressedPush(() => deleteMediaAndUnlink(remote.id));
+    return;
+  }
+  if (local || !activeCode) return; // already have it locally (orphan or since associated)
+  try {
+    const path = `households/${activeCode}/media/${remote.id}`;
+    const bytes = await getBytes(ref(firebaseStorage(), path));
+    const blob = new Blob([bytes], { type: remote.mime || 'application/octet-stream' });
+    await withSuppressedPush(() => saveMedia({
+      id: remote.id, obsId: '', name: remote.name, mime: remote.mime, blob,
+      addedAt: remote.addedAt, takenAt: remote.takenAt, takenAtSource: remote.takenAtSource, contentHash: remote.contentHash,
+    }));
+  } catch (err) {
+    // Blob not uploaded yet (metadata can arrive slightly ahead of the
+    // Storage write) or offline — will retry on the next remote update.
+    console.warn('Firebase: could not download gallery photo', remote.id, err);
+  }
 }
 
 /** Uploads a StoredFile's blob to Storage (same as observation photos) and
