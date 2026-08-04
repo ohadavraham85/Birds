@@ -6,7 +6,7 @@
  * ולחיצה על כל נתון שמפנה ליומן/ללוח השנה המסונן. חוזרים למסך הזה תמיד
  * באותו מצב סינון/גרפים וגלילה שהיו כשיצאת ממנו (למשל אחרי לחיצה על גרף). */
 
-import { listObservations, listSpeciesRows } from '../db/repository';
+import { listObservations, listSpeciesRows, listAllMedia } from '../db/repository';
 import { SPECIES_DETAILS } from '../data/species-data';
 import { speciesNames, speciesLabel, entriesOf, entryImages } from '../lib/observation';
 import { getImageObjectUrl } from '../lib/media';
@@ -36,6 +36,10 @@ function colorFor(i: number): string {
 let container: HTMLElement;
 let allObservations: Observation[] = [];
 let speciesMasterList: string[] = [];
+/** Gallery photos tagged with a species directly (no observation link) —
+ * first one per species, used as a fallback photo when a species has no
+ * observation photo yet. */
+let orphanPhotoBySpecies: Record<string, ObservationImage> = {};
 
 const chartMode: Record<BreakdownKind, ChartMode> = { species: 'pie', location: 'bar', tag: 'bar' };
 let yearMode: 'bar' | 'line' = 'bar';
@@ -57,6 +61,11 @@ export function init(el: HTMLElement): void {
 export async function activate(): Promise<void> {
   allObservations = await listObservations();
   speciesMasterList = (await listSpeciesRows()).map((r) => r.name);
+  orphanPhotoBySpecies = {};
+  for (const m of await listAllMedia()) {
+    if (m.obsId || !m.species || orphanPhotoBySpecies[m.species]) continue;
+    orphanPhotoBySpecies[m.species] = { localId: m.id, name: m.name, remoteId: m.remoteId };
+  }
   render();
 }
 
@@ -80,6 +89,8 @@ function firstPhotoForSpecies(name: string): { img: ObservationImage; obsId: str
       if (imgs.length) return { img: imgs[0]!, obsId: o.id };
     }
   }
+  const orphan = orphanPhotoBySpecies[name];
+  if (orphan) return { img: orphan, obsId: '' };
   return null;
 }
 
