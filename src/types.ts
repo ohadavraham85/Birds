@@ -194,6 +194,16 @@ export interface MediaRecord {
    * a photo already in the Gallery before saving a duplicate row. Optional
    * only because rows saved before this field existed don't have it. */
   contentHash?: string;
+  /** A species name tagged directly onto this photo from the Gallery —
+   * independent of `obsId`/any observation link, so a photo can be labeled
+   * by species even when it isn't (or isn't yet) attached to a logged
+   * observation. Must be a name from the species master list. */
+  species?: string;
+  /** Last local modification, ISO — used for last-write-wins merging of
+   * "orphan" (unassociated) photos synced via the `media` Firestore
+   * collection. Associated photos don't need this; their sync merge is
+   * driven by the owning Observation's own `updatedAt` instead. */
+  updatedAt?: string;
 }
 
 /** A file kept in Settings ← קבצים: either a PDF report archived automatically
