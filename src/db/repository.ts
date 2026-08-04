@@ -779,7 +779,12 @@ export async function mergeProjectNames(variants: string[], canonical: string): 
 /* ---------- media ---------- */
 
 export async function saveMedia(media: MediaRecord): Promise<MediaRecord> {
-  const rec = media.addedAt ? media : { ...media, addedAt: now() };
+  let rec = media.addedAt ? media : { ...media, addedAt: now() };
+  // Only stamped when the caller didn't already provide one — a remote sync
+  // merge passes the origin device's own updatedAt through unchanged so
+  // last-write-wins comparisons stay meaningful; a genuine local edit (new
+  // upload, species tag, etc.) has none yet and gets a fresh timestamp here.
+  rec = rec.updatedAt ? rec : { ...rec, updatedAt: now() };
   await db.media.put(rec);
   // A photo already tied to an observation is synced as part of that
   // observation's own save (pushObservationMedia) — only a "orphan" Gallery
@@ -815,7 +820,7 @@ export function listAllMedia(): Promise<MediaRecord[]> {
 export async function deleteMediaAndUnlink(id: string): Promise<void> {
   const media = await db.media.get(id);
   await db.media.delete(id);
-  if (media && !media.obsId) emitMutation('media', id, 'delete', { ...media, deleted: true });
+  if (media && !media.obsId) emitMutation('media', id, 'delete', { ...media, deleted: true, updatedAt: now() });
   if (!media?.obsId) return;
   const obs = await getObservation(media.obsId);
   if (!obs) return;

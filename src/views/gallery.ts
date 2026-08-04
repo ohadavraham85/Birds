@@ -7,7 +7,7 @@
  * לכל תמונה משויכת, ולחיצה ארוכה על תמונה נכנסת לבחירה מרובה כדי לשייך או
  * למחוק כמה תמונות יחד. */
 
-import { listAllMedia, deleteMediaAndUnlink, saveMedia, associateMediaWithObservation, listObservations, findMediaByHash, getSetting, setSetting } from '../db/repository';
+import { listAllMedia, deleteMediaAndUnlink, saveMedia, associateMediaWithObservation, listObservations, listSpecies, findMediaByHash, getSetting, setSetting } from '../db/repository';
 import { getMediaObjectUrl, hashBlob } from '../lib/media';
 import { resolvePhotoDate } from '../lib/exif';
 import { toast, confirmDialog, showModal, fmtDateTime } from '../lib/ui';
@@ -182,11 +182,15 @@ async function buildOwnerIndex(): Promise<void> {
   ownerIndex = index;
 }
 
-/** Caption shown under a tile — the species it's attached to, or its
- * association status when it has none. */
+/** Caption shown under a tile — the species it's attached to via an
+ * observation, its own directly-tagged species (see `species` on
+ * MediaRecord — set independently of any observation link, from the
+ * lightbox's "שיוך למין" action), or its association status when it has
+ * neither. */
 function captionFor(m: MediaRecord): string {
   const owner = ownerInfo(m);
-  return owner ? (owner.species || speciesLabel(owner.obs) || 'תצפית') : 'לא משויכת';
+  if (owner) return owner.species || speciesLabel(owner.obs) || 'תצפית';
+  return m.species || 'לא משויכת';
 }
 
 function renderGrid(): void {
@@ -345,11 +349,13 @@ function openLightbox(index: number): void {
     } else {
       info.innerHTML = `
         <div class="gallery-lb-meta">
-          <span>לא משויכת לתצפית</span>
+          <span>${m.species ? `${icon('bird')} ${escapeHtml(m.species)}` : 'לא משויכת לתצפית'}</span>
+          ${m.species ? '<span>לא משויכת לתצפית</span>' : ''}
           ${taken ? `<span class="gallery-lb-taken">${icon('info')} ${escapeHtml(taken)}</span>` : ''}
         </div>
         <div class="gallery-lb-actions">
           <button type="button" class="btn btn-sm btn-primary gallery-lb-assoc">${icon('link')} שיוך לתצפית</button>
+          <button type="button" class="btn btn-sm gallery-lb-species">${icon('bird')} ${m.species ? 'שינוי מין' : 'שיוך למין'}</button>
           <button type="button" class="btn btn-sm gallery-lb-new">${icon('plus')} תצפית חדשה</button>
           <button type="button" class="btn btn-sm btn-danger gallery-lb-delete">${icon('trash')} מחיקה</button>
         </div>
@@ -362,6 +368,10 @@ function openLightbox(index: number): void {
       info.querySelector('.gallery-lb-assoc')!.addEventListener('click', () => {
         close();
         openObservationPicker('שיוך תמונה לתצפית', taken, (obsId, entryIndex) => void doAssociateOne(m, obsId, entryIndex), m.takenAt);
+      });
+      info.querySelector('.gallery-lb-species')!.addEventListener('click', () => {
+        close();
+        openSpeciesPicker(m);
       });
       info.querySelector('.gallery-lb-new')!.addEventListener('click', () => {
         close();
@@ -427,6 +437,52 @@ async function doAssociateMany(ids: string[], obsId: string, entryIndex: number)
   selectedIds.clear();
   toast(`${ids.length} תמונות שויכו לתצפית`);
   await activate();
+}
+
+/** Tags an unassociated photo with a species directly — independent of
+ * `associateMediaWithObservation`/`obsId`, so a photo can be labeled by
+ * species without needing an actual logged observation to attach it to. */
+async function doSetSpecies(m: MediaRecord, species: string | undefined): Promise<void> {
+  await saveMedia({ ...m, species });
+  toast(species ? `התמונה שויכה למין ${species}` : 'שיוך המין הוסר');
+  await activate();
+}
+
+/** Searchable species picker for the lightbox's "שיוך למין"/"שינוי מין"
+ * action — same search-list UI as openObservationPicker, but listing plain
+ * species names instead of observations. Offers a clear option when the
+ * photo already carries a species tag. */
+function openSpeciesPicker(m: MediaRecord): void {
+  void (async () => {
+    const allSpecies = await listSpecies();
+    const wrap = document.createElement('div');
+    wrap.className = 'gallery-assoc-modal';
+    wrap.innerHTML = `
+      <h3>שיוך תמונה למין</h3>
+      <input type="search" class="gallery-assoc-search" placeholder="חיפוש מין...">
+      <div class="gallery-assoc-list"></div>
+      ${m.species ? `<button type="button" class="btn btn-sm gallery-species-clear">${icon('trash')} הסרת שיוך המין</button>` : ''}
+    `;
+    const closeModal = showModal(wrap);
+    const list = qs(wrap, '.gallery-assoc-list');
+    const renderList = (filter: string): void => {
+      const f = filter.trim().toLowerCase();
+      const filtered = (f ? allSpecies.filter((s) => s.toLowerCase().includes(f)) : allSpecies).slice(0, 60);
+      list.innerHTML = '';
+      if (!filtered.length) { list.innerHTML = '<p class="map-sheet-empty">לא נמצאו מינים</p>'; return; }
+      for (const name of filtered) {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'map-sheet-item';
+        item.innerHTML = `<span class="map-sheet-item-species">${escapeHtml(name)}</span>`;
+        item.addEventListener('click', () => { closeModal(); void doSetSpecies(m, name); });
+        list.appendChild(item);
+      }
+    };
+    renderList('');
+    qs<HTMLInputElement>(wrap, '.gallery-assoc-search').addEventListener('input', (e) => renderList((e.target as HTMLInputElement).value));
+    wrap.querySelector('.gallery-species-clear')?.addEventListener('click', () => { closeModal(); void doSetSpecies(m, undefined); });
+  })();
 }
 
 /** Searchable observation picker modal, shared by the single-photo and

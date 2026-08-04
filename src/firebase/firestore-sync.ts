@@ -65,6 +65,7 @@ interface MediaMeta {
   takenAt?: string;
   takenAtSource?: 'exif' | 'file';
   contentHash?: string;
+  species?: string;
   updatedAt: string;
   deleted: boolean;
 }
@@ -548,13 +549,16 @@ async function mergeRemoteObserver(remote: ObserverRow): Promise<void> {
  * set) since it's synced as part of that observation's own document instead. */
 async function pushMedia(media: MediaRecord & { deleted?: boolean }): Promise<void> {
   if (!activeCode || media.obsId) return;
-  if (!media.deleted && media.remoteId) return; // already uploaded
   const meta: MediaMeta = {
     id: media.id, name: media.name, mime: media.mime,
     addedAt: media.addedAt, takenAt: media.takenAt, takenAtSource: media.takenAtSource,
-    contentHash: media.contentHash, updatedAt: new Date().toISOString(), deleted: !!media.deleted,
+    contentHash: media.contentHash, species: media.species,
+    updatedAt: media.updatedAt || new Date().toISOString(), deleted: !!media.deleted,
   };
-  if (!media.deleted) {
+  // Once uploaded, only the metadata doc needs pushing again on further edits
+  // (e.g. tagging a species onto it later) — re-uploading the same blob would
+  // be redundant.
+  if (!media.deleted && !media.remoteId) {
     if (!media.blob) return;
     try {
       const path = `households/${activeCode}/media/${media.id}`;
@@ -581,14 +585,26 @@ async function mergeRemoteMedia(remote: MediaMeta): Promise<void> {
     if (local && !local.obsId) await withSuppressedPush(() => deleteMediaAndUnlink(remote.id));
     return;
   }
-  if (local || !activeCode) return; // already have it locally (orphan or since associated)
+  if (!activeCode) return;
+  if (local) {
+    if (local.obsId) return; // associated locally since — its own business now, not this collection's
+    if (local.updatedAt && new Date(local.updatedAt) >= new Date(remote.updatedAt)) return; // local is newer/equal
+    // Blob is already present locally — just bring metadata (e.g. a species
+    // tag added on another device) up to date.
+    await withSuppressedPush(() => saveMedia({
+      ...local, name: remote.name, takenAt: remote.takenAt, takenAtSource: remote.takenAtSource,
+      contentHash: remote.contentHash, species: remote.species, updatedAt: remote.updatedAt,
+    }));
+    return;
+  }
   try {
     const path = `households/${activeCode}/media/${remote.id}`;
     const bytes = await getBytes(ref(firebaseStorage(), path));
     const blob = new Blob([bytes], { type: remote.mime || 'application/octet-stream' });
     await withSuppressedPush(() => saveMedia({
       id: remote.id, obsId: '', name: remote.name, mime: remote.mime, blob,
-      addedAt: remote.addedAt, takenAt: remote.takenAt, takenAtSource: remote.takenAtSource, contentHash: remote.contentHash,
+      addedAt: remote.addedAt, takenAt: remote.takenAt, takenAtSource: remote.takenAtSource,
+      contentHash: remote.contentHash, species: remote.species, updatedAt: remote.updatedAt,
     }));
   } catch (err) {
     // Blob not uploaded yet (metadata can arrive slightly ahead of the
