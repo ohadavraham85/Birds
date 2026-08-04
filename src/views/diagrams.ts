@@ -25,10 +25,15 @@ export function init(el: HTMLElement): void {
       <button class="btn btn-sm btn-primary" id="diagram-add-btn">${icon('plus')} תרשים חדש</button>
     </div>
     <p class="hint">תרשים חד קווי ומראה לוח, עם קישור נכסים קיימים לתאים שבתרשים.</p>
+    <button type="button" class="network-entry-btn" id="diagram-network-btn">
+      <span class="network-entry-icon">${icon('link')}</span>
+      <span class="network-entry-text"><strong>תרשים רשת ראשי</strong><span class="hint">מפה אינטראקטיבית של כל הלוחות/תחנות — גרירה, חיבורים, וניווט לתרשים הפנימי של כל לוח</span></span>
+    </button>
     <div class="diagram-grid" id="diagram-grid"></div>
     <p id="diagram-empty" class="hint" hidden>אין עדיין תרשימים. הוסיפו תרשים כדי להתחיל לקשר אליו נכסים.</p>
   `;
   qs(container, '#diagram-add-btn').addEventListener('click', () => void openCreateDiagramModal());
+  qs(container, '#diagram-network-btn').addEventListener('click', () => navigate('network'));
   qs(container, '#diagram-grid').addEventListener('click', (e) => void onGridClick(e));
 }
 

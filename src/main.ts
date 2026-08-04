@@ -20,6 +20,7 @@ import * as detailView from './views/detail';
 import * as settingsView from './views/settings';
 import * as diagramsView from './views/diagrams';
 import * as diagramView from './views/diagram';
+import * as networkView from './views/network';
 
 const VIEWS: Record<string, View> = {
   home: homeView,
@@ -30,6 +31,7 @@ const VIEWS: Record<string, View> = {
   settings: settingsView,
   diagrams: diagramsView,
   diagram: diagramView,
+  network: networkView,
 };
 
 /** Views reachable from the bottom tab bar (order matters). */

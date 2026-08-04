@@ -1885,3 +1885,44 @@ a.media-link-icon:hover { color: var(--accent-700); }
 }
 .asset-picker-row:hover { background: var(--accent-50); }
 .asset-picker-row .hint { margin-inline-start: auto; }
+
+/* ---------- network layout entry point (on the diagrams list) ---------- */
+
+.network-entry-btn {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: right;
+  border: 1.5px solid var(--accent-700); border-radius: var(--radius); background: var(--accent-50);
+  padding: 12px 14px; cursor: pointer; font: inherit; margin: 10px 0 14px;
+}
+.network-entry-btn:hover { background: var(--accent-100); }
+.network-entry-icon { color: var(--accent-700); flex-shrink: 0; }
+.network-entry-text { display: flex; flex-direction: column; gap: 2px; }
+.network-entry-text strong { color: var(--accent-900); }
+
+/* ---------- network layout canvas (draggable board nodes + dynamic edges) ---------- */
+
+.net-canvas { position: relative; transform-origin: 0 0; }
+.net-svg { position: absolute; top: 0; left: 0; pointer-events: none; overflow: visible; }
+.net-edge { fill: none; stroke: var(--accent-700); stroke-width: 2; }
+.net-edge-hit { fill: none; stroke: transparent; stroke-width: 14; cursor: pointer; pointer-events: stroke; }
+
+.net-node {
+  position: absolute; display: flex; flex-direction: column; justify-content: center; gap: 2px;
+  border: 2px solid var(--accent-700); border-radius: 10px; background: var(--card);
+  padding: 8px 10px; cursor: grab; touch-action: none; user-select: none;
+  box-shadow: var(--shadow-lg);
+}
+.net-node:active { cursor: grabbing; }
+.net-node-linked { border-color: var(--accent-600); background: var(--accent-50); }
+.net-node.net-node-connect-from { outline: 3px solid var(--danger); outline-offset: 2px; }
+.net-node-label { color: var(--accent-900); font-size: .95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.net-node-sub { color: var(--ink-soft); font-size: .74rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.net-node-link-hint { display: flex; align-items: center; gap: 4px; color: var(--accent-700); font-size: .7rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.net-node-link-hint .icon { width: 12px; height: 12px; flex-shrink: 0; }
+.net-node-edit-btn {
+  position: absolute; top: -10px; left: -10px; width: 26px; height: 26px; padding: 0;
+  border-radius: 50%; background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow);
+  display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--accent-700);
+}
+.net-node-edit-btn .icon { width: 14px; height: 14px; }
+
+#net-connect-toggle.active { background: var(--accent-700); color: #fff; }

@@ -3,7 +3,7 @@
  * reads always come from the local store. */
 
 import { db } from './database';
-import type { Asset, MaintenanceLog, MediaRecord, Diagram, DiagramMarker, DiagramMediaRecord } from '../types';
+import type { Asset, MaintenanceLog, MediaRecord, Diagram, DiagramMarker, DiagramMediaRecord, LayoutNode, LayoutEdge } from '../types';
 
 /* ---------- change notifications ---------- */
 
@@ -222,6 +222,80 @@ export async function deleteDiagramMedia(id: string): Promise<void> {
   await db.diagramMedia.delete(id);
 }
 
+/* ---------- network layout (single master board-to-board map) ---------- */
+
+export async function saveLayoutNode(node: LayoutNode): Promise<LayoutNode> {
+  node.updatedAt = now();
+  await db.layoutNodes.put(node);
+  emitChange();
+  return node;
+}
+
+export async function listLayoutNodes(): Promise<LayoutNode[]> {
+  const all = await db.layoutNodes.toArray();
+  return all.filter((n) => !n.deleted);
+}
+
+/** Hard-deletes the node and every edge touching it (no tombstone needed —
+ * edges have no independent meaning once an endpoint is gone). */
+export async function deleteLayoutNode(id: string): Promise<void> {
+  const edges = await listLayoutEdges();
+  for (const e of edges) {
+    if (e.fromNodeId === id || e.toNodeId === id) await db.layoutEdges.delete(e.id);
+  }
+  await db.layoutNodes.delete(id);
+  emitChange();
+}
+
+export async function saveLayoutEdge(edge: LayoutEdge): Promise<LayoutEdge> {
+  edge.updatedAt = now();
+  await db.layoutEdges.put(edge);
+  emitChange();
+  return edge;
+}
+
+export async function listLayoutEdges(): Promise<LayoutEdge[]> {
+  const all = await db.layoutEdges.toArray();
+  return all.filter((e) => !e.deleted);
+}
+
+export async function deleteLayoutEdge(id: string): Promise<void> {
+  await db.layoutEdges.delete(id);
+  emitChange();
+}
+
+/** Seeds the master layout with the board-to-board topology from the "33kV
+ * ONE LINE DIAGRAM ARRAY" drawing (project 3723300062-0) as a starting
+ * point — the user drags/reconnects freely from there. No-op (returns
+ * false) if any layout node already exists, so it only ever runs once. */
+export async function seedInitialLayoutIfEmpty(): Promise<boolean> {
+  if ((await listLayoutNodes()).length > 0) return false;
+
+  const nodeDefs: Array<{ id: string; label: string; subLabel: string; x: number; y: number }> = [
+    { id: 'eb60', label: 'EB', subLabel: 'Building 60 · קיים', x: 40, y: 60 },
+    { id: 'rm6', label: 'RM6', subLabel: 'NE-II · 25-0089', x: 260, y: 60 },
+    { id: 'eb1', label: 'EB1', subLabel: 'Building 83 · F400-36kV', x: 480, y: 60 },
+    { id: 'eb7', label: 'EB7', subLabel: 'Building 140 · לאישור', x: 720, y: 60 },
+    { id: 'eb2', label: 'EB2', subLabel: 'Building 102 · קיים', x: 40, y: 320 },
+    { id: 'eb3', label: 'EB3', subLabel: 'Building 50 · לביצוע', x: 260, y: 320 },
+    { id: 'eb4', label: 'EB4', subLabel: 'Building 51 · לביצוע', x: 480, y: 320 },
+    { id: 'eb5', label: 'EB5', subLabel: 'Building 82 · לביצוע', x: 700, y: 320 },
+    { id: 'eb6', label: 'EB6', subLabel: 'Building 80.2 · חדש', x: 920, y: 320 },
+  ];
+  for (const n of nodeDefs) {
+    await saveLayoutNode({ id: n.id, label: n.label, subLabel: n.subLabel, x: n.x, y: n.y, width: 150, height: 76, deleted: false, updatedAt: '' });
+  }
+
+  const edgeDefs: Array<[string, string]> = [
+    ['eb60', 'rm6'], ['rm6', 'eb1'], ['eb1', 'eb7'],
+    ['eb2', 'eb3'], ['eb3', 'eb4'], ['eb4', 'eb5'], ['eb5', 'eb6'],
+  ];
+  for (const [fromNodeId, toNodeId] of edgeDefs) {
+    await saveLayoutEdge({ id: crypto.randomUUID(), fromNodeId, toNodeId, deleted: false, updatedAt: '' });
+  }
+  return true;
+}
+
 /* ---------- data reset ---------- */
 
 export async function clearAllData(): Promise<void> {
@@ -231,5 +305,7 @@ export async function clearAllData(): Promise<void> {
   await db.diagrams.clear();
   await db.diagramMarkers.clear();
   await db.diagramMedia.clear();
+  await db.layoutNodes.clear();
+  await db.layoutEdges.clear();
   emitChange();
 }

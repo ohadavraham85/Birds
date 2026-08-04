@@ -1,7 +1,7 @@
 /* db/database.ts — Typed IndexedDB schema via Dexie. */
 
 import Dexie, { type EntityTable } from 'dexie';
-import type { Asset, MaintenanceLog, MediaRecord, SettingRow, Diagram, DiagramMarker, DiagramMediaRecord } from '../types';
+import type { Asset, MaintenanceLog, MediaRecord, SettingRow, Diagram, DiagramMarker, DiagramMediaRecord, LayoutNode, LayoutEdge } from '../types';
 
 export class AssetsDatabase extends Dexie {
   assets!: EntityTable<Asset, 'id'>;
@@ -11,6 +11,8 @@ export class AssetsDatabase extends Dexie {
   diagrams!: EntityTable<Diagram, 'id'>;
   diagramMarkers!: EntityTable<DiagramMarker, 'id'>;
   diagramMedia!: EntityTable<DiagramMediaRecord, 'id'>;
+  layoutNodes!: EntityTable<LayoutNode, 'id'>;
+  layoutEdges!: EntityTable<LayoutEdge, 'id'>;
 
   constructor() {
     super('electric-assets-db');
@@ -24,6 +26,10 @@ export class AssetsDatabase extends Dexie {
       diagrams: 'id, updatedAt, deleted',
       diagramMarkers: 'id, diagramId, pageId, assetId, updatedAt, deleted',
       diagramMedia: 'id',
+    });
+    this.version(3).stores({
+      layoutNodes: 'id, diagramId, updatedAt, deleted',
+      layoutEdges: 'id, fromNodeId, toNodeId, updatedAt, deleted',
     });
   }
 }

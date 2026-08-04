@@ -117,3 +117,32 @@ export interface DiagramMediaRecord {
   mime: string;
   blob: Blob;
 }
+
+/* ---------- network layout (the single master "array" board-to-board map) ---------- */
+
+/** One draggable board/station box on the master network layout. Optionally
+ * linked to that board's own internal Diagram (the one-line/front-view
+ * sheets with asset markers) — clicking the node drills into it. */
+export interface LayoutNode {
+  id: string;
+  label: string;
+  subLabel?: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  diagramId?: string;
+  deleted: boolean;
+  updatedAt: string;
+}
+
+/** A dynamic connector between two LayoutNodes, drawn as a routed line with
+ * an arrowhead that re-computes live as either endpoint moves. */
+export interface LayoutEdge {
+  id: string;
+  fromNodeId: string;
+  toNodeId: string;
+  label?: string;
+  deleted: boolean;
+  updatedAt: string;
+}
