@@ -2,7 +2,7 @@
  * חיפוש, קיבוץ לפי משפחה, מספר תצפיות לכל מין, תמונות מהתצפיות, תיאור אישי
  * לכל מין, וקישור לתצפיות. */
 
-import { listSpeciesRows, addSpecies, setSpeciesDescription, listObservations } from '../db/repository';
+import { listSpeciesRows, addSpecies, setSpeciesDescription, listObservations, listAllMedia } from '../db/repository';
 import { SPECIES_DETAILS } from '../data/species-data';
 import { toast, showImageModal, fmtDateTime, showModal } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
@@ -123,6 +123,13 @@ export async function activate(): Promise<void> {
         (imagesByName[entry.species] ??= []).push(...imgs.map((img) => ({ img, obsId: o.id })));
       }
     }
+  }
+  // Gallery photos tagged with a species directly (no observation link) —
+  // shown alongside observation photos so a species-only tag still counts
+  // as "a photo of this species" here and in the home screen's Bird of the Day.
+  for (const m of await listAllMedia()) {
+    if (m.obsId || !m.species) continue;
+    (imagesByName[m.species] ??= []).push({ img: { localId: m.id, name: m.name, remoteId: m.remoteId }, obsId: '' });
   }
   render();
 
@@ -326,7 +333,7 @@ function detailsHtml(name: string): string {
       ${lastObserved[name] ? `<div><b>תצפית אחרונה:</b> ${fmtDateTime(lastObserved[name]!)}</div>` : ''}
       ${!d.en && !d.sci && !d.family ? '<div style="color:var(--ink-soft)">אין פרטים נוספים למין זה.</div>' : ''}
       ${photoCount ? `
-        <div class="sp-photos-label">${icon('camera')} ${photoCount} תמונות מהתצפיות</div>
+        <div class="sp-photos-label">${icon('camera')} ${photoCount} תמונות</div>
         <div class="sp-photos" data-name="${escapeHtml(name)}"></div>` : ''}
       <div class="field sp-desc-field">
         <label for="sp-desc-${escapeHtml(name)}">תיאור אישי</label>
