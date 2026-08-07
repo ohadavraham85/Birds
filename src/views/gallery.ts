@@ -35,8 +35,8 @@ let allItems: MediaRecord[] = [];
 /** The subset actually shown in the grid and browsable in the lightbox —
  * `allItems` filtered by `assocFilter`. */
 let items: MediaRecord[] = [];
-/** Which photos to show: all, only ones attached to an observation, or only
- * unassociated ("orphan") ones. */
+/** Which photos to show: all, only ones that carry SOME association (an
+ * observation link or a direct species tag), or only ones with neither. */
 let assocFilter: 'all' | 'assoc' | 'orphan' = 'all';
 let lightboxIndex = -1;
 let closeLightbox: (() => void) | null = null;
@@ -59,12 +59,13 @@ export function init(el: HTMLElement): void {
     </div>
     <div class="seg-toggle" id="gallery-assoc-filter">
       <button type="button" class="seg-btn active" data-filter="all">הכל</button>
-      <button type="button" class="seg-btn" data-filter="assoc">עם תצפית</button>
-      <button type="button" class="seg-btn" data-filter="orphan">ללא שיוך לתצפית</button>
+      <button type="button" class="seg-btn" data-filter="assoc">משויכות</button>
+      <button type="button" class="seg-btn" data-filter="orphan">ללא שיוך</button>
     </div>
     <div class="bulk-toolbar" id="gallery-bulk-toolbar" hidden>
       <span id="gallery-bulk-count"></span>
       <button type="button" class="btn btn-sm btn-primary" id="gallery-bulk-assoc">${icon('link')} שיוך לתצפית</button>
+      <button type="button" class="btn btn-sm" id="gallery-bulk-species">${icon('bird')} שיוך למין</button>
       <button type="button" class="btn btn-sm btn-danger" id="gallery-bulk-delete">${icon('trash')} מחיקה</button>
       <span class="spacer"></span>
       <button type="button" class="btn btn-sm" id="gallery-bulk-cancel">ביטול</button>
@@ -93,6 +94,7 @@ export function init(el: HTMLElement): void {
   });
   qs(container, '#gallery-bulk-delete').addEventListener('click', () => void onBulkDelete());
   qs(container, '#gallery-bulk-assoc').addEventListener('click', () => void onBulkAssociate());
+  qs(container, '#gallery-bulk-species').addEventListener('click', () => void onBulkSetSpecies());
 }
 
 async function onUpload(e: Event): Promise<void> {
@@ -151,11 +153,15 @@ export async function activate(): Promise<void> {
 }
 
 /** Recomputes `items` (the browsable/rendered subset) from `allItems` per
- * the current with/without-observation filter. */
+ * the current association filter. "משויכות" / "ללא שיוך" split on ANY
+ * association — an observation link or a direct species tag — not just an
+ * observation, so "ללא שיוך" reliably surfaces photos that need attention
+ * (truly untouched), rather than being cluttered by ones already tagged
+ * with a species but not yet filed into an observation. */
 function applyFilter(): void {
   items = assocFilter === 'all' ? allItems
-    : assocFilter === 'assoc' ? allItems.filter((m) => !!m.obsId)
-    : allItems.filter((m) => !m.obsId);
+    : assocFilter === 'assoc' ? allItems.filter((m) => !!m.obsId || !!m.species)
+    : allItems.filter((m) => !m.obsId && !m.species);
 }
 
 /** localId -> the observation/species entry that references it, for every
@@ -425,6 +431,11 @@ async function onBulkAssociate(): Promise<void> {
   openObservationPicker(`שיוך ${ids.length} תמונות לתצפית`, null, (obsId, entryIndex) => void doAssociateMany(ids, obsId, entryIndex));
 }
 
+async function onBulkSetSpecies(): Promise<void> {
+  if (!selectedIds.size) return;
+  openSpeciesPicker([...selectedIds]);
+}
+
 async function doAssociateOne(m: MediaRecord, obsId: string, entryIndex: number): Promise<void> {
   await associateMediaWithObservation(m.id, obsId, entryIndex);
   toast('התמונה שויכה לתצפית');
@@ -439,32 +450,53 @@ async function doAssociateMany(ids: string[], obsId: string, entryIndex: number)
   await activate();
 }
 
-/** Tags an unassociated photo with a species directly — independent of
- * `associateMediaWithObservation`/`obsId`, so a photo can be labeled by
- * species without needing an actual logged observation to attach it to. */
-async function doSetSpecies(m: MediaRecord, species: string | undefined): Promise<void> {
-  // updatedAt: undefined forces saveMedia to stamp a fresh timestamp rather
-  // than keep the stale one already on `m` from its last load — otherwise
-  // this edit would never win a last-write-wins sync merge on other devices.
-  await saveMedia({ ...m, species, updatedAt: undefined });
-  toast(species ? `התמונה שויכה למין ${species}` : 'שיוך המין הוסר');
+/** Tags one or more unassociated photos with a species directly —
+ * independent of `associateMediaWithObservation`/`obsId`, so a photo can be
+ * labeled by species without needing an actual logged observation to attach
+ * it to. Photos already attached to an observation are silently skipped
+ * (their species already comes from the observation's own entry) — relevant
+ * mainly for the bulk path, since a multi-select can span any mix of tiles. */
+async function doSetSpeciesMany(ids: string[], species: string | undefined): Promise<void> {
+  const targets = allItems.filter((m) => ids.includes(m.id) && !m.obsId);
+  for (const m of targets) {
+    // updatedAt: undefined forces saveMedia to stamp a fresh timestamp rather
+    // than keep the stale one already on `m` from its last load — otherwise
+    // this edit would never win a last-write-wins sync merge on other devices.
+    await saveMedia({ ...m, species, updatedAt: undefined });
+  }
+  selectionMode = false;
+  selectedIds.clear();
+  const skipped = ids.length - targets.length;
+  if (!targets.length) {
+    toast('לא ניתן לשייך למין תמונות שכבר משויכות לתצפית', true);
+  } else {
+    let msg = targets.length === 1
+      ? (species ? `התמונה שויכה למין ${species}` : 'שיוך המין הוסר')
+      : (species ? `${targets.length} תמונות שויכו למין ${species}` : `שיוך המין הוסר מ-${targets.length} תמונות`);
+    if (skipped) msg += ` (${skipped} דולגו — כבר משויכות לתצפית)`;
+    toast(msg);
+  }
   await activate();
 }
 
 /** Searchable species picker for the lightbox's "שיוך למין"/"שינוי מין"
- * action — same search-list UI as openObservationPicker, but listing plain
- * species names instead of observations. Offers a clear option when the
- * photo already carries a species tag. */
-function openSpeciesPicker(m: MediaRecord): void {
+ * action and the bulk-select toolbar's "שיוך למין" action — same
+ * search-list UI as openObservationPicker, but listing plain species names
+ * instead of observations. A single photo that already carries a species
+ * tag gets a clear option too; bulk mode (an id array) skips it since the
+ * selection's existing tags may differ from each other. */
+function openSpeciesPicker(target: MediaRecord | string[]): void {
+  const ids = Array.isArray(target) ? target : [target.id];
+  const currentSpecies = Array.isArray(target) ? undefined : target.species;
   void (async () => {
     const allSpecies = await listSpecies();
     const wrap = document.createElement('div');
     wrap.className = 'gallery-assoc-modal';
     wrap.innerHTML = `
-      <h3>שיוך תמונה למין</h3>
+      <h3>${ids.length > 1 ? `שיוך ${ids.length} תמונות למין` : 'שיוך תמונה למין'}</h3>
       <input type="search" class="gallery-assoc-search" placeholder="חיפוש מין...">
       <div class="gallery-assoc-list"></div>
-      ${m.species ? `<button type="button" class="btn btn-sm gallery-species-clear">${icon('trash')} הסרת שיוך המין</button>` : ''}
+      ${currentSpecies ? `<button type="button" class="btn btn-sm gallery-species-clear">${icon('trash')} הסרת שיוך המין</button>` : ''}
     `;
     const closeModal = showModal(wrap);
     const list = qs(wrap, '.gallery-assoc-list');
@@ -478,13 +510,13 @@ function openSpeciesPicker(m: MediaRecord): void {
         item.type = 'button';
         item.className = 'map-sheet-item';
         item.innerHTML = `<span class="map-sheet-item-species">${escapeHtml(name)}</span>`;
-        item.addEventListener('click', () => { closeModal(); void doSetSpecies(m, name); });
+        item.addEventListener('click', () => { closeModal(); void doSetSpeciesMany(ids, name); });
         list.appendChild(item);
       }
     };
     renderList('');
     qs<HTMLInputElement>(wrap, '.gallery-assoc-search').addEventListener('input', (e) => renderList((e.target as HTMLInputElement).value));
-    wrap.querySelector('.gallery-species-clear')?.addEventListener('click', () => { closeModal(); void doSetSpecies(m, undefined); });
+    wrap.querySelector('.gallery-species-clear')?.addEventListener('click', () => { closeModal(); void doSetSpeciesMany(ids, undefined); });
   })();
 }
 
