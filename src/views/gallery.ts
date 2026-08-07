@@ -60,7 +60,7 @@ export function init(el: HTMLElement): void {
     <div class="seg-toggle" id="gallery-assoc-filter">
       <button type="button" class="seg-btn active" data-filter="all">הכל</button>
       <button type="button" class="seg-btn" data-filter="assoc">עם תצפית</button>
-      <button type="button" class="seg-btn" data-filter="orphan">ללא תצפית</button>
+      <button type="button" class="seg-btn" data-filter="orphan">ללא שיוך לתצפית</button>
     </div>
     <div class="bulk-toolbar" id="gallery-bulk-toolbar" hidden>
       <span id="gallery-bulk-count"></span>
