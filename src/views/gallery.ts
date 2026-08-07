@@ -443,7 +443,10 @@ async function doAssociateMany(ids: string[], obsId: string, entryIndex: number)
  * `associateMediaWithObservation`/`obsId`, so a photo can be labeled by
  * species without needing an actual logged observation to attach it to. */
 async function doSetSpecies(m: MediaRecord, species: string | undefined): Promise<void> {
-  await saveMedia({ ...m, species });
+  // updatedAt: undefined forces saveMedia to stamp a fresh timestamp rather
+  // than keep the stale one already on `m` from its last load — otherwise
+  // this edit would never win a last-write-wins sync merge on other devices.
+  await saveMedia({ ...m, species, updatedAt: undefined });
   toast(species ? `התמונה שויכה למין ${species}` : 'שיוך המין הוסר');
   await activate();
 }

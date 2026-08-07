@@ -2,12 +2,14 @@
  * חיפוש, קיבוץ לפי משפחה, מספר תצפיות לכל מין, תמונות מהתצפיות, תיאור אישי
  * לכל מין, וקישור לתצפיות. */
 
-import { listSpeciesRows, addSpecies, setSpeciesDescription, listObservations, listAllMedia } from '../db/repository';
+import { listSpeciesRows, addSpecies, setSpeciesDescription, listObservations, listAllMedia, saveMedia, findMediaByHash, getMedia } from '../db/repository';
 import { SPECIES_DETAILS } from '../data/species-data';
 import { toast, showImageModal, fmtDateTime, showModal } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
 import { speciesNames, entriesOf, entryImages } from '../lib/observation';
-import { getImageObjectUrl } from '../lib/media';
+import { getImageObjectUrl, hashBlob } from '../lib/media';
+import { resolvePhotoDate } from '../lib/exif';
+import { pickFromGalleryForSpecies } from '../lib/photo-picker';
 import { qs, input, select } from '../lib/dom';
 import { icon } from '../lib/icons';
 import { speciesInfoButtonHtml, openSpeciesInfoModal } from '../lib/species-info';
@@ -82,7 +84,10 @@ export function init(el: HTMLElement): void {
   qs(container, '#sp-copy-missing').addEventListener('click', () => void onCopyMissingDetails());
   input(container, '#sp-new').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); void onAdd(); } });
   qs(container, '#sp-list').addEventListener('click', onListClick);
-  qs(container, '#sp-list').addEventListener('change', (e) => void onDescriptionChange(e));
+  qs(container, '#sp-list').addEventListener('change', (e) => {
+    void onDescriptionChange(e);
+    void onPhotoFileChange(e);
+  });
 }
 
 /** Opens a specific species' card directly (e.g. from the home screen's
@@ -283,7 +288,11 @@ function render(): void {
   renderTileThumbnails();
 }
 
-/** Fills the open card's photo gallery (thumbnails resolved async, like the journal cards). */
+/** Fills the open card's photo gallery (thumbnails resolved async, like the
+ * journal cards). Photos tagged directly from the Gallery (no `obsId`) get a
+ * small remove button to undo an accidental tag — a photo attached via an
+ * observation entry has its species implied by that entry, so it isn't
+ * removable from here. */
 function renderOpenPhotos(): void {
   if (!openKey) return;
   const wrap = [...container.querySelectorAll<HTMLElement>('.sp-photos')].find((w) => w.dataset.name === openKey);
@@ -291,15 +300,39 @@ function renderOpenPhotos(): void {
   const photos = imagesByName[openKey] || [];
   wrap.innerHTML = '';
   for (const { img, obsId } of photos) {
+    const tile = document.createElement('div');
+    tile.className = 'sp-photo-tile';
     const el = document.createElement('img');
     el.loading = 'lazy';
     el.alt = openKey;
-    wrap.appendChild(el);
+    tile.appendChild(el);
+    if (!obsId) {
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'sp-photo-remove';
+      removeBtn.title = 'הסרת שיוך התמונה למין';
+      removeBtn.setAttribute('aria-label', 'הסרת שיוך התמונה למין');
+      removeBtn.textContent = '✕';
+      removeBtn.addEventListener('click', (e) => { e.stopPropagation(); void onRemovePhotoTag(img.localId); });
+      tile.appendChild(removeBtn);
+    }
+    wrap.appendChild(tile);
     void getImageObjectUrl(img, obsId).then((url) => {
       if (url) { el.src = url; el.onclick = (): void => showImageModal(url, openKey || ''); }
       else el.remove();
     });
   }
+}
+
+/** Undoes an accidental "תמונה מהגלריה"/"תמונה מהמכשיר" species tag. */
+async function onRemovePhotoTag(mediaId: string): Promise<void> {
+  const media = await getMedia(mediaId);
+  if (!media) return;
+  // updatedAt: undefined — see gallery.ts's doSetSpecies for why the stale
+  // one already on `media` must not be kept.
+  await saveMedia({ ...media, species: undefined, updatedAt: undefined });
+  toast('שיוך התמונה למין הוסר');
+  await activate();
 }
 
 /** Fills each closed tile's thumbnail (square/rect view modes) with the species' first available photo. */
@@ -335,6 +368,11 @@ function detailsHtml(name: string): string {
       ${photoCount ? `
         <div class="sp-photos-label">${icon('camera')} ${photoCount} תמונות</div>
         <div class="sp-photos" data-name="${escapeHtml(name)}"></div>` : ''}
+      <div class="sp-photo-actions">
+        <button type="button" class="btn btn-sm sp-photo-gallery" data-name="${escapeHtml(name)}">${icon('grid')} תמונה מהגלריה</button>
+        <button type="button" class="btn btn-sm sp-photo-device" data-name="${escapeHtml(name)}">${icon('camera')} תמונה מהמכשיר</button>
+        <input type="file" class="sp-photo-file" accept="image/*" multiple hidden data-name="${escapeHtml(name)}">
+      </div>
       <div class="field sp-desc-field">
         <label for="sp-desc-${escapeHtml(name)}">תיאור אישי</label>
         <textarea id="sp-desc-${escapeHtml(name)}" class="sp-desc-input" data-name="${escapeHtml(name)}"
@@ -396,6 +434,14 @@ function onListClick(e: Event): void {
     openSpeciesInfoModal(infoBtn.dataset.speciesInfo!, infoBtn.dataset.speciesSci || undefined);
     return;
   }
+  const galleryBtn = target.closest<HTMLElement>('.sp-photo-gallery');
+  if (galleryBtn) { e.stopPropagation(); void onPickFromGallery(galleryBtn.dataset.name!); return; }
+  const deviceBtn = target.closest<HTMLElement>('.sp-photo-device');
+  if (deviceBtn) {
+    e.stopPropagation();
+    deviceBtn.parentElement!.querySelector<HTMLInputElement>('.sp-photo-file')!.click();
+    return;
+  }
   const obs = target.closest<HTMLElement>('.act-obs');
   if (obs) { e.stopPropagation(); navigate('cards', { filterSpecies: obs.dataset.name! }); return; }
   const report = target.closest<HTMLElement>('.act-report');
@@ -420,6 +466,43 @@ function onListClick(e: Event): void {
     openKey = openKey === card.dataset.name ? null : card.dataset.name!;
     render();
   }
+}
+
+/** "תמונה מהגלריה" — tags an existing not-yet-associated Gallery photo with
+ * this species directly, via the shared orphan-photo picker. */
+async function onPickFromGallery(name: string): Promise<void> {
+  const count = await pickFromGalleryForSpecies(name);
+  if (!count) return;
+  toast(count === 1 ? 'התמונה שויכה למין' : `${count} תמונות שויכו למין`);
+  await activate();
+}
+
+/** "תמונה מהמכשיר" — uploads new photo(s) straight from the device's file
+ * picker (which on mobile also surfaces cloud sources like Google Photos),
+ * tagging each one with this species directly. Same dedup-by-content-hash
+ * check as the Gallery tab's own upload button. */
+async function onPhotoFileChange(e: Event): Promise<void> {
+  const fileInput = (e.target as HTMLElement).closest<HTMLInputElement>('.sp-photo-file');
+  if (!fileInput) return;
+  const name = fileInput.dataset.name!;
+  const files = fileInput.files ? Array.from(fileInput.files) : [];
+  fileInput.value = '';
+  if (!files.length) return;
+  let added = 0;
+  let skipped = 0;
+  for (const file of files) {
+    const contentHash = await hashBlob(file);
+    if (await findMediaByHash(contentHash)) { skipped++; continue; }
+    const { date, source } = await resolvePhotoDate(file);
+    await saveMedia({
+      id: crypto.randomUUID(), obsId: '', name: file.name || 'image', mime: file.type, blob: file,
+      takenAt: date.toISOString(), takenAtSource: source, contentHash, species: name,
+    });
+    added++;
+  }
+  if (skipped) toast(added ? `הועלו ${added} תמונות, ${skipped} דולגו (כבר קיימות בגלריה)` : `${skipped} תמונות דולגו — כבר קיימות בגלריה`);
+  else if (added) toast(added === 1 ? 'התמונה נוספה ושויכה למין' : `${added} תמונות נוספו ושויכו למין`);
+  await activate();
 }
 
 async function onDescriptionChange(e: Event): Promise<void> {
