@@ -55,6 +55,9 @@ let selectedSpeciesNames = new Set<string>();
 let selectedLocationNames = new Set<string>();
 let newLocationCoords: LatLng | null = null;
 let locationSearchQuery = '';
+let speciesSearchQuery = '';
+let tagSearchQuery = '';
+let observerSearchQuery = '';
 
 interface PhotoImportRow {
   file: File;
@@ -537,6 +540,7 @@ function listsHtml(): string {
         <button type="button" class="btn btn-sm btn-primary" id="s-sp-merge-all" hidden>${icon('layers')} מיזוג הכל</button>
         <button type="button" class="btn btn-sm btn-primary" id="s-sp-merge-selected" hidden>${icon('layers')} מיזוג הנבחרים (<span id="s-sp-sel-count">0</span>)</button>
       </div>
+      <input type="search" id="s-sp-search" class="filter-search" style="width:100%;margin-bottom:8px" placeholder="חיפוש חופשי ברשימת המינים...">
       <div class="dupe-list" id="s-species-dupes"></div>
       <div class="species-list" id="s-species-list"></div>
     </div>
@@ -580,6 +584,7 @@ function listsHtml(): string {
         <button class="btn" id="s-tag-add">${icon('plus')} הוספה</button>
       </div>
       <div id="s-tag-new-icon">${tagIconPickerHtml()}</div>
+      <input type="search" id="s-tag-search" class="filter-search" style="width:100%;margin-bottom:8px" placeholder="חיפוש חופשי ברשימת התגיות...">
       <div class="tag-list" id="s-tag-list"></div>
     </div>
 
@@ -594,6 +599,7 @@ function listsHtml(): string {
         <input type="text" id="s-observer-new" placeholder="הוספת צופה חדש לרשימה...">
         <button class="btn" id="s-observer-add">${icon('plus')} הוספה</button>
       </div>
+      <input type="search" id="s-observer-search" class="filter-search" style="width:100%;margin-bottom:8px" placeholder="חיפוש חופשי ברשימת הצופים...">
       <div class="species-list" id="s-observer-list"></div>
     </div>
   `;
@@ -630,6 +636,11 @@ function wireLists(): void {
   input(container, '#s-sp-new').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); void onAddSpeciesManaged(); } });
   qs(container, '#s-species-list').addEventListener('click', (e) => void onSpeciesListClick(e));
   qs(container, '#s-species-list').addEventListener('change', (e) => onSpeciesListSelChange(e));
+  speciesSearchQuery = '';
+  input(container, '#s-sp-search').addEventListener('input', (e) => {
+    speciesSearchQuery = (e.target as HTMLInputElement).value;
+    void renderSpeciesManageList();
+  });
   void renderSpeciesManageList();
 
   speciesDupeGroups = [];
@@ -665,12 +676,22 @@ function wireLists(): void {
   input(container, '#s-tag-new-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); void onAddTagManaged(); } });
   wireTagIconPicker(qs(container, '#s-tag-new-icon'));
   qs(container, '#s-tag-list').addEventListener('click', (e) => void onTagListClick(e));
-  void renderTagManageList();
   renamingTag = null;
+  tagSearchQuery = '';
+  input(container, '#s-tag-search').addEventListener('input', (e) => {
+    tagSearchQuery = (e.target as HTMLInputElement).value;
+    void renderTagManageList();
+  });
+  void renderTagManageList();
 
   qs(container, '#s-observer-add').addEventListener('click', () => void onAddObserverManaged());
   input(container, '#s-observer-new').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); void onAddObserverManaged(); } });
   qs(container, '#s-observer-list').addEventListener('click', (e) => void onObserverListClick(e));
+  observerSearchQuery = '';
+  input(container, '#s-observer-search').addEventListener('input', (e) => {
+    observerSearchQuery = (e.target as HTMLInputElement).value;
+    void renderObserverManageList();
+  });
   void renderObserverManageList();
 }
 
@@ -770,7 +791,9 @@ function pickedCanonical(dupeListSelector: string, idx: number, group: Duplicate
 /* ---------- species list management ---------- */
 
 async function renderSpeciesManageList(): Promise<void> {
-  const rows = await listSpeciesRows();
+  const allRows = await listSpeciesRows();
+  const q = speciesSearchQuery.trim().toLowerCase();
+  const rows = q ? allRows.filter((r) => r.name.toLowerCase().includes(q)) : allRows;
   const el = container.querySelector<HTMLElement>('#s-species-list');
   if (!el) return;
   el.innerHTML = rows.length
@@ -789,7 +812,7 @@ async function renderSpeciesManageList(): Promise<void> {
         <button type="button" class="del" data-name="${escapeHtml(r.name)}" title="הסרה מהרשימה" aria-label="הסרה מהרשימה">${icon('trash')}</button>
       </div>`;
     }).join('')
-    : '<p class="hint" style="padding:10px 12px">אין מינים ברשימה.</p>';
+    : `<p class="hint" style="padding:10px 12px">${q ? 'אין מין התואם את החיפוש.' : 'אין מינים ברשימה.'}</p>`;
   if (renamingSpecies) el.querySelector<HTMLInputElement>('.rename-input')?.focus();
   updateSpeciesSelToolbar();
 }
@@ -1095,7 +1118,9 @@ async function onMergeSelectedLocations(): Promise<void> {
 /* ---------- tags management ---------- */
 
 async function renderTagManageList(): Promise<void> {
-  const rows = await listTagRows();
+  const allRows = await listTagRows();
+  const q = tagSearchQuery.trim().toLowerCase();
+  const rows = q ? allRows.filter((r) => r.name.toLowerCase().includes(q)) : allRows;
   const el = container.querySelector<HTMLElement>('#s-tag-list');
   if (!el) return;
   el.innerHTML = rows.length
@@ -1116,7 +1141,7 @@ async function renderTagManageList(): Promise<void> {
         ${isRenaming ? `<div class="tag-edit-icon">${tagIconPickerHtml(r.icon)}</div>` : ''}
       </div>`;
     }).join('')
-    : '<p class="hint" style="padding:10px 12px">אין תגיות עדיין.</p>';
+    : `<p class="hint" style="padding:10px 12px">${q ? 'אין תגית התואמת את החיפוש.' : 'אין תגיות עדיין.'}</p>`;
   if (renamingTag) el.querySelector<HTMLInputElement>('.rename-input')?.focus();
 }
 
@@ -1175,7 +1200,9 @@ async function onTagListClick(e: Event): Promise<void> {
 /* ---------- ניהול רשימת הצופים (שם בלבד, ללא שינוי שם/מיזוג) ---------- */
 
 async function renderObserverManageList(): Promise<void> {
-  const rows = await listObserverRows();
+  const allRows = await listObserverRows();
+  const q = observerSearchQuery.trim().toLowerCase();
+  const rows = q ? allRows.filter((r) => r.name.toLowerCase().includes(q)) : allRows;
   const el = container.querySelector<HTMLElement>('#s-observer-list');
   if (!el) return;
   el.innerHTML = rows.length
@@ -1184,7 +1211,7 @@ async function renderObserverManageList(): Promise<void> {
         <span>${escapeHtml(r.name)}</span>
         <button type="button" class="del" data-name="${escapeHtml(r.name)}" title="הסרה מהרשימה" aria-label="הסרה מהרשימה">${icon('trash')}</button>
       </div>`).join('')
-    : '<p class="hint" style="padding:10px 12px">אין צופים ברשימה.</p>';
+    : `<p class="hint" style="padding:10px 12px">${q ? 'אין צופה התואם את החיפוש.' : 'אין צופים ברשימה.'}</p>`;
 }
 
 async function onAddObserverManaged(): Promise<void> {
