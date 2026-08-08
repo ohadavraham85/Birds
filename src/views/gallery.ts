@@ -173,6 +173,16 @@ function fmtStorageBytes(n: number): string {
   return `${(n / 1024 ** 3).toFixed(2)} GB`;
 }
 
+/** Bumped at the start of every refreshStorageUsage() call and captured as
+ * `requestId` — since activate() re-fires this on every Gallery entry AND
+ * again right after any associate action, an older sweep (listAll +
+ * getMetadata over every photo, genuinely slow with a real library) can
+ * still be in flight when a newer one starts. Without this guard, whichever
+ * sweep happens to resolve LAST wins the DOM regardless of which one
+ * actually started last — so a stale, smaller pre-upload snapshot could
+ * overwrite a fresher, larger one and make usage look like it dropped. */
+let storageUsageRequestId = 0;
+
 /** Fetches the real Firebase Storage usage for this household's photos (via
  * getMediaStorageUsage — a live listing of the Storage bucket, not just a
  * local estimate) and renders it as a labeled progress bar against the
@@ -184,6 +194,7 @@ async function refreshStorageUsage(): Promise<void> {
   if (!card) return;
   if (!isFirebaseSyncActive()) { card.hidden = true; return; }
   card.hidden = false;
+  const requestId = ++storageUsageRequestId;
   const label = qs(container, '#gallery-storage-label');
   const pctEl = qs(container, '#gallery-storage-pct');
   const fill = qs<HTMLElement>(container, '#gallery-storage-fill');
@@ -193,6 +204,7 @@ async function refreshStorageUsage(): Promise<void> {
   fill.classList.remove('warn', 'danger');
   try {
     const usage = await getMediaStorageUsage();
+    if (requestId !== storageUsageRequestId) return; // a newer refresh has since superseded this one
     if (!usage) { card.hidden = true; return; }
     const pct = Math.min(100, (usage.bytes / STORAGE_FREE_TIER_BYTES) * 100);
     label.textContent = `${fmtStorageBytes(usage.bytes)} מתוך ${fmtStorageBytes(STORAGE_FREE_TIER_BYTES)} (${usage.fileCount} תמונות ב-Firebase)`;
@@ -201,6 +213,7 @@ async function refreshStorageUsage(): Promise<void> {
     fill.classList.toggle('warn', pct >= 70 && pct < 90);
     fill.classList.toggle('danger', pct >= 90);
   } catch (err) {
+    if (requestId !== storageUsageRequestId) return;
     console.warn('Firebase: could not compute Storage usage', err);
     label.textContent = 'לא ניתן לחשב שימוש באחסון כרגע';
   }
