@@ -36,8 +36,8 @@ import {
   setTheme, setAccent, setFontColor, setFontSize, setFontWeight, setDisplayMode,
   type ThemeId, type AccentId, type FontColorId, type FontSizeId, type FontWeightId, type DisplayModeId,
 } from '../lib/theme';
-import type { Observation, LocationRow, TagRow, TagIconName, ObserverRow } from '../types';
-import { TAG_ICON_NAMES, SPECIES_TAG_LABELS } from '../types';
+import type { Observation, LocationRow, TagRow, TagIconName, ObserverRow, SpeciesTag } from '../types';
+import { TAG_ICON_NAMES, SPECIES_TAGS, SPECIES_TAG_LABELS } from '../types';
 
 const TAG_ICON_LABELS: Record<TagIconName, string> = {
   tagRaptor: 'דורסים', tagOwl: 'ינשופים', tagHeron: 'אנפתאים/שיטנים', tagDuck: 'עופות מים',
@@ -877,13 +877,15 @@ async function onSpeciesListClick(e: Event): Promise<void> {
 /** Full-details editor for a species: English/scientific name and family
  * (all otherwise read from the bundled reference data — an override here
  * takes precedence, see lib/species-details-cache.ts), plus the manual
- * "target species" flag. The card badge in the "מינים" tab always shows one
- * of נצפה/לא נצפה/לייפר automatically (from the species' own logged
- * observation count) unless it's marked as a target here, which overrides it. */
+ * status-badge override. The card badge in the "מינים" tab is auto-derived
+ * from the species' own logged observation count (0 → לא נצפה, 1 → לייפר,
+ * 2+ → נצפה) unless overridden here to a specific state, which takes
+ * priority — same override the badge itself can be clicked to set directly
+ * from the "מינים" tab. */
 async function openSpeciesDetailsEditor(name: string): Promise<void> {
   const d = getSpeciesDetail(name);
   const rows = await listSpeciesRows();
-  const currentTarget = !!rows.find((r) => r.name === name)?.isTarget;
+  const currentTag = rows.find((r) => r.name === name)?.manualTag || '';
   const families = listKnownFamilies();
 
   const backdrop = document.createElement('div');
@@ -906,11 +908,14 @@ async function openSpeciesDetailsEditor(name: string): Promise<void> {
           ${families.map((f) => `<option value="${escapeHtml(f)}"${f === d.family ? ' selected' : ''}>${escapeHtml(f)}</option>`).join('')}
         </select>
       </div>
-      <label class="notif-toggle-row">
-        <span>סימון כמין מטרה</span>
-        <input type="checkbox" id="spd-target"${currentTarget ? ' checked' : ''}>
-      </label>
-      <p class="hint" style="margin-top:0">התגית "${SPECIES_TAG_LABELS.target}" גוברת על תגית ${SPECIES_TAG_LABELS.seen}/${SPECIES_TAG_LABELS.unseen}/${SPECIES_TAG_LABELS.lifer} — שאר התגיות נקבעות אוטומטית לפי מספר התצפיות שנרשמו למין.</p>
+      <div class="field">
+        <label for="spd-tag">סיווג</label>
+        <select id="spd-tag">
+          <option value=""${!currentTag ? ' selected' : ''}>אוטומטי (לפי מספר תצפיות)</option>
+          ${SPECIES_TAGS.map((tag) => `<option value="${tag}"${currentTag === tag ? ' selected' : ''}>${SPECIES_TAG_LABELS[tag]}</option>`).join('')}
+        </select>
+      </div>
+      <p class="hint" style="margin-top:0">אוטומטי: 0 תצפיות → ${SPECIES_TAG_LABELS.unseen}, תצפית אחת → ${SPECIES_TAG_LABELS.lifer}, יותר → ${SPECIES_TAG_LABELS.seen}. סיווג ידני גובר על החישוב האוטומטי — ניתן גם לשנות אותו בלחיצה על התגית ברשימת המינים.</p>
       <div class="modal-actions">
         <button class="btn btn-primary" id="spd-save">שמירה</button>
         <button class="btn" id="spd-cancel">ביטול</button>
@@ -925,8 +930,8 @@ async function openSpeciesDetailsEditor(name: string): Promise<void> {
       const en = qs<HTMLInputElement>(backdrop, '#spd-en').value.trim();
       const sci = qs<HTMLInputElement>(backdrop, '#spd-sci').value.trim();
       const family = qs<HTMLSelectElement>(backdrop, '#spd-family').value;
-      const isTarget = qs<HTMLInputElement>(backdrop, '#spd-target').checked;
-      await updateSpeciesDetails(name, { en, sci, family, isTarget });
+      const manualTag = qs<HTMLSelectElement>(backdrop, '#spd-tag').value as SpeciesTag | '';
+      await updateSpeciesDetails(name, { en, sci, family, manualTag });
       close();
       toast(`פרטי "${name}" עודכנו`);
     })();

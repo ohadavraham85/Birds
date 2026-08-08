@@ -1636,7 +1636,9 @@ a.media-link-icon:hover { color: var(--accent-700); }
   display: inline-flex; align-items: center; gap: 4px;
   padding: 2px 8px; border-radius: 999px; font-size: .72rem; font-weight: 600;
   width: fit-content;
+  border: none; font-family: inherit; cursor: pointer;
 }
+.sp-tagbadge:hover { filter: brightness(0.95); }
 .sp-tagbadge .icon { width: 12px; height: 12px; }
 .sp-tagbadge-seen { background: var(--accent-100); color: var(--accent-700); }
 .sp-tagbadge-unseen { background: var(--line); color: var(--ink-soft); }
