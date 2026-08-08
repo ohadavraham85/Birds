@@ -2,8 +2,8 @@
  * חיפוש, קיבוץ לפי משפחה, מספר תצפיות לכל מין, תמונות מהתצפיות, תיאור אישי
  * לכל מין, וקישור לתצפיות. */
 
-import { listSpeciesRows, addSpecies, setSpeciesDescription, listObservations, listAllMedia, saveMedia, findMediaByHash, getMedia } from '../db/repository';
-import { getSpeciesDetail, isSpeciesTarget } from '../lib/species-details-cache';
+import { listSpeciesRows, addSpecies, setSpeciesDescription, updateSpeciesDetails, listObservations, listAllMedia, saveMedia, findMediaByHash, getMedia } from '../db/repository';
+import { getSpeciesDetail, getManualSpeciesTag } from '../lib/species-details-cache';
 import { toast, showImageModal, fmtDateTime, showModal } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
 import { speciesNames, entriesOf, entryImages } from '../lib/observation';
@@ -17,19 +17,20 @@ import { viewModeToggleHtml, wireViewModeToggle, syncViewModeToggle, type ViewDi
 import { navigate } from '../main';
 import type { ViewParams } from './view';
 import type { SpeciesDetail, ObservationImage, SpeciesTag } from '../types';
-import { SPECIES_TAG_LABELS } from '../types';
+import { SPECIES_TAGS, SPECIES_TAG_LABELS } from '../types';
 
 /** Corner badge shown on a species card/tile for its birding-status (see
- * SpeciesTag). 'target' is the only manually-set state (Settings ← ניהול
- * רשימת המינים) and takes priority; otherwise the badge is auto-derived
- * from the species' own logged observation count, so every species always
- * has one: 0 → unseen, 1 → lifer, 2+ → seen. */
+ * SpeciesTag) — click it to set the status directly (any of the 4 states),
+ * or pick "אוטומטי" to clear the override and go back to deriving it from
+ * the species' own logged observation count: 0 → unseen, 1 → lifer, 2+ →
+ * seen. */
 const SPECIES_TAG_ICONS: Record<SpeciesTag, IconName> = {
   seen: 'check', unseen: 'eye', target: 'target', lifer: 'star',
 };
 
 function speciesTag(name: string): SpeciesTag {
-  if (isSpeciesTarget(name)) return 'target';
+  const manual = getManualSpeciesTag(name);
+  if (manual) return manual;
   const n = counts[name] || 0;
   if (n === 0) return 'unseen';
   if (n === 1) return 'lifer';
@@ -39,7 +40,7 @@ function speciesTag(name: string): SpeciesTag {
 function speciesTagBadgeHtml(name: string): string {
   const tag = speciesTag(name);
   const label = SPECIES_TAG_LABELS[tag];
-  return `<span class="sp-tagbadge sp-tagbadge-${tag}" title="${label}">${icon(SPECIES_TAG_ICONS[tag])} ${label}</span>`;
+  return `<button type="button" class="sp-tagbadge sp-tagbadge-${tag}" data-name="${escapeHtml(name)}" title="לחיצה לשינוי הסיווג — ${label}">${icon(SPECIES_TAG_ICONS[tag])} ${label}</button>`;
 }
 
 type SortMode = 'family' | 'alpha' | 'recent' | 'seen' | 'tag' | 'count' | 'details';
@@ -454,6 +455,8 @@ function tileHtml(name: string, mode: ViewDisplayMode): string {
 
 function onListClick(e: Event): void {
   const target = e.target as HTMLElement;
+  const tagBadge = target.closest<HTMLElement>('.sp-tagbadge');
+  if (tagBadge) { e.stopPropagation(); openSpeciesTagPicker(tagBadge.dataset.name!); return; }
   const infoBtn = target.closest<HTMLElement>('.species-info-btn');
   if (infoBtn) {
     e.stopPropagation();
@@ -492,6 +495,40 @@ function onListClick(e: Event): void {
     openKey = openKey === card.dataset.name ? null : card.dataset.name!;
     render();
   }
+}
+
+/** Lets the user set (or clear) a species' status badge directly from its
+ * card/tile, in addition to the same field's editor in Settings. */
+function openSpeciesTagPicker(name: string): void {
+  const current = getManualSpeciesTag(name);
+  const wrap = document.createElement('div');
+  wrap.className = 'gallery-assoc-modal';
+  wrap.innerHTML = `
+    <h3>סיווג "${escapeHtml(name)}"</h3>
+    <div class="gallery-assoc-list">
+      <button type="button" class="map-sheet-item" data-tag="">
+        <span class="map-sheet-item-species">אוטומטי (לפי מספר תצפיות)</span>
+      </button>
+      ${SPECIES_TAGS.map((tag) => `
+        <button type="button" class="map-sheet-item" data-tag="${tag}">
+          <span class="map-sheet-item-species">${icon(SPECIES_TAG_ICONS[tag])} ${SPECIES_TAG_LABELS[tag]}</span>
+          ${current === tag ? `<span class="map-sheet-item-date">${icon('check')} נבחר</span>` : ''}
+        </button>`).join('')}
+    </div>
+  `;
+  const closeModal = showModal(wrap);
+  wrap.querySelectorAll<HTMLElement>('[data-tag]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      closeModal();
+      void doSetSpeciesTag(name, (btn.dataset.tag || '') as SpeciesTag | '');
+    });
+  });
+}
+
+async function doSetSpeciesTag(name: string, tag: SpeciesTag | ''): Promise<void> {
+  await updateSpeciesDetails(name, { manualTag: tag });
+  toast(tag ? `"${name}" סווג כ${SPECIES_TAG_LABELS[tag]}` : `הסיווג של "${name}" הוחזר לאוטומטי`);
+  await activate();
 }
 
 /** "תמונה מהגלריה" — tags an existing not-yet-associated Gallery photo with

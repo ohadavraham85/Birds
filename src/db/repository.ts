@@ -11,6 +11,7 @@ import { entriesOf, speciesNames } from '../lib/observation';
 import type {
   Observation,
   SpeciesRow,
+  SpeciesTag,
   LocationRow,
   ProjectRow,
   TagRow,
@@ -278,19 +279,19 @@ export async function setSpeciesDescription(name: string, description: string): 
 }
 
 /** Edits a species' reference-data overrides (English/scientific/family
- * name — otherwise read from the bundled data/species-data.ts) and whether
- * it's manually marked as a birding target. An empty string clears an
- * override back to the bundled default. */
+ * name — otherwise read from the bundled data/species-data.ts) and its
+ * manual status-badge override. An empty string clears an override/tag back
+ * to its default (bundled data, or auto-derived from observation count). */
 export async function updateSpeciesDetails(
   name: string,
-  fields: { en?: string; sci?: string; family?: string; isTarget?: boolean },
+  fields: { en?: string; sci?: string; family?: string; manualTag?: SpeciesTag | '' },
 ): Promise<void> {
   const row = await db.species.get(name);
   if (!row) return;
   if (fields.en !== undefined) row.enOverride = fields.en || undefined;
   if (fields.sci !== undefined) row.sciOverride = fields.sci || undefined;
   if (fields.family !== undefined) row.familyOverride = fields.family || undefined;
-  if (fields.isTarget !== undefined) row.isTarget = fields.isTarget || undefined;
+  if (fields.manualTag !== undefined) row.manualTag = fields.manualTag || undefined;
   row.updatedAt = now();
   await db.species.put(row);
   emitChange();
