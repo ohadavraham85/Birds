@@ -15,14 +15,14 @@ import { fmtDistance } from './gps-track';
 import { getTrack, deleteTrack, toggleStarred } from '../db/repository';
 import { tagBadgesHtml, wireTagBadges } from './tag-badge';
 import { familyColor } from './family-color';
-import { SPECIES_DETAILS } from '../data/species-data';
+import { getSpeciesDetail } from './species-details-cache';
 import type { Observation } from '../types';
 
 /** Sets the --family-color custom property (read by .obs-card's left
  * accent border in CSS) from the primary species' family, so the journal
  * feed gets a bit of species-driven color variety at a glance. */
 function applyFamilyAccent(card: HTMLElement, o: Observation): void {
-  const family = SPECIES_DETAILS[primarySpecies(o)]?.family || '';
+  const family = getSpeciesDetail(primarySpecies(o)).family || '';
   const color = familyColor(family);
   if (color) card.style.setProperty('--family-color', color);
 }

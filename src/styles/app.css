@@ -1632,10 +1632,23 @@ a.media-link-icon:hover { color: var(--accent-700); }
 .sp-desc-field { margin: 12px 0 0; }
 .sp-desc-field textarea { min-height: 80px; font-size: .92rem; }
 
+.sp-tagbadge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: 999px; font-size: .72rem; font-weight: 600;
+  width: fit-content;
+}
+.sp-tagbadge .icon { width: 12px; height: 12px; }
+.sp-tagbadge-seen { background: var(--accent-100); color: var(--accent-700); }
+.sp-tagbadge-unseen { background: var(--line); color: var(--ink-soft); }
+.sp-tagbadge-target { background: var(--danger-soft); color: var(--danger); }
+.sp-tagbadge-lifer { background: var(--accent-50); color: #f5a623; }
+
 .sp-tile {
+  position: relative;
   background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
   overflow: hidden; box-shadow: var(--shadow);
 }
+.sp-tile > .sp-tagbadge { position: absolute; top: 8px; left: 8px; z-index: 2; box-shadow: var(--shadow); }
 .sp-tile:hover { box-shadow: var(--shadow-lg); }
 .sp-tile-head {
   display: flex; flex-direction: column; width: 100%; height: 100%;

@@ -7,7 +7,7 @@
  * באותו מצב סינון/גרפים וגלילה שהיו כשיצאת ממנו (למשל אחרי לחיצה על גרף). */
 
 import { listObservations, listSpeciesRows, listAllMedia } from '../db/repository';
-import { SPECIES_DETAILS } from '../data/species-data';
+import { getSpeciesDetail } from '../lib/species-details-cache';
 import { speciesNames, speciesLabel, entriesOf, entryImages } from '../lib/observation';
 import { getImageObjectUrl } from '../lib/media';
 import { escapeHtml } from '../lib/markdown';
@@ -97,7 +97,7 @@ function firstPhotoForSpecies(name: string): { img: ObservationImage; obsId: str
 function birdOfDayHtml(): string {
   const name = pickBirdOfDay();
   if (!name) return '';
-  const d = SPECIES_DETAILS[name] || { he: name, en: '', sci: '', family: '' };
+  const d = getSpeciesDetail(name);
   const seenCount = allObservations.filter((o) => speciesNames(o).includes(name)).length;
   return `
     <button type="button" class="bod-card" id="bod-card" data-name="${escapeHtml(name)}">
@@ -594,7 +594,7 @@ function familyChartHtml(observations: Observation[]): string {
   const familyCounts = new Map<string, number>();
   for (const o of observations) {
     for (const name of new Set(speciesNames(o))) {
-      const family = SPECIES_DETAILS[name]?.family || '(ללא משפחה)';
+      const family = getSpeciesDetail(name).family || '(ללא משפחה)';
       familyCounts.set(family, (familyCounts.get(family) || 0) + 1);
     }
   }
