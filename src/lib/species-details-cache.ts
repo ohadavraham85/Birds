@@ -1,12 +1,12 @@
 /* lib/species-details-cache.ts — in-memory mirror of the species master
- * list's reference-data overrides (English/scientific/family name) and
- * manual birding-status tag (seen/unseen/target/lifer), kept fresh via
- * onDataChanged. Card/tile rendering needs these synchronously while
- * drawing many species at once, same reasoning as lib/tags-cache.ts. */
+ * list's reference-data overrides (English/scientific/family name) and the
+ * manual "birding target" flag, kept fresh via onDataChanged. Card/tile
+ * rendering needs these synchronously while drawing many species at once,
+ * same reasoning as lib/tags-cache.ts. */
 
 import { listSpeciesRows, onDataChanged } from '../db/repository';
 import { SPECIES_DETAILS } from '../data/species-data';
-import type { SpeciesDetail, SpeciesRow, SpeciesTag } from '../types';
+import type { SpeciesDetail, SpeciesRow } from '../types';
 
 let cache = new Map<string, SpeciesRow>();
 
@@ -24,8 +24,8 @@ export function getSpeciesDetail(name: string): SpeciesDetail {
   };
 }
 
-export function getSpeciesTag(name: string): SpeciesTag | undefined {
-  return cache.get(name)?.tag;
+export function isSpeciesTarget(name: string): boolean {
+  return !!cache.get(name)?.isTarget;
 }
 
 /** Every family name currently in use, bundled or custom-entered via an
