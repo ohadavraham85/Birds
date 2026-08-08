@@ -9,7 +9,7 @@
 import {
   collection, doc, setDoc, onSnapshot, getDocs, query, limit, type Unsubscribe, type QuerySnapshot, type DocumentData,
 } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL, getBytes } from 'firebase/storage';
+import { ref, uploadBytes, getDownloadURL, getBytes, listAll, getMetadata } from 'firebase/storage';
 import { firebaseDb, firebaseStorage } from './app';
 import {
   onMutation, getSetting, setSetting,
@@ -167,6 +167,28 @@ export async function getFirebaseSyncCode(): Promise<string> {
 
 export function isFirebaseSyncActive(): boolean {
   return !!activeCode;
+}
+
+export interface StorageUsage {
+  bytes: number;
+  fileCount: number;
+}
+
+/** Sums the actual byte size of every photo currently sitting in this
+ * household's Firebase Storage `media` folder — both Gallery-orphan uploads
+ * and observation-attached photos live under the same path (see
+ * pushObservationMedia/pushMedia above), so this single listing covers all
+ * of them. Used by the Gallery tab to show real usage against the Storage
+ * quota, rather than an estimate from locally-cached blobs (which can
+ * undercount photos synced from other devices but never downloaded to this
+ * one). Throws if the listing fails (e.g. Storage rules don't grant `list`
+ * on this path) — the caller decides how to surface that. */
+export async function getMediaStorageUsage(): Promise<StorageUsage | null> {
+  if (!activeCode) return null;
+  const listing = await listAll(ref(firebaseStorage(), `households/${activeCode}/media`));
+  const metas = await Promise.all(listing.items.map((item) => getMetadata(item)));
+  const bytes = metas.reduce((sum, m) => sum + (m.size || 0), 0);
+  return { bytes, fileCount: listing.items.length };
 }
 
 export async function configureFirebaseSync(rawCode: string): Promise<void> {

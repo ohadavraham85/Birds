@@ -10,6 +10,7 @@
 import { listAllMedia, deleteMediaAndUnlink, saveMedia, associateMediaWithObservation, listObservations, listSpecies, findMediaByHash, getSetting, setSetting } from '../db/repository';
 import { getMediaObjectUrl, hashBlob } from '../lib/media';
 import { resolvePhotoDate } from '../lib/exif';
+import { isFirebaseSyncActive, getMediaStorageUsage } from '../firebase/firestore-sync';
 import { toast, confirmDialog, showModal, fmtDateTime } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
 import { speciesLabel, entriesOf } from '../lib/observation';
@@ -56,6 +57,13 @@ export function init(el: HTMLElement): void {
         <button type="button" class="btn btn-primary" id="gallery-upload-btn">${icon('upload')} העלאת תמונות</button>
       </div>
       <input type="file" id="gallery-upload-input" accept="image/*" multiple hidden>
+    </div>
+    <div class="gallery-storage-card" id="gallery-storage-card" hidden>
+      <div class="gallery-storage-head">
+        <span id="gallery-storage-label"></span>
+        <span id="gallery-storage-pct"></span>
+      </div>
+      <div class="gallery-storage-bar"><div class="gallery-storage-fill" id="gallery-storage-fill"></div></div>
     </div>
     <div class="seg-toggle" id="gallery-assoc-filter">
       <button type="button" class="seg-btn active" data-filter="all">הכל</button>
@@ -150,6 +158,52 @@ export async function activate(): Promise<void> {
   await buildOwnerIndex();
   applyFilter();
   renderGrid();
+  void refreshStorageUsage();
+}
+
+/** Firebase Storage's no-cost tier — 5 GiB. Beyond this, a Blaze-plan
+ * project starts incurring actual storage charges, which is exactly what
+ * this card exists to help avoid running into by surprise. */
+const STORAGE_FREE_TIER_BYTES = 5 * 1024 ** 3;
+
+function fmtStorageBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 ** 2) return `${(n / 1024).toFixed(1)} KB`;
+  if (n < 1024 ** 3) return `${(n / 1024 ** 2).toFixed(1)} MB`;
+  return `${(n / 1024 ** 3).toFixed(2)} GB`;
+}
+
+/** Fetches the real Firebase Storage usage for this household's photos (via
+ * getMediaStorageUsage — a live listing of the Storage bucket, not just a
+ * local estimate) and renders it as a labeled progress bar against the
+ * no-cost tier limit. Hidden entirely when sync isn't active, since without
+ * it there's no Firebase Storage usage to report. Runs fire-and-forget from
+ * activate() so a slow/failed listing never blocks the grid from showing. */
+async function refreshStorageUsage(): Promise<void> {
+  const card = container.querySelector<HTMLElement>('#gallery-storage-card');
+  if (!card) return;
+  if (!isFirebaseSyncActive()) { card.hidden = true; return; }
+  card.hidden = false;
+  const label = qs(container, '#gallery-storage-label');
+  const pctEl = qs(container, '#gallery-storage-pct');
+  const fill = qs<HTMLElement>(container, '#gallery-storage-fill');
+  label.textContent = 'מחשב שימוש באחסון ב-Firebase...';
+  pctEl.textContent = '';
+  fill.style.width = '0%';
+  fill.classList.remove('warn', 'danger');
+  try {
+    const usage = await getMediaStorageUsage();
+    if (!usage) { card.hidden = true; return; }
+    const pct = Math.min(100, (usage.bytes / STORAGE_FREE_TIER_BYTES) * 100);
+    label.textContent = `${fmtStorageBytes(usage.bytes)} מתוך ${fmtStorageBytes(STORAGE_FREE_TIER_BYTES)} (${usage.fileCount} תמונות ב-Firebase)`;
+    pctEl.textContent = `${pct.toFixed(1)}%`;
+    fill.style.width = `${pct}%`;
+    fill.classList.toggle('warn', pct >= 70 && pct < 90);
+    fill.classList.toggle('danger', pct >= 90);
+  } catch (err) {
+    console.warn('Firebase: could not compute Storage usage', err);
+    label.textContent = 'לא ניתן לחשב שימוש באחסון כרגע';
+  }
 }
 
 /** Recomputes `items` (the browsable/rendered subset) from `allItems` per
