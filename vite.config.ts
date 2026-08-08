@@ -43,6 +43,19 @@ export default defineConfig({
           { src: 'icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
           { src: 'icons/icon.svg', sizes: 'any', type: 'image/svg+xml' },
         ],
+        // Lets the OS "share" sheet (e.g. selecting photos in the phone's own
+        // Gallery app and tapping "Share") list this app as a target — the
+        // shared photos land straight in the Gallery tab. Handled by sw.ts
+        // (only a service worker can read a share-target POST body) + the
+        // #share-target pickup in main.ts/gallery.ts.
+        share_target: {
+          action: 'share-target',
+          method: 'POST',
+          enctype: 'multipart/form-data',
+          params: {
+            files: [{ name: 'photos', accept: ['image/*'] }],
+          },
+        },
       },
       injectManifest: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],

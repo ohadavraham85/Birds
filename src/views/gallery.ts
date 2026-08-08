@@ -17,6 +17,7 @@ import { speciesLabel, entriesOf } from '../lib/observation';
 import { icon } from '../lib/icons';
 import { qs } from '../lib/dom';
 import { navigate } from '../main';
+import { SHARE_TARGET_CACHE } from '../lib/share-target';
 import type { MediaRecord, Observation, SpeciesEntry } from '../types';
 
 /** "צולם ב-..." line, or null if the photo has no known capture date at all
@@ -110,6 +111,16 @@ async function onUpload(e: Event): Promise<void> {
   const files = input.files ? Array.from(input.files) : [];
   input.value = '';
   if (!files.length) return;
+  const { added, skipped } = await importFiles(files);
+  if (skipped) toast(added ? `הועלו ${added} תמונות, ${skipped} דולגו (כבר קיימות בגלריה)` : `${skipped} תמונות דולגו — כבר קיימות בגלריה`);
+  else toast(`הועלו ${added} תמונות לגלריה`);
+  await activate();
+}
+
+/** Shared by the upload button and the OS share-target pickup (see
+ * importSharedPhotos) — hashes + dedups each file and saves it as an orphan
+ * (no `obsId`) media row, same as any other Gallery upload. */
+async function importFiles(files: File[]): Promise<{ added: number; skipped: number }> {
   await ensureHashBackfill();
   let added = 0;
   let skipped = 0;
@@ -123,9 +134,35 @@ async function onUpload(e: Event): Promise<void> {
     });
     added++;
   }
-  if (skipped) toast(added ? `הועלו ${added} תמונות, ${skipped} דולגו (כבר קיימות בגלריה)` : `${skipped} תמונות דולגו — כבר קיימות בגלריה`);
-  else toast(`הועלו ${added} תמונות לגלריה`);
-  await activate();
+  return { added, skipped };
+}
+
+/** Picks up photos shared into the app via the OS share sheet — sw.ts's
+ * share-target handler stashes them into the Cache API (the only way to get
+ * a POST body's files out to the client) before redirecting here; called
+ * once from main.ts on boot when that redirect's #share-target hash is
+ * present. Returns how many were actually added, so the caller can decide
+ * whether it's worth navigating to the Gallery tab. */
+export async function importSharedPhotos(): Promise<number> {
+  if (!('caches' in window)) return 0;
+  const cache = await caches.open(SHARE_TARGET_CACHE);
+  const keys = await cache.keys();
+  if (!keys.length) return 0;
+  const files: File[] = [];
+  for (const req of keys) {
+    const res = await cache.match(req);
+    if (!res) continue;
+    const blob = await res.blob();
+    const name = decodeURIComponent(res.headers.get('X-Share-Name') || 'shared-image');
+    const lastModified = Number(res.headers.get('X-Share-Last-Modified')) || Date.now();
+    files.push(new File([blob], name, { type: blob.type, lastModified }));
+  }
+  await Promise.all(keys.map((k) => cache.delete(k)));
+  if (!files.length) return 0;
+  const { added, skipped } = await importFiles(files);
+  if (added) toast(skipped ? `${added} תמונות שותפו לגלריה (${skipped} דולגו — כבר קיימות)` : `${added} תמונות שותפו לגלריה`);
+  else if (skipped) toast('התמונות ששותפו כבר קיימות בגלריה');
+  return added;
 }
 
 let hashBackfillDone = false;

@@ -16,6 +16,7 @@ import { refreshTagsCache } from './lib/tags-cache';
 import { refreshSpeciesDetailsCache } from './lib/species-details-cache';
 import { haptic } from './lib/haptics';
 import { isPatternLockEnabled, renderLockScreen } from './lib/pattern-lock';
+import { SHARE_TARGET_HASH } from './lib/share-target';
 import type { View, ViewParams } from './views/view';
 
 initTheme();
@@ -282,8 +283,17 @@ async function init(): Promise<void> {
   // thing the hash fragment is meant to drive; per-view params (which
   // observation, which filter) live only in memory and can't survive a
   // reload anyway, so reopening whatever view the hash names would show a
-  // stale/empty screen instead of a working one.
-  await showView(HOME_VIEW, undefined, 'replace');
+  // stale/empty screen instead of a working one. The one exception: the
+  // service worker's share-target redirect (see sw.ts + gallery.ts's
+  // importSharedPhotos) — that hash means photos are waiting in the Cache
+  // API to be picked up, so land on the Gallery tab instead once they are.
+  if (location.hash === SHARE_TARGET_HASH) {
+    history.replaceState(null, '', location.pathname + location.search);
+    await galleryView.importSharedPhotos();
+    await showView('gallery', undefined, 'replace');
+  } else {
+    await showView(HOME_VIEW, undefined, 'replace');
+  }
 }
 
 void init().catch((err: unknown) => {
