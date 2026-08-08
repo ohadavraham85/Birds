@@ -56,8 +56,10 @@ export interface Observation {
   updatedAt: string;
 }
 
-/** A manual birding-status badge for a species — independent of whether the
- * app has actually logged any observations of it, and independent of the
+/** A species' birding-status badge, shown on its card in the "מינים" tab.
+ * 'target' is the only manually-set state (see SpeciesRow.isTarget) — the
+ * other three are always auto-derived from the species' logged observation
+ * count (0 → unseen, 1 → lifer, 2+ → seen), independent of the
  * general-purpose TagRow system (which tags observations, not species). */
 export const SPECIES_TAGS = ['seen', 'unseen', 'target', 'lifer'] as const;
 export type SpeciesTag = typeof SPECIES_TAGS[number];
@@ -79,8 +81,9 @@ export interface SpeciesRow {
   enOverride?: string;
   sciOverride?: string;
   familyOverride?: string;
-  /** See SpeciesTag. */
-  tag?: SpeciesTag;
+  /** Manually marks this species as a birding target — overrides the
+   * otherwise auto-derived seen/unseen/lifer badge (see SpeciesTag). */
+  isTarget?: boolean;
 }
 
 /** Master locations-list entry: a saved place name with canonical

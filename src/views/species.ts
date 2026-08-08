@@ -3,7 +3,7 @@
  * לכל מין, וקישור לתצפיות. */
 
 import { listSpeciesRows, addSpecies, setSpeciesDescription, listObservations, listAllMedia, saveMedia, findMediaByHash, getMedia } from '../db/repository';
-import { getSpeciesDetail, getSpeciesTag } from '../lib/species-details-cache';
+import { getSpeciesDetail, isSpeciesTarget } from '../lib/species-details-cache';
 import { toast, showImageModal, fmtDateTime, showModal } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
 import { speciesNames, entriesOf, entryImages } from '../lib/observation';
@@ -19,15 +19,25 @@ import type { ViewParams } from './view';
 import type { SpeciesDetail, ObservationImage, SpeciesTag } from '../types';
 import { SPECIES_TAG_LABELS } from '../types';
 
-/** Corner badge shown on a species card/tile for its manual birding-status
- * tag (see SpeciesTag) — set in Settings ← ניהול רשימת המינים. */
+/** Corner badge shown on a species card/tile for its birding-status (see
+ * SpeciesTag). 'target' is the only manually-set state (Settings ← ניהול
+ * רשימת המינים) and takes priority; otherwise the badge is auto-derived
+ * from the species' own logged observation count, so every species always
+ * has one: 0 → unseen, 1 → lifer, 2+ → seen. */
 const SPECIES_TAG_ICONS: Record<SpeciesTag, IconName> = {
   seen: 'check', unseen: 'eye', target: 'target', lifer: 'star',
 };
 
+function speciesTag(name: string): SpeciesTag {
+  if (isSpeciesTarget(name)) return 'target';
+  const n = counts[name] || 0;
+  if (n === 0) return 'unseen';
+  if (n === 1) return 'lifer';
+  return 'seen';
+}
+
 function speciesTagBadgeHtml(name: string): string {
-  const tag = getSpeciesTag(name);
-  if (!tag) return '';
+  const tag = speciesTag(name);
   const label = SPECIES_TAG_LABELS[tag];
   return `<span class="sp-tagbadge sp-tagbadge-${tag}" title="${label}">${icon(SPECIES_TAG_ICONS[tag])} ${label}</span>`;
 }
