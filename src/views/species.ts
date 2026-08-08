@@ -3,7 +3,7 @@
  * לכל מין, וקישור לתצפיות. */
 
 import { listSpeciesRows, addSpecies, setSpeciesDescription, listObservations, listAllMedia, saveMedia, findMediaByHash, getMedia } from '../db/repository';
-import { SPECIES_DETAILS } from '../data/species-data';
+import { getSpeciesDetail, getSpeciesTag } from '../lib/species-details-cache';
 import { toast, showImageModal, fmtDateTime, showModal } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
 import { speciesNames, entriesOf, entryImages } from '../lib/observation';
@@ -11,12 +11,26 @@ import { getImageObjectUrl, hashBlob } from '../lib/media';
 import { resolvePhotoDate } from '../lib/exif';
 import { pickFromGalleryForSpecies } from '../lib/photo-picker';
 import { qs, input, select } from '../lib/dom';
-import { icon } from '../lib/icons';
+import { icon, type IconName } from '../lib/icons';
 import { speciesInfoButtonHtml, openSpeciesInfoModal } from '../lib/species-info';
 import { viewModeToggleHtml, wireViewModeToggle, syncViewModeToggle, type ViewDisplayMode } from '../lib/view-mode';
 import { navigate } from '../main';
 import type { ViewParams } from './view';
-import type { SpeciesDetail, ObservationImage } from '../types';
+import type { SpeciesDetail, ObservationImage, SpeciesTag } from '../types';
+import { SPECIES_TAG_LABELS } from '../types';
+
+/** Corner badge shown on a species card/tile for its manual birding-status
+ * tag (see SpeciesTag) — set in Settings ← ניהול רשימת המינים. */
+const SPECIES_TAG_ICONS: Record<SpeciesTag, IconName> = {
+  seen: 'check', unseen: 'eye', target: 'target', lifer: 'star',
+};
+
+function speciesTagBadgeHtml(name: string): string {
+  const tag = getSpeciesTag(name);
+  if (!tag) return '';
+  const label = SPECIES_TAG_LABELS[tag];
+  return `<span class="sp-tagbadge sp-tagbadge-${tag}" title="${label}">${icon(SPECIES_TAG_ICONS[tag])} ${label}</span>`;
+}
 
 type SortMode = 'family' | 'alpha' | 'recent' | 'seen' | 'tag' | 'count' | 'details';
 type SortDir = 'asc' | 'desc';
@@ -149,7 +163,7 @@ export async function activate(): Promise<void> {
 }
 
 function detailsFor(name: string): SpeciesDetail {
-  return SPECIES_DETAILS[name] || { he: name, en: '', sci: '', family: '' };
+  return getSpeciesDetail(name);
 }
 
 function matches(name: string): boolean {
@@ -396,6 +410,7 @@ function cardHtml(name: string): string {
         <div class="sp-main">
           <span class="sp-he">${escapeHtml(d.he)}</span>
           ${d.en ? `<span class="sp-en">${escapeHtml(d.en)}</span>` : ''}
+          ${speciesTagBadgeHtml(name)}
         </div>
         <div class="sp-side">
           ${n ? `<button class="badge badge-link act-obs" data-name="${escapeHtml(name)}" title="הצגת התצפיות של המין">${n} תצפיות ›</button>` : ''}
@@ -414,6 +429,7 @@ function tileHtml(name: string, mode: ViewDisplayMode): string {
   const open = openKey === name;
   return `
     <div class="sp-tile${open ? ' sp-tile-open' : ''}" data-name="${escapeHtml(name)}"${open ? ' style="grid-column:1/-1"' : ''}>
+      ${speciesTagBadgeHtml(name)}
       <button type="button" class="sp-tile-head" data-name="${escapeHtml(name)}">
         <div class="sp-tile-media obs-tile-media" data-name="${escapeHtml(name)}">${icon('bird', 'obs-tile-fallback-icon')}</div>
         <div class="sp-tile-info obs-tile-info">

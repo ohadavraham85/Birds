@@ -13,6 +13,7 @@ import { hydrateIcons, icon, type IconName } from './lib/icons';
 import { initFirebaseSyncFromSettings, onFirebaseSyncStatus, type FirebaseSyncStatus } from './firebase/firestore-sync';
 import { checkAndNotify } from './lib/notifications';
 import { refreshTagsCache } from './lib/tags-cache';
+import { refreshSpeciesDetailsCache } from './lib/species-details-cache';
 import { haptic } from './lib/haptics';
 import { isPatternLockEnabled, renderLockScreen } from './lib/pattern-lock';
 import type { View, ViewParams } from './views/view';
@@ -249,6 +250,7 @@ async function init(): Promise<void> {
   hydrateIcons(document.body);
   await seedSpeciesIfEmpty(SPECIES_SEED, SPECIES_SEED_VERSION);
   await refreshTagsCache();
+  await refreshSpeciesDetailsCache();
 
   for (const [name, view] of Object.entries(VIEWS)) {
     view.init(document.getElementById(`view-${name}`) as HTMLElement);

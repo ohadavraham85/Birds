@@ -56,6 +56,15 @@ export interface Observation {
   updatedAt: string;
 }
 
+/** A manual birding-status badge for a species — independent of whether the
+ * app has actually logged any observations of it, and independent of the
+ * general-purpose TagRow system (which tags observations, not species). */
+export const SPECIES_TAGS = ['seen', 'unseen', 'target', 'lifer'] as const;
+export type SpeciesTag = typeof SPECIES_TAGS[number];
+export const SPECIES_TAG_LABELS: Record<SpeciesTag, string> = {
+  seen: 'נצפה', unseen: 'לא נצפה', target: 'מין מטרה', lifer: 'לייפר',
+};
+
 /** Master species-list entry (name only; details come from the bundle). */
 export interface SpeciesRow {
   name: string;
@@ -63,6 +72,15 @@ export interface SpeciesRow {
   deleted?: boolean;
   /** User-written free-text description/notes for this species. */
   description?: string;
+  /** Manual overrides for the bundled reference data (data/species-data.ts)
+   * — set when editing a species' details in Settings. Falls back to the
+   * bundled value (or nothing, for a species missing from the bundle
+   * entirely) when absent. */
+  enOverride?: string;
+  sciOverride?: string;
+  familyOverride?: string;
+  /** See SpeciesTag. */
+  tag?: SpeciesTag;
 }
 
 /** Master locations-list entry: a saved place name with canonical

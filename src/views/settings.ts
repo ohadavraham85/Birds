@@ -2,7 +2,7 @@
  * ייבוא תמונות / התראות / נתונים מקומיים), כל קטגוריה נפתחת כמסך משלה. */
 
 import {
-  listSpecies, addSpecies, deleteSpecies, listSpeciesRows,
+  listSpecies, addSpecies, deleteSpecies, listSpeciesRows, updateSpeciesDetails,
   listLocationRows, addLocation, updateLocationCoords, deleteLocation, seedLocationsFromObservations,
   listTagRows, addTag, updateTag, deleteTag,
   listObserverRows, addObserver, deleteObserver,
@@ -12,6 +12,7 @@ import {
   putObservationRaw, saveMedia, mediaForObservation,
   listFiles, saveFile, getFile, deleteFile,
 } from '../db/repository';
+import { getSpeciesDetail, listKnownFamilies } from '../lib/species-details-cache';
 import type { DuplicateGroup } from '../db/repository';
 import { getFirebaseSyncCode, configureFirebaseSync, onFirebaseSyncStatus, isFirebaseSyncActive, forceResyncListsFromCloud, retryMediaUploads, pullAllObservationMedia, type FirebaseSyncStatus } from '../firebase/firestore-sync';
 import {
@@ -35,8 +36,8 @@ import {
   setTheme, setAccent, setFontColor, setFontSize, setFontWeight, setDisplayMode,
   type ThemeId, type AccentId, type FontColorId, type FontSizeId, type FontWeightId, type DisplayModeId,
 } from '../lib/theme';
-import type { Observation, LocationRow, TagRow, TagIconName, ObserverRow } from '../types';
-import { TAG_ICON_NAMES } from '../types';
+import type { Observation, LocationRow, TagRow, TagIconName, ObserverRow, SpeciesTag } from '../types';
+import { TAG_ICON_NAMES, SPECIES_TAGS, SPECIES_TAG_LABELS } from '../types';
 
 const TAG_ICON_LABELS: Record<TagIconName, string> = {
   tagRaptor: 'דורסים', tagOwl: 'ינשופים', tagHeron: 'אנפתאים/שיטנים', tagDuck: 'עופות מים',
@@ -809,6 +810,7 @@ async function renderSpeciesManageList(): Promise<void> {
           ? `<button type="button" class="rename-save" data-name="${escapeHtml(r.name)}" title="שמירת שם" aria-label="שמירת שם">${icon('check')}</button>
              <button type="button" class="rename-cancel" title="ביטול" aria-label="ביטול">✕</button>`
           : `<button type="button" class="rename" data-name="${escapeHtml(r.name)}" title="שינוי שם / מיזוג" aria-label="שינוי שם / מיזוג">${icon('edit')}</button>`}
+        <button type="button" class="sp-edit-details" data-name="${escapeHtml(r.name)}" title="עריכת פרטים ותגית" aria-label="עריכת פרטים ותגית">${icon('document')}</button>
         <button type="button" class="del" data-name="${escapeHtml(r.name)}" title="הסרה מהרשימה" aria-label="הסרה מהרשימה">${icon('trash')}</button>
       </div>`;
     }).join('')
@@ -858,6 +860,11 @@ async function onSpeciesListClick(e: Event): Promise<void> {
     toast(`"${oldName}" מוזג ל-"${newName}" (${n} תצפיות עודכנו)`);
     return;
   }
+  const editBtn = target.closest<HTMLElement>('.sp-edit-details');
+  if (editBtn) {
+    await openSpeciesDetailsEditor(editBtn.dataset.name!);
+    return;
+  }
   const btn = target.closest<HTMLElement>('.del');
   if (!btn) return;
   const name = btn.dataset.name!;
@@ -865,6 +872,65 @@ async function onSpeciesListClick(e: Event): Promise<void> {
   await deleteSpecies(name);
   await renderSpeciesManageList();
   toast(`"${name}" הוסר מהרשימה`);
+}
+
+/** Full-details editor for a species: English/scientific name and family
+ * (all otherwise read from the bundled reference data — an override here
+ * takes precedence, see lib/species-details-cache.ts), plus the manual
+ * birding-status tag shown as a badge on the species card in the "מינים" tab. */
+async function openSpeciesDetailsEditor(name: string): Promise<void> {
+  const d = getSpeciesDetail(name);
+  const rows = await listSpeciesRows();
+  const currentTag = rows.find((r) => r.name === name)?.tag || '';
+  const families = listKnownFamilies();
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal bulk-edit-modal">
+      <h3>עריכת פרטי מין — ${escapeHtml(name)}</h3>
+      <div class="field">
+        <label for="spd-en">שם אנגלי</label>
+        <input type="text" id="spd-en" dir="ltr" value="${escapeHtml(d.en)}">
+      </div>
+      <div class="field">
+        <label for="spd-sci">שם מדעי</label>
+        <input type="text" id="spd-sci" dir="ltr" value="${escapeHtml(d.sci)}">
+      </div>
+      <div class="field">
+        <label for="spd-family">משפחה</label>
+        <select id="spd-family">
+          <option value="">ללא משפחה</option>
+          ${families.map((f) => `<option value="${escapeHtml(f)}"${f === d.family ? ' selected' : ''}>${escapeHtml(f)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field">
+        <label for="spd-tag">תגית</label>
+        <select id="spd-tag">
+          <option value="">ללא תגית</option>
+          ${SPECIES_TAGS.map((t) => `<option value="${t}"${t === currentTag ? ' selected' : ''}>${SPECIES_TAG_LABELS[t]}</option>`).join('')}
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" id="spd-save">שמירה</button>
+        <button class="btn" id="spd-cancel">ביטול</button>
+      </div>
+    </div>`;
+  document.getElementById('modal-root')!.appendChild(backdrop);
+  const close = (): void => backdrop.remove();
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+  qs(backdrop, '#spd-cancel').addEventListener('click', close);
+  qs(backdrop, '#spd-save').addEventListener('click', () => {
+    void (async () => {
+      const en = qs<HTMLInputElement>(backdrop, '#spd-en').value.trim();
+      const sci = qs<HTMLInputElement>(backdrop, '#spd-sci').value.trim();
+      const family = qs<HTMLSelectElement>(backdrop, '#spd-family').value;
+      const tag = qs<HTMLSelectElement>(backdrop, '#spd-tag').value as SpeciesTag | '';
+      await updateSpeciesDetails(name, { en, sci, family, tag });
+      close();
+      toast(`פרטי "${name}" עודכנו`);
+    })();
+  });
 }
 
 /* ---------- species duplicate finder / merge ---------- */
