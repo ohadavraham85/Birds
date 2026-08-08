@@ -847,7 +847,11 @@ export async function associateMediaWithObservation(mediaId: string, obsId: stri
   if (!media.obsId) await db.media.put({ ...media, obsId });
   const images = entry.images ?? [];
   if (images.some((i) => i.localId === mediaId)) return;
-  const newEntries = entries.map((e, i) => (i === entryIndex ? { ...e, images: [...images, { localId: mediaId, name: media.name }] } : e));
+  // Carry over remoteId when the orphan photo was already uploaded to
+  // Firebase Storage — otherwise pushObservationMedia sees a bare `localId`
+  // with no known remote URL and needlessly re-uploads the same blob to the
+  // exact same Storage path it's already sitting at.
+  const newEntries = entries.map((e, i) => (i === entryIndex ? { ...e, images: [...images, { localId: mediaId, name: media.name, remoteId: media.remoteId }] } : e));
   await saveObservation({ ...obs!, entries: newEntries, updatedAt: '' });
 }
 
