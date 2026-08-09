@@ -40,6 +40,10 @@ let items: MediaRecord[] = [];
 /** Which photos to show: all, only ones that carry SOME association (an
  * observation link or a direct species tag), or only ones with neither. */
 let assocFilter: 'all' | 'assoc' | 'orphan' = 'all';
+/** Free-text filter — matched against the photo's species (from its
+ * observation entry or a direct tag), the owning observation's location, and
+ * the original file name (see matchesQuery). */
+let query = '';
 let lightboxIndex = -1;
 let closeLightbox: (() => void) | null = null;
 
@@ -58,6 +62,9 @@ export function init(el: HTMLElement): void {
         <button type="button" class="btn btn-primary" id="gallery-upload-btn">${icon('upload')} העלאת תמונות</button>
       </div>
       <input type="file" id="gallery-upload-input" accept="image/*" multiple hidden>
+    </div>
+    <div class="filter-bar">
+      <input type="search" id="gallery-q" class="filter-search" placeholder="חיפוש לפי מין / מיקום / שם קובץ...">
     </div>
     <div class="gallery-storage-card" id="gallery-storage-card" hidden>
       <div class="gallery-storage-head">
@@ -84,6 +91,12 @@ export function init(el: HTMLElement): void {
   `;
   qs(container, '#gallery-upload-btn').addEventListener('click', () => qs(container, '#gallery-upload-input').click());
   qs<HTMLInputElement>(container, '#gallery-upload-input').addEventListener('change', (e) => void onUpload(e));
+
+  qs<HTMLInputElement>(container, '#gallery-q').addEventListener('input', (e) => {
+    query = (e.target as HTMLInputElement).value;
+    applyFilter();
+    renderGrid();
+  });
 
   qs(container, '#gallery-assoc-filter').addEventListener('click', (e) => {
     const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('.seg-btn');
@@ -263,9 +276,21 @@ async function refreshStorageUsage(): Promise<void> {
  * (truly untouched), rather than being cluttered by ones already tagged
  * with a species but not yet filed into an observation. */
 function applyFilter(): void {
-  items = assocFilter === 'all' ? allItems
+  const byAssoc = assocFilter === 'all' ? allItems
     : assocFilter === 'assoc' ? allItems.filter((m) => !!m.obsId || !!m.species)
     : allItems.filter((m) => !m.obsId && !m.species);
+  items = query.trim() ? byAssoc.filter(matchesQuery) : byAssoc;
+}
+
+/** Matches the search box's free text against a photo's species (from its
+ * observation entry if attached, otherwise a direct tag), the owning
+ * observation's location name, and the original file name. */
+function matchesQuery(m: MediaRecord): boolean {
+  const q = query.trim().toLowerCase();
+  const owner = ownerInfo(m);
+  const species = owner?.species || m.species || '';
+  const location = owner?.obs.locationName || '';
+  return `${species} ${location} ${m.name || ''}`.toLowerCase().includes(q);
 }
 
 /** localId -> the observation/species entry that references it, for every
