@@ -721,6 +721,12 @@ textarea { min-height: 130px; resize: vertical; white-space: pre-wrap; line-heig
 .sp-swipe-wrap { position: relative; border-radius: 10px; margin-bottom: 16px; }
 .sp-swipe-wrap:last-child { margin-bottom: 0; }
 .sp-swipe-front { position: relative; z-index: 1; touch-action: pan-y; }
+/* .sp-swipe-front's own z-index makes it a self-contained stacking context,
+ * so its .sp-edit-menu dropdown can never outrank a row below it in the list
+ * no matter how high the menu's own z-index is set — lift the whole row
+ * above its siblings for as long as that menu is open (see closeEditMenu()
+ * in form.ts, which is the single place responsible for taking this back off). */
+.sp-swipe-front.sp-menu-open { z-index: 50; }
 .sp-swipe-delete {
   position: absolute; top: 0; bottom: 0; left: 0; width: 84px;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
