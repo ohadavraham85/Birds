@@ -1123,6 +1123,20 @@ async function renderRowThumbs(row: HTMLElement): Promise<void> {
 
 /* ---------- save ---------- */
 
+/** Races a promise against a timeout so a stuck IndexedDB transaction (e.g.
+ * contending with a Firebase sync write) surfaces as a clear, retryable
+ * error after a long GPS session instead of leaving the save button looking
+ * permanently unresponsive with no feedback at all — the underlying
+ * operation isn't actually cancelled, but `saveObservation`/`saveTrack` are
+ * plain upserts keyed by this form's stable `obsId`, so a retry (or the
+ * original call quietly finishing late) is always safe to land twice. */
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(message)), ms)),
+  ]);
+}
+
 async function onSave(e: Event): Promise<void> {
   e.preventDefault();
   const rowEls = Array.from(container.querySelectorAll<HTMLElement>('#species-rows .sp-entry'));
@@ -1134,67 +1148,88 @@ async function onSave(e: Event): Promise<void> {
     return;
   }
 
-  const entries: SpeciesEntry[] = [];
-  const keptIds = new Set<string>();
-  for (const row of rowEls) {
-    const species = row.querySelector<HTMLInputElement>('.sp-input')!.value.trim();
-    if (!species) continue;
-    if (!speciesCache.includes(species)) {
-      toast(`"${species}" אינו ברשימת המינים — בחרו מין מהרשימה (ניתן להוסיף בטאב "מינים")`, true, 5000);
-      return;
-    }
-    const quantity = Math.max(1, parseInt(row.querySelector<HTMLInputElement>('.sp-qty')!.value, 10) || 1);
-    const note = row.querySelector<HTMLInputElement>('.sp-note')!.value.trim();
-    const st = rowImages.get(row)!;
-    const images: ObservationImage[] = [...st.kept];
-    for (const p of st.pending) {
-      const { date, source } = await resolvePhotoDate(p.file);
-      await saveMedia({
-        id: p.id, obsId, name: p.file.name || 'image', mime: p.file.type, blob: p.file,
-        takenAt: date.toISOString(), takenAtSource: source,
-      });
-      images.push({ localId: p.id, name: p.file.name || 'image' });
-    }
-    images.forEach((i) => i.localId && keptIds.add(i.localId));
-    const entry: SpeciesEntry = { species, quantity };
-    if (note) entry.note = note;
-    if (images.length) entry.images = images;
-    entries.push(entry);
-  }
-  if (!entries.length) { toast('יש לבחור לפחות מין ציפור אחד', true); return; }
+  const saveBtn = qs<HTMLButtonElement>(container, '#save-btn');
+  if (saveBtn.disabled) return; // already saving — ignore a double-tap instead of racing two saves
+  const originalLabel = saveBtn.innerHTML;
+  saveBtn.disabled = true;
+  saveBtn.innerHTML = `${icon('save')} שומר...`;
 
-  // on edit: delete media blobs that were removed
-  if (editId) {
-    const existing = await mediaForObservation(obsId);
-    for (const m of existing) {
-      if (!keptIds.has(m.id)) await deleteMedia(m.id);
+  // Everything from here on used to run with no failure handling at all: an
+  // exception (a full IndexedDB, a stuck transaction, anything) became an
+  // unhandled promise rejection that the submit handler swallowed silently —
+  // the button just looked dead, with zero indication anything went wrong.
+  // The draft (species/track already autosaved every couple of seconds) is
+  // deliberately left untouched on failure, so it's still resumable from the
+  // Home screen's draft banner even if this save attempt didn't make it.
+  try {
+    const entries: SpeciesEntry[] = [];
+    const keptIds = new Set<string>();
+    for (const row of rowEls) {
+      const species = row.querySelector<HTMLInputElement>('.sp-input')!.value.trim();
+      if (!species) continue;
+      if (!speciesCache.includes(species)) {
+        toast(`"${species}" אינו ברשימת המינים — בחרו מין מהרשימה (ניתן להוסיף בטאב "מינים")`, true, 5000);
+        return;
+      }
+      const quantity = Math.max(1, parseInt(row.querySelector<HTMLInputElement>('.sp-qty')!.value, 10) || 1);
+      const note = row.querySelector<HTMLInputElement>('.sp-note')!.value.trim();
+      const st = rowImages.get(row)!;
+      const images: ObservationImage[] = [...st.kept];
+      for (const p of st.pending) {
+        const { date, source } = await resolvePhotoDate(p.file);
+        await saveMedia({
+          id: p.id, obsId, name: p.file.name || 'image', mime: p.file.type, blob: p.file,
+          takenAt: date.toISOString(), takenAtSource: source,
+        });
+        images.push({ localId: p.id, name: p.file.name || 'image' });
+      }
+      images.forEach((i) => i.localId && keptIds.add(i.localId));
+      const entry: SpeciesEntry = { species, quantity };
+      if (note) entry.note = note;
+      if (images.length) entry.images = images;
+      entries.push(entry);
     }
-  }
+    if (!entries.length) { toast('יש לבחור לפחות מין ציפור אחד', true); return; }
 
-  const prev = editId ? await getObservation(editId) : null;
-  const obs: Observation = {
-    ...(prev ?? {}),
-    id: obsId,
-    dateTime: iso,
-    locationName: input(container, '#f-location').value.trim(),
-    lat: currentLat,
-    lng: currentLng,
-    // `project` is deprecated but kept in sync (first tag) for any code path
-    // not yet migrated off it — see types.ts.
-    tags: [...selectedTags],
-    project: [...selectedTags][0] || '',
-    entries,
-    images: [], // per-species now; keep empty for legacy field
-    notes: qs<HTMLTextAreaElement>(container, '#f-notes').value,
-    mediaLink,
-    observers: [...selectedObservers],
-    deleted: false,
-    updatedAt: '',
-  };
-  await saveObservation(obs);
-  await stopAndSaveTrack(obsId);
-  stopDraftAutosave();
-  clearDraft();
-  toast(editId ? 'התצפית עודכנה ✓' : 'התצפית נשמרה ✓');
-  navigate('cards');
+    // on edit: delete media blobs that were removed
+    if (editId) {
+      const existing = await mediaForObservation(obsId);
+      for (const m of existing) {
+        if (!keptIds.has(m.id)) await deleteMedia(m.id);
+      }
+    }
+
+    const prev = editId ? await getObservation(editId) : null;
+    const obs: Observation = {
+      ...(prev ?? {}),
+      id: obsId,
+      dateTime: iso,
+      locationName: input(container, '#f-location').value.trim(),
+      lat: currentLat,
+      lng: currentLng,
+      // `project` is deprecated but kept in sync (first tag) for any code path
+      // not yet migrated off it — see types.ts.
+      tags: [...selectedTags],
+      project: [...selectedTags][0] || '',
+      entries,
+      images: [], // per-species now; keep empty for legacy field
+      notes: qs<HTMLTextAreaElement>(container, '#f-notes').value,
+      mediaLink,
+      observers: [...selectedObservers],
+      deleted: false,
+      updatedAt: '',
+    };
+    await withTimeout(saveObservation(obs), 20000, 'שמירת התצפית ארכה זמן רב מדי');
+    await withTimeout(stopAndSaveTrack(obsId), 20000, 'שמירת מסלול ה-GPS ארכה זמן רב מדי');
+    stopDraftAutosave();
+    clearDraft();
+    toast(editId ? 'התצפית עודכנה ✓' : 'התצפית נשמרה ✓');
+    navigate('cards');
+  } catch (err) {
+    console.error('Observation save failed:', err);
+    toast('שמירת התצפית נכשלה — נסו שוב. הטיוטה שלכם (כולל מסלול ה-GPS) נשמרה אוטומטית ותוכלו לשחזר אותה ממסך הבית אם תצטרכו לרענן את האפליקציה.', true, 9000);
+  } finally {
+    saveBtn.disabled = false;
+    saveBtn.innerHTML = originalLabel;
+  }
 }
