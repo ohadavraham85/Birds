@@ -2,9 +2,9 @@
  * חיפוש, קיבוץ לפי משפחה, מספר תצפיות לכל מין, תמונות מהתצפיות, תיאור אישי
  * לכל מין, וקישור לתצפיות. */
 
-import { listSpeciesRows, addSpecies, setSpeciesDescription, updateSpeciesDetails, listObservations, listAllMedia, saveMedia, findMediaByHash, getMedia } from '../db/repository';
+import { listSpeciesRows, addSpecies, setSpeciesDescription, updateSpeciesDetails, listObservations, listAllMedia, saveMedia, findMediaByHash, getMedia, deleteMediaAndUnlink, removeBrokenObservationImage } from '../db/repository';
 import { getSpeciesDetail, getManualSpeciesTag } from '../lib/species-details-cache';
-import { toast, showImageModal, fmtDateTime, showModal } from '../lib/ui';
+import { toast, showImageModal, fmtDateTime, showModal, confirmDialog } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
 import { speciesNames, entriesOf, entryImages } from '../lib/observation';
 import { getImageObjectUrl, hashBlob } from '../lib/media';
@@ -314,10 +314,13 @@ function render(): void {
 }
 
 /** Fills the open card's photo gallery (thumbnails resolved async, like the
- * journal cards). Photos tagged directly from the Gallery (no `obsId`) get a
- * small remove button to undo an accidental tag — a photo attached via an
- * observation entry has its species implied by that entry, so it isn't
- * removable from here. */
+ * journal cards). A working photo tagged directly from the Gallery (no
+ * `obsId`) gets a small remove button to undo an accidental tag — a working
+ * photo attached via an observation entry has its species implied by that
+ * entry, so it isn't removable from here. A *broken* photo (no local blob,
+ * no working Storage URL — can never load, regardless of source) instead
+ * gets a delete button that removes it outright, since untagging alone
+ * would just leave a permanently-dead row sitting in the Gallery too. */
 function renderOpenPhotos(): void {
   if (!openKey) return;
   const wrap = [...container.querySelectorAll<HTMLElement>('.sp-photos')].find((w) => w.dataset.name === openKey);
@@ -331,33 +334,45 @@ function renderOpenPhotos(): void {
     el.loading = 'lazy';
     el.alt = openKey;
     tile.appendChild(el);
-    if (!obsId) {
-      const removeBtn = document.createElement('button');
-      removeBtn.type = 'button';
-      removeBtn.className = 'sp-photo-remove';
-      removeBtn.title = 'הסרת שיוך התמונה למין';
-      removeBtn.setAttribute('aria-label', 'הסרת שיוך התמונה למין');
-      removeBtn.textContent = '✕';
-      removeBtn.addEventListener('click', (e) => { e.stopPropagation(); void onRemovePhotoTag(img.localId); });
-      tile.appendChild(removeBtn);
-    }
     wrap.appendChild(tile);
     void getImageObjectUrl(img, obsId).then((url) => {
-      if (url) { el.src = url; el.onclick = (): void => showImageModal(url, openKey || ''); }
-      else {
-        // No local blob and no (working) Storage URL to fetch it from —
-        // shown as a visible broken-photo placeholder rather than silently
-        // vanishing, so a photo that "looks like it's there" (it's still
-        // counted above) doesn't just disappear without explanation; see
-        // Settings ← סנכרון for the recovery actions this points at.
-        el.remove();
-        tile.classList.add('sp-photo-broken');
-        const broken = document.createElement('div');
-        broken.className = 'sp-photo-broken-icon';
-        broken.title = 'לא ניתן לטעון תמונה זו — היא לא נמצאת במכשיר הזה ולא זמינה להורדה מהענן. אפשר לנסות "הורדת כל התמונות מהענן" או "תיקון קישורי תמונות שבורות" בהגדרות ← סנכרון וגיבוי.';
-        broken.innerHTML = icon('alert');
-        tile.insertBefore(broken, tile.firstChild);
+      if (url) {
+        el.src = url;
+        el.onclick = (): void => showImageModal(url, openKey || '');
+        if (!obsId) {
+          const removeBtn = document.createElement('button');
+          removeBtn.type = 'button';
+          removeBtn.className = 'sp-photo-remove';
+          removeBtn.title = 'הסרת שיוך התמונה למין';
+          removeBtn.setAttribute('aria-label', 'הסרת שיוך התמונה למין');
+          removeBtn.textContent = '✕';
+          removeBtn.addEventListener('click', (e) => { e.stopPropagation(); void onRemovePhotoTag(img.localId); });
+          tile.appendChild(removeBtn);
+        }
+        return;
       }
+      // No local blob and no (working) Storage URL to fetch it from —
+      // shown as a visible broken-photo placeholder (with a delete action,
+      // since it can never load) rather than silently vanishing, so a
+      // photo that "looks like it's there" (it's still counted above)
+      // doesn't just disappear with no way to deal with it. If it's worth
+      // trying to recover instead of deleting, Settings ← סנכרון וגיבוי has
+      // "הורדת כל התמונות מהענן" / "תיקון קישורי תמונות שבורות" first.
+      el.remove();
+      tile.classList.add('sp-photo-broken');
+      const broken = document.createElement('div');
+      broken.className = 'sp-photo-broken-icon';
+      broken.title = 'לא ניתן לטעון תמונה זו — היא לא נמצאת במכשיר הזה ולא זמינה להורדה מהענן. אפשר לנסות "הורדת כל התמונות מהענן" או "תיקון קישורי תמונות שבורות" בהגדרות ← סנכרון וגיבוי, או למחוק אותה.';
+      broken.innerHTML = icon('alert');
+      tile.insertBefore(broken, tile.firstChild);
+      const deleteBtn = document.createElement('button');
+      deleteBtn.type = 'button';
+      deleteBtn.className = 'sp-photo-remove';
+      deleteBtn.title = 'מחיקת התמונה השבורה';
+      deleteBtn.setAttribute('aria-label', 'מחיקת התמונה השבורה');
+      deleteBtn.textContent = '✕';
+      deleteBtn.addEventListener('click', (e) => { e.stopPropagation(); void onDeleteBrokenPhoto(img.localId, obsId); });
+      tile.appendChild(deleteBtn);
     });
   }
 }
@@ -370,6 +385,18 @@ async function onRemovePhotoTag(mediaId: string): Promise<void> {
   // one already on `media` must not be kept.
   await saveMedia({ ...media, species: undefined, updatedAt: undefined });
   toast('שיוך התמונה למין הוסר');
+  await activate();
+}
+
+/** Permanently deletes a photo that can never load (no local blob, no
+ * working Storage URL) — for an observation-linked one this strips the
+ * dangling reference from that specific entry too, not just the (possibly
+ * nonexistent) media row, see repository.ts's removeBrokenObservationImage. */
+async function onDeleteBrokenPhoto(mediaId: string, obsId: string): Promise<void> {
+  if (!(await confirmDialog('למחוק את התמונה השבורה? לא ניתן לשחזר אותה.', 'מחיקה'))) return;
+  if (obsId) await removeBrokenObservationImage(obsId, mediaId);
+  else await deleteMediaAndUnlink(mediaId);
+  toast('התמונה השבורה נמחקה');
   await activate();
 }
 

@@ -2,7 +2,7 @@
  * associated ("orphan") gallery photos to attach directly to a species entry
  * in the observation form, as an alternative to capturing new photos. */
 
-import { listAllMedia, saveMedia } from '../db/repository';
+import { listAllMedia, saveMedia, claimOrphanMedia } from '../db/repository';
 import { getMediaObjectUrl } from './media';
 import { showModal } from './ui';
 import type { ObservationImage } from '../types';
@@ -55,7 +55,7 @@ export function pickFromGallery(obsId: string): Promise<ObservationImage[]> {
           const picked: ObservationImage[] = [];
           for (const m of orphans) {
             if (!selected.has(m.id)) continue;
-            await saveMedia({ ...m, obsId });
+            await claimOrphanMedia(m, obsId);
             picked.push({ localId: m.id, name: m.name });
           }
           close();

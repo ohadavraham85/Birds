@@ -865,7 +865,22 @@ export async function associateMediaWithObservation(mediaId: string, obsId: stri
   const entries = obs ? entriesOf(obs) : [];
   const entry = entries[entryIndex];
   if (!media || !entry) return;
-  if (!media.obsId) await db.media.put({ ...media, obsId });
+  if (!media.obsId) {
+    await db.media.put({ ...media, obsId });
+    // Once associated, this photo is tracked via the observation's own
+    // entries (synced generically as part of that document) instead of the
+    // separate orphan-photo `media` Firestore collection — tell Firestore to
+    // drop it from there too. Skipping this leaves a *stale* copy of this
+    // exact bug on any other device that had already downloaded the photo
+    // as an orphan: its local media row never learns `obsId` was set (only
+    // this device's own row does, above), so its Gallery keeps showing the
+    // photo as unassociated forever even though it's genuinely tied to an
+    // observation now. Mirrors the same cleanup deleteMediaAndUnlink already
+    // does on outright deletion — `media` here (obsId still '') is exactly
+    // what pushMedia needs to accept the delete (it refuses anything with
+    // obsId set, since that's meant to be pushed via pushObservationMedia).
+    emitMutation('media', mediaId, 'delete', { ...media, deleted: true, updatedAt: now() });
+  }
   const images = entry.images ?? [];
   if (images.some((i) => i.localId === mediaId)) return;
   // Carry over remoteId when the orphan photo was already uploaded to
@@ -874,6 +889,46 @@ export async function associateMediaWithObservation(mediaId: string, obsId: stri
   // exact same Storage path it's already sitting at.
   const newEntries = entries.map((e, i) => (i === entryIndex ? { ...e, images: [...images, { localId: mediaId, name: media.name, remoteId: media.remoteId }] } : e));
   await saveObservation({ ...obs!, entries: newEntries, updatedAt: '' });
+}
+
+/** Removes one image reference from whichever entry of `obsId` has it
+ * (normally just one) — used to clean up a permanently broken reference (no
+ * local blob, no working Storage URL) from the species/observation views.
+ * Unlike deleteMediaAndUnlink, this doesn't need a local media row to exist
+ * at all to know which observation to touch, since the caller already knows
+ * — the species tab's aggregated photo list tracks each image's `obsId`
+ * directly. Also deletes the underlying media row if one still happens to
+ * exist, same cleanup deleteMediaAndUnlink does. */
+export async function removeBrokenObservationImage(obsId: string, localId: string): Promise<void> {
+  const obs = await getObservation(obsId);
+  if (obs) {
+    let changed = false;
+    const entries = entriesOf(obs).map((e) => {
+      if (!e.images?.some((i) => i.localId === localId)) return e;
+      changed = true;
+      return { ...e, images: e.images.filter((i) => i.localId !== localId) };
+    });
+    if (changed) await saveObservation({ ...obs, entries, updatedAt: '' });
+  }
+  const media = await db.media.get(localId);
+  if (media) {
+    await db.media.delete(localId);
+    if (!media.obsId) emitMutation('media', localId, 'delete', { ...media, deleted: true, updatedAt: now() });
+  }
+}
+
+/** Claims an orphan ("not yet associated") gallery photo for an observation
+ * — used by the observation form's "בחירה מהגלריה" picker (lib/photo-picker.ts),
+ * which attaches a batch of already-uploaded photos directly rather than
+ * going through associateMediaWithObservation's single-entry flow. Same
+ * Firestore cleanup as that function: dropping this photo from the separate
+ * orphan-photo collection once it's tracked via the observation itself, so
+ * another device that already downloaded it as an orphan doesn't keep
+ * showing it as unassociated forever. */
+export async function claimOrphanMedia(media: MediaRecord, obsId: string): Promise<void> {
+  const wasOrphan = !media.obsId;
+  await saveMedia({ ...media, obsId });
+  if (wasOrphan) emitMutation('media', media.id, 'delete', { ...media, deleted: true, updatedAt: now() });
 }
 
 /** Finds an already-saved media row with the exact same content hash, if
