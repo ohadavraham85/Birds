@@ -1007,13 +1007,28 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
 
   const editBtn = row.querySelector<HTMLButtonElement>('.sp-edit-btn')!;
   const editMenu = row.querySelector<HTMLElement>('.sp-edit-menu')!;
-  const disposeEditMenu = wireDropdown(editBtn, editMenu);
+  // A row in the middle of a long list otherwise has its open menu painted
+  // *underneath* every row below it — `.sp-swipe-front` (this row) sets its
+  // own `position:relative; z-index:1` for the swipe-to-delete reveal, which
+  // makes it a self-contained stacking context, so the menu's own z-index
+  // can never outrank a later sibling row no matter how high it's set. Lift
+  // this row's whole context above its siblings for as long as its menu is
+  // open (see `.sp-menu-open` in app.css) — every path that can close the
+  // menu goes through closeEditMenu() so the class always comes back off.
+  const closeEditMenu = (): void => {
+    editMenu.hidden = true;
+    editBtn.setAttribute('aria-expanded', 'false');
+    row.classList.remove('sp-menu-open');
+  };
+  const disposeEditMenu = wireDropdown(editBtn, editMenu, (open) => {
+    row.classList.toggle('sp-menu-open', open);
+  });
 
   const noteToggleBtn = row.querySelector<HTMLButtonElement>('.sp-note-toggle')!;
   const secondRow = row.querySelector<HTMLElement>('.sp-entry-second')!;
   const noteInput = row.querySelector<HTMLInputElement>('.sp-note')!;
   noteToggleBtn.addEventListener('click', () => {
-    editMenu.hidden = true;
+    closeEditMenu();
     secondRow.hidden = !secondRow.hidden;
     if (!secondRow.hidden) noteInput.focus();
   });
@@ -1030,7 +1045,7 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
 
   const fileInput = row.querySelector<HTMLInputElement>('.sp-file')!;
   row.querySelector('.sp-add-img')!.addEventListener('click', () => {
-    editMenu.hidden = true;
+    closeEditMenu();
     fileInput.click();
   });
   fileInput.addEventListener('change', (e) => {
@@ -1044,7 +1059,7 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
   });
 
   row.querySelector('.sp-pick-gallery')!.addEventListener('click', () => {
-    editMenu.hidden = true;
+    closeEditMenu();
     void pickFromGallery(obsId).then((picked) => {
       if (!picked.length) return;
       rowImages.get(row)!.kept.push(...picked);
@@ -1054,7 +1069,7 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
   });
 
   const doRemove = (): void => {
-    editMenu.hidden = true;
+    closeEditMenu();
     if (container.querySelectorAll('#species-rows .sp-entry').length > 1) {
       disposeEditMenu();
       wrap.remove();
@@ -1076,7 +1091,7 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
   wireSpeciesSwipe(row, wrap);
 
   row.querySelector('.sp-split')!.addEventListener('click', () => {
-    editMenu.hidden = true;
+    closeEditMenu();
     void onSplitSpeciesToStandalone(spInput.value.trim(), Math.max(1, parseInt(qtyInput.value, 10) || 1), noteInput.value.trim(), doRemove);
   });
 
