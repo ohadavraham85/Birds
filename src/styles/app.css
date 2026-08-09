@@ -1622,6 +1622,12 @@ a.media-link-icon:hover { color: var(--accent-700); }
   width: 100%; height: 100%; object-fit: cover;
   border-radius: 10px; border: 1px solid var(--line); cursor: pointer;
 }
+.sp-photo-broken-icon {
+  width: 100%; height: 100%; border-radius: 10px;
+  border: 1px dashed var(--danger); background: var(--danger-soft); color: var(--danger);
+  display: flex; align-items: center; justify-content: center; cursor: help;
+}
+.sp-photo-broken-icon .icon { width: 22px; height: 22px; }
 .sp-photo-remove {
   position: absolute; top: -6px; left: -6px; width: 22px; height: 22px;
   border-radius: 50%; border: 1px solid var(--line); background: var(--card);

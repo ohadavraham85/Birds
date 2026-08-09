@@ -344,7 +344,20 @@ function renderOpenPhotos(): void {
     wrap.appendChild(tile);
     void getImageObjectUrl(img, obsId).then((url) => {
       if (url) { el.src = url; el.onclick = (): void => showImageModal(url, openKey || ''); }
-      else el.remove();
+      else {
+        // No local blob and no (working) Storage URL to fetch it from —
+        // shown as a visible broken-photo placeholder rather than silently
+        // vanishing, so a photo that "looks like it's there" (it's still
+        // counted above) doesn't just disappear without explanation; see
+        // Settings ← סנכרון for the recovery actions this points at.
+        el.remove();
+        tile.classList.add('sp-photo-broken');
+        const broken = document.createElement('div');
+        broken.className = 'sp-photo-broken-icon';
+        broken.title = 'לא ניתן לטעון תמונה זו — היא לא נמצאת במכשיר הזה ולא זמינה להורדה מהענן. אפשר לנסות "הורדת כל התמונות מהענן" או "תיקון קישורי תמונות שבורות" בהגדרות ← סנכרון וגיבוי.';
+        broken.innerHTML = icon('alert');
+        tile.insertBefore(broken, tile.firstChild);
+      }
     });
   }
 }
@@ -360,21 +373,31 @@ async function onRemovePhotoTag(mediaId: string): Promise<void> {
   await activate();
 }
 
-/** Fills each closed tile's thumbnail (square/rect view modes) with the species' first available photo. */
+/** Fills each closed tile's thumbnail (square/rect view modes) with the
+ * species' first *resolvable* photo — tries every photo in order rather than
+ * only the first, since that one alone can be permanently unresolvable (no
+ * local blob and no known Storage URL, e.g. from a historical association
+ * bug — see repository.ts's repairMissingImageLinks) while later ones in the
+ * same list are perfectly fine; stopping at the first candidate left the
+ * tile blank even though the species genuinely has viewable photos. */
 function renderTileThumbnails(): void {
   for (const media of container.querySelectorAll<HTMLElement>('.sp-tile-media[data-name]')) {
     const name = media.dataset.name!;
-    const first = (imagesByName[name] || [])[0];
-    if (!first) continue;
-    void getImageObjectUrl(first.img, first.obsId).then((url) => {
-      if (!url) return;
-      media.innerHTML = '';
-      const el = document.createElement('img');
-      el.src = url;
-      el.alt = name;
-      el.loading = 'lazy';
-      media.appendChild(el);
-    });
+    const candidates = imagesByName[name] || [];
+    if (!candidates.length) continue;
+    void (async () => {
+      for (const { img, obsId } of candidates) {
+        const url = await getImageObjectUrl(img, obsId);
+        if (!url) continue;
+        media.innerHTML = '';
+        const el = document.createElement('img');
+        el.src = url;
+        el.alt = name;
+        el.loading = 'lazy';
+        media.appendChild(el);
+        return;
+      }
+    })();
   }
 }
 

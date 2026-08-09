@@ -9,12 +9,12 @@ import {
   findDuplicateSpeciesGroups, findDuplicateLocationGroups,
   mergeSpeciesNames, mergeLocationNames,
   clearAllData, listObservations, listObservationsRaw, getObservation, saveObservation,
-  putObservationRaw, saveMedia, mediaForObservation,
+  putObservationRaw, saveMedia, mediaForObservation, repairMissingImageLinks,
   listFiles, saveFile, getFile, deleteFile,
 } from '../db/repository';
 import { getSpeciesDetail, listKnownFamilies } from '../lib/species-details-cache';
 import type { DuplicateGroup } from '../db/repository';
-import { getFirebaseSyncCode, configureFirebaseSync, onFirebaseSyncStatus, isFirebaseSyncActive, forceResyncListsFromCloud, retryMediaUploads, pullAllObservationMedia, type FirebaseSyncStatus } from '../firebase/firestore-sync';
+import { getFirebaseSyncCode, configureFirebaseSync, onFirebaseSyncStatus, isFirebaseSyncActive, forceResyncListsFromCloud, retryMediaUploads, pullAllObservationMedia, retryMissingGalleryDownloads, type FirebaseSyncStatus } from '../firebase/firestore-sync';
 import {
   notificationsSupported, permissionState, requestPermission,
   isEnabled, setEnabled, isMigrationEnabled, setMigrationEnabled, isOnThisDayEnabled, setOnThisDayEnabled,
@@ -293,6 +293,21 @@ function syncHtml(fbCode: string): string {
             חסרות לו.
           </p>
           <button class="btn btn-sm" id="s-fb-pull-media">${icon('download')} הורדת כל התמונות מהענן</button>
+          <p style="font-size:.85rem;color:var(--ink-soft);margin:12px 0 0">
+            תמונה שתויגה למין ישירות מהגלריה (לא דרך תצפית) מורדת למכשיר
+            באופן אוטומטי — אבל תקלת רשת חד-פעמית יכולה להשאיר תמונה כזו בלי
+            שהמכשיר הזה בכלל שמר אותה, כך שהיא לא מופיעה בשום מקום (לא במין,
+            לא בגלריה). הכפתור הזה מנסה שוב להוריד את כל מה שחסר.
+          </p>
+          <button class="btn btn-sm" id="s-fb-pull-gallery">${icon('download')} ניסיון חוזר להורדת תמונות גלריה חסרות</button>
+          <p style="font-size:.85rem;color:var(--ink-soft);margin:12px 0 0">
+            תמונות ששויכו למין דרך תצפית לפני עדכון מסוים ("שיוך תמונה למין
+            ואז לתצפית") לא נשאו איתן את קישור ההורדה מהענן, אז מכשיר שאין לו
+            את התמונה מקומית לא יכול להציג אותן בכלל — התמונה "נראית כאילו
+            קיימת" (המין יודע עליה) אך לא נטענת בפועל. הכפתור הזה מתקן את
+            הקישור החסר בלי צורך בהעלאה מחדש, בהתבסס על מה שכבר יש במכשיר.
+          </p>
+          <button class="btn btn-sm" id="s-fb-repair-links">${icon('link')} תיקון קישורי תמונות שבורות</button>
         </div>` : ''}
     </div>
 
@@ -330,6 +345,8 @@ function wireSync(): void {
   container.querySelector('#s-fb-resync')?.addEventListener('click', () => void onForceResync());
   container.querySelector('#s-fb-retry-media')?.addEventListener('click', () => void onRetryMediaUploads());
   container.querySelector('#s-fb-pull-media')?.addEventListener('click', () => void onPullAllMedia());
+  container.querySelector('#s-fb-pull-gallery')?.addEventListener('click', () => void onPullMissingGalleryPhotos());
+  container.querySelector('#s-fb-repair-links')?.addEventListener('click', () => void onRepairImageLinks());
 
   unsubStatus = onFirebaseSyncStatus((s) => {
     const el = container.querySelector<HTMLElement>('#s-fb-status');
@@ -1399,6 +1416,35 @@ async function onPullAllMedia(): Promise<void> {
   } finally {
     btn.disabled = false;
     btn.innerHTML = original;
+  }
+}
+
+async function onPullMissingGalleryPhotos(): Promise<void> {
+  const btn = qs<HTMLButtonElement>(container, '#s-fb-pull-gallery');
+  btn.disabled = true;
+  const original = btn.innerHTML;
+  btn.innerHTML = 'בודק תמונות חסרות...';
+  try {
+    const n = await retryMissingGalleryDownloads();
+    toast(n ? `הורדו ${n} תמונות גלריה שהיו חסרות` : 'כל תמונות הגלריה כבר קיימות במכשיר זה');
+  } catch (err) {
+    toast('ההורדה נכשלה: ' + (err as Error).message, true, 6000);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = original;
+  }
+}
+
+async function onRepairImageLinks(): Promise<void> {
+  const btn = qs<HTMLButtonElement>(container, '#s-fb-repair-links');
+  btn.disabled = true;
+  try {
+    const n = await repairMissingImageLinks();
+    toast(n ? `תוקנו ${n} קישורי תמונות` : 'לא נמצאו קישורי תמונות שבורים לתיקון');
+  } catch (err) {
+    toast('התיקון נכשל: ' + (err as Error).message, true, 6000);
+  } finally {
+    btn.disabled = false;
   }
 }
 

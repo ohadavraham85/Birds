@@ -36,19 +36,26 @@ export function renderObservationTile(o: Observation, mode: 'square' | 'rect'): 
   wireTagBadges(tile);
 
   const media = tile.querySelector<HTMLElement>('.obs-tile-media')!;
-  for (const entry of entriesOf(o)) {
-    const img = entryImages(entry)[0];
-    if (!img) continue;
-    void getImageObjectUrl(img, o.id).then((url) => {
-      if (!url) return;
-      media.innerHTML = '';
-      const el = document.createElement('img');
-      el.src = url;
-      el.alt = o.locationName || 'תצפית';
-      el.loading = 'lazy';
-      media.appendChild(el);
-    });
-    break;
+  // Tries every photo across every entry in order, not just the very first
+  // one — that single photo can be permanently unresolvable (no local blob,
+  // no known Storage URL) while later ones on the same observation are fine,
+  // which left the tile on the plain fallback icon despite having viewable
+  // photos (same fix as species.ts's renderTileThumbnails).
+  const candidates = entriesOf(o).flatMap((entry) => entryImages(entry));
+  if (candidates.length) {
+    void (async () => {
+      for (const img of candidates) {
+        const url = await getImageObjectUrl(img, o.id);
+        if (!url) continue;
+        media.innerHTML = '';
+        const el = document.createElement('img');
+        el.src = url;
+        el.alt = o.locationName || 'תצפית';
+        el.loading = 'lazy';
+        media.appendChild(el);
+        return;
+      }
+    })();
   }
   return tile;
 }
