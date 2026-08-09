@@ -300,6 +300,29 @@ export async function pullAllObservationMedia(): Promise<{ downloaded: number; o
   return { downloaded, observations };
 }
 
+/** Re-attempts downloading every "orphan" Gallery photo (the `media`
+ * collection — species-tagged photos not tied to any observation) that's
+ * missing locally. Normally this only self-heals the next time the sync
+ * listeners attach (mergeRemoteMedia below fires once per doc on every
+ * fresh connection) — but a Storage upload that lands a moment after its
+ * Firestore metadata write, a dropped connection mid-download, or a
+ * permissions hiccup can leave a photo with no local row at all until then,
+ * so it never shows up anywhere (not even as a broken placeholder) despite
+ * being tagged. Safe to call any time: already-present photos are skipped
+ * untouched. Returns how many were newly downloaded. */
+export async function retryMissingGalleryDownloads(): Promise<number> {
+  if (!activeCode) throw new Error('סנכרון Firebase אינו מופעל');
+  const snap = await getDocs(collection(firebaseDb(), 'households', activeCode, 'media'));
+  let downloaded = 0;
+  for (const d of snap.docs) {
+    const remote = d.data() as MediaMeta;
+    if (remote.deleted || await getMedia(remote.id)) continue;
+    await mergeRemoteMedia(remote);
+    if (await getMedia(remote.id)) downloaded++;
+  }
+  return downloaded;
+}
+
 export function stopFirebaseSync(): void {
   unsubs.forEach((u) => u());
   unsubs = [];

@@ -883,6 +883,38 @@ export async function findMediaByHash(hash: string): Promise<MediaRecord | undef
   return db.media.where('contentHash').equals(hash).first();
 }
 
+/** Repairs a historical gap: before a fix shipped, associating an
+ * already-uploaded Gallery photo with an observation (associateMediaWithObservation)
+ * didn't copy the photo's `remoteId` onto the new `ObservationImage` it created
+ * — only the media row itself kept it. On the device that made the
+ * association this went unnoticed (its local blob still resolves the image
+ * fine), but on any device that doesn't have that blob locally, the image
+ * has neither a blob nor a known Storage URL and can never be shown. Backfills
+ * `remoteId` from the (already-local) media row wherever the entry is
+ * missing it — pure local data cleanup, no network access. Returns how many
+ * images were fixed. */
+export async function repairMissingImageLinks(): Promise<number> {
+  let fixed = 0;
+  for (const obs of await listObservationsRaw()) {
+    if (obs.deleted) continue;
+    let changed = false;
+    const entries = await Promise.all(entriesOf(obs).map(async (entry) => {
+      if (!entry.images?.length) return entry;
+      const images = await Promise.all(entry.images.map(async (img) => {
+        if (!img.localId || img.remoteId) return img;
+        const media = await db.media.get(img.localId);
+        if (!media?.remoteId) return img;
+        changed = true;
+        fixed++;
+        return { ...img, remoteId: media.remoteId };
+      }));
+      return { ...entry, images };
+    }));
+    if (changed) await saveObservation({ ...obs, entries, updatedAt: '' });
+  }
+  return fixed;
+}
+
 /* ---------- settings ---------- */
 
 export async function getSetting<T = unknown>(key: string, fallback: T): Promise<T> {
