@@ -9,20 +9,26 @@
 import L from './leaflet-setup';
 import { icon } from './icons';
 import { createMapLayers, loadMapLayerState, setMapLayerPref, applyMapLayerState, type MapLayerState } from './map-layers';
+import { escapeHtml } from './markdown';
 
 export interface LatLng { lat: number; lng: number }
-export interface PickLocationOptions { readonly?: boolean }
+/** `label`, when given, is appended to the modal's heading (e.g. an
+ * observation's location name) — so the map is clearly identified as "this
+ * spot" rather than a generic picker, useful when opening it repeatedly from
+ * a list of many locations. */
+export interface PickLocationOptions { readonly?: boolean; label?: string }
 
 const ISRAEL_CENTER: [number, number] = [31.5, 35.0];
 
 export function pickLocation(initial: LatLng | null, opts: PickLocationOptions = {}): Promise<LatLng | null> {
   return new Promise((resolve) => {
     const readonly = !!opts.readonly;
+    const heading = (readonly ? 'מיקום שמור' : 'בחירת מיקום על המפה') + (opts.label ? ` — ${escapeHtml(opts.label)}` : '');
     const backdrop = document.createElement('div');
     backdrop.className = 'modal-backdrop';
     backdrop.innerHTML = `
       <div class="modal map-picker">
-        <h3>${readonly ? 'מיקום שמור' : 'בחירת מיקום על המפה'}</h3>
+        <h3>${heading}</h3>
         <p class="picker-hint">${readonly ? 'זהו המיקום השמור. כדי לשנות יש לבחור מיקום חדש.' : 'גררו את הסיכה או לחצו על המפה. אפשר להזיז ולהתקרב.'}</p>
         <div class="picker-map-wrap">
           <div class="picker-map" id="picker-map"></div>

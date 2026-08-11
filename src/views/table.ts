@@ -5,6 +5,7 @@ import {
   listObservations, deleteObservation, saveObservation, listSpecies, addSpecies,
 } from '../db/repository';
 import { toast, fmtDateTime, fmtCoords, confirmDialog, withBusyButton } from '../lib/ui';
+import { pickLocation } from '../lib/location-picker';
 import { escapeHtml } from '../lib/markdown';
 import { parseCsv, mapHeaders, parseCoordinates, parseDateTime, type HeaderMap, type CsvField } from '../lib/csv';
 import { exportObservationsPdf } from '../lib/pdf';
@@ -224,7 +225,12 @@ function rowHtml(o: Observation): string {
       <td><strong>${escapeHtml(speciesLabel(o))}</strong></td>
       <td>${totalQuantity(o)}</td>
       <td>${escapeHtml(o.locationName || '')}</td>
-      <td class="num">${fmtCoords(o.lat, o.lng)}</td>
+      <td class="num">
+        <button type="button" class="btn btn-sm location-pin-cell" data-id="${o.id}"
+          title="${o.lat != null && o.lng != null ? 'הצגה/שינוי המיקום על מפה גיאוגרפית' : 'קביעת מיקום על מפה גיאוגרפית'}">
+          ${icon('pin')} ${fmtCoords(o.lat, o.lng) || 'קביעת מיקום'}
+        </button>
+      </td>
       <td>${o.tags.length ? tagBadgesHtml(o.tags) : ''}</td>
       <td class="notes-cell" title="${escapeHtml(o.notes || '')}">${escapeHtml((o.notes || '').replace(/\s+/g, ' '))}</td>
       <td class="row-actions">
@@ -312,6 +318,9 @@ async function onRowClick(e: Event): Promise<void> {
     renderRows();
     return;
   }
+  const pinBtn = target.closest<HTMLElement>('.location-pin-cell');
+  if (pinBtn) { e.stopPropagation(); void onPickLocation(pinBtn.dataset.id!); return; }
+
   const tr = target.closest<HTMLElement>('tr[data-id]');
   if (!tr) return;
   const id = tr.dataset.id!;
@@ -332,6 +341,21 @@ async function onRowClick(e: Event): Promise<void> {
       toast('התצפית נמחקה');
     }
   }
+}
+
+/** Opens the geographic (satellite) map picker for one observation's exact
+ * coordinates, pre-filled with its current pin if it has one — confirming a
+ * new spot saves it straight onto that observation, so revisiting the same
+ * row later shows the updated pin. */
+async function onPickLocation(id: string): Promise<void> {
+  const obs = observations.find((o) => o.id === id);
+  if (!obs) return;
+  const initial = obs.lat != null && obs.lng != null ? { lat: obs.lat, lng: obs.lng } : null;
+  const result = await pickLocation(initial, { label: obs.locationName || undefined });
+  if (!result) return;
+  await saveObservation({ ...obs, lat: result.lat, lng: result.lng, updatedAt: '' });
+  toast('המיקום עודכן על המפה');
+  await activate();
 }
 
 async function onBulkDelete(): Promise<void> {
