@@ -85,6 +85,11 @@ export interface SpeciesRow {
    * by clicking the badge in the "מינים" tab, or via Settings. Absent means
    * auto-derive from the observation count instead. */
   manualTag?: SpeciesTag;
+  /** The `ObservationImage.localId`/`MediaRecord.id` of the photo hand-picked
+   * to represent this species on its closed card/tile — set by clicking a
+   * photo's star in the species detail gallery. Absent means auto-pick the
+   * first resolvable photo instead (species.ts's renderTileThumbnails). */
+  coverPhotoId?: string;
 }
 
 /** Master locations-list entry: a saved place name with canonical

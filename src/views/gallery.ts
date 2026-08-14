@@ -44,6 +44,13 @@ let assocFilter: 'all' | 'assoc' | 'orphan' = 'all';
  * observation entry or a direct tag), the owning observation's location, and
  * the original file name (see matchesQuery). */
 let query = '';
+/** 'added' = when the photo entered this app (upload/capture/import time —
+ * "נוספו לאחרונה"); 'taken' = the photo's own capture date (falls back to
+ * 'added' for a photo with no known capture date, same fallback shown next
+ * to its date in the lightbox/info panel — see takenLabel). */
+let sortMode: 'added' | 'taken' = 'added';
+/** 'desc' (newest first) matches the gallery's original default ordering. */
+let sortDir: 'asc' | 'desc' = 'desc';
 let lightboxIndex = -1;
 let closeLightbox: (() => void) | null = null;
 
@@ -65,6 +72,11 @@ export function init(el: HTMLElement): void {
     </div>
     <div class="filter-bar">
       <input type="search" id="gallery-q" class="filter-search" placeholder="חיפוש לפי מין / מיקום / שם קובץ...">
+      <select id="gallery-sort" class="filter-sel">
+        <option value="added">נוספו לאחרונה</option>
+        <option value="taken">לפי תאריך צילום</option>
+      </select>
+      <button type="button" class="btn btn-icon" id="gallery-sort-dir" title="היפוך סדר" aria-label="היפוך סדר">${icon('sortArrows')}</button>
     </div>
     <div class="gallery-storage-card" id="gallery-storage-card" hidden>
       <div class="gallery-storage-head">
@@ -94,6 +106,17 @@ export function init(el: HTMLElement): void {
 
   qs<HTMLInputElement>(container, '#gallery-q').addEventListener('input', (e) => {
     query = (e.target as HTMLInputElement).value;
+    applyFilter();
+    renderGrid();
+  });
+
+  qs<HTMLSelectElement>(container, '#gallery-sort').addEventListener('change', (e) => {
+    sortMode = (e.target as HTMLSelectElement).value as 'added' | 'taken';
+    applyFilter();
+    renderGrid();
+  });
+  qs(container, '#gallery-sort-dir').addEventListener('click', () => {
+    sortDir = sortDir === 'asc' ? 'desc' : 'asc';
     applyFilter();
     renderGrid();
   });
@@ -204,7 +227,7 @@ async function ensureHashBackfill(): Promise<void> {
 
 export async function activate(): Promise<void> {
   void ensureHashBackfill();
-  allItems = (await listAllMedia()).sort((a, b) => (b.addedAt || '').localeCompare(a.addedAt || ''));
+  allItems = await listAllMedia();
   await buildOwnerIndex();
   applyFilter();
   renderGrid();
@@ -279,7 +302,12 @@ function applyFilter(): void {
   const byAssoc = assocFilter === 'all' ? allItems
     : assocFilter === 'assoc' ? allItems.filter((m) => !!m.obsId || !!m.species)
     : allItems.filter((m) => !m.obsId && !m.species);
-  items = query.trim() ? byAssoc.filter(matchesQuery) : byAssoc;
+  const bySearch = query.trim() ? byAssoc.filter(matchesQuery) : byAssoc;
+  const key = (m: MediaRecord): string => (sortMode === 'taken' ? m.takenAt || m.addedAt || '' : m.addedAt || '');
+  items = [...bySearch].sort((a, b) => {
+    const cmp = key(a).localeCompare(key(b));
+    return sortDir === 'desc' ? -cmp : cmp;
+  });
 }
 
 /** Matches the search box's free text against a photo's species (from its
@@ -329,6 +357,10 @@ function captionFor(m: MediaRecord): string {
 }
 
 function renderGrid(): void {
+  const sortBtn = qs(container, '#gallery-sort-dir');
+  sortBtn.innerHTML = icon('sortArrows', sortDir === 'desc' ? 'icon-flip' : '');
+  sortBtn.title = sortDir === 'asc' ? 'מוצג: מהישן לחדש' : 'מוצג: מהחדש לישן';
+
   const grid = qs(container, '#gallery-grid');
   const empty = qs(container, '#gallery-empty');
   empty.hidden = items.length > 0;

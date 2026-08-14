@@ -284,7 +284,7 @@ export async function setSpeciesDescription(name: string, description: string): 
  * to its default (bundled data, or auto-derived from observation count). */
 export async function updateSpeciesDetails(
   name: string,
-  fields: { en?: string; sci?: string; family?: string; manualTag?: SpeciesTag | '' },
+  fields: { en?: string; sci?: string; family?: string; manualTag?: SpeciesTag | ''; coverPhotoId?: string | '' },
 ): Promise<void> {
   const row = await db.species.get(name);
   if (!row) return;
@@ -292,6 +292,7 @@ export async function updateSpeciesDetails(
   if (fields.sci !== undefined) row.sciOverride = fields.sci || undefined;
   if (fields.family !== undefined) row.familyOverride = fields.family || undefined;
   if (fields.manualTag !== undefined) row.manualTag = fields.manualTag || undefined;
+  if (fields.coverPhotoId !== undefined) row.coverPhotoId = fields.coverPhotoId || undefined;
   row.updatedAt = now();
   await db.species.put(row);
   emitChange();

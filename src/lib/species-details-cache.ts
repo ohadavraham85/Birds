@@ -28,6 +28,12 @@ export function getManualSpeciesTag(name: string): SpeciesTag | undefined {
   return cache.get(name)?.manualTag;
 }
 
+/** The photo hand-picked (species.ts's star button) to represent this
+ * species on its closed card/tile — undefined means auto-pick instead. */
+export function getCoverPhotoId(name: string): string | undefined {
+  return cache.get(name)?.coverPhotoId;
+}
+
 /** Every family name currently in use, bundled or custom-entered via an
  * override — for the family edit dropdown in Settings, sorted alphabetically. */
 export function listKnownFamilies(): string[] {
