@@ -3,7 +3,7 @@
  * לכל מין, וקישור לתצפיות. */
 
 import { listSpeciesRows, addSpecies, setSpeciesDescription, updateSpeciesDetails, listObservations, listAllMedia, saveMedia, findMediaByHash, getMedia, deleteMediaAndUnlink, removeBrokenObservationImage } from '../db/repository';
-import { getSpeciesDetail, getManualSpeciesTag } from '../lib/species-details-cache';
+import { getSpeciesDetail, getManualSpeciesTag, getCoverPhotoId } from '../lib/species-details-cache';
 import { toast, showImageModal, fmtDateTime, showModal, confirmDialog } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
 import { speciesNames, entriesOf, entryImages } from '../lib/observation';
@@ -349,6 +349,15 @@ function renderOpenPhotos(): void {
           removeBtn.addEventListener('click', (e) => { e.stopPropagation(); void onRemovePhotoTag(img.localId); });
           tile.appendChild(removeBtn);
         }
+        const isCover = getCoverPhotoId(openKey!) === img.localId;
+        const coverBtn = document.createElement('button');
+        coverBtn.type = 'button';
+        coverBtn.className = `sp-photo-cover${isCover ? ' active' : ''}`;
+        coverBtn.title = isCover ? 'זו תמונת הנבחרת של המין — לחיצה לביטול' : 'בחירת תמונה זו כתמונת המין';
+        coverBtn.setAttribute('aria-label', coverBtn.title);
+        coverBtn.innerHTML = icon('star');
+        coverBtn.addEventListener('click', (e) => { e.stopPropagation(); void onSetCoverPhoto(openKey!, isCover ? '' : img.localId); });
+        tile.appendChild(coverBtn);
         return;
       }
       // No local blob and no (working) Storage URL to fetch it from —
@@ -388,6 +397,14 @@ async function onRemovePhotoTag(mediaId: string): Promise<void> {
   await activate();
 }
 
+/** Sets (or, passing '', clears) which of the species' photos is hand-picked
+ * to represent it on its closed card/tile — see types.ts's coverPhotoId. */
+async function onSetCoverPhoto(name: string, mediaId: string | ''): Promise<void> {
+  await updateSpeciesDetails(name, { coverPhotoId: mediaId });
+  toast(mediaId ? 'התמונה נבחרה כתמונת המין' : 'הבחירה בוטלה — חוזר לבחירה אוטומטית');
+  await activate();
+}
+
 /** Permanently deletes a photo that can never load (no local blob, no
  * working Storage URL) — for an observation-linked one this strips the
  * dangling reference from that specific entry too, not just the (possibly
@@ -406,12 +423,18 @@ async function onDeleteBrokenPhoto(mediaId: string, obsId: string): Promise<void
  * local blob and no known Storage URL, e.g. from a historical association
  * bug — see repository.ts's repairMissingImageLinks) while later ones in the
  * same list are perfectly fine; stopping at the first candidate left the
- * tile blank even though the species genuinely has viewable photos. */
+ * tile blank even though the species genuinely has viewable photos. A
+ * hand-picked cover photo (getCoverPhotoId — set via the star button in the
+ * species detail gallery) is tried first, ahead of the rest in their normal
+ * order, so long as it's still one of the species' actual photos. */
 function renderTileThumbnails(): void {
   for (const media of container.querySelectorAll<HTMLElement>('.sp-tile-media[data-name]')) {
     const name = media.dataset.name!;
-    const candidates = imagesByName[name] || [];
-    if (!candidates.length) continue;
+    const all = imagesByName[name] || [];
+    if (!all.length) continue;
+    const coverId = getCoverPhotoId(name);
+    const cover = coverId ? all.find((c) => c.img.localId === coverId) : undefined;
+    const candidates = cover ? [cover, ...all.filter((c) => c !== cover)] : all;
     void (async () => {
       for (const { img, obsId } of candidates) {
         const url = await getImageObjectUrl(img, obsId);
