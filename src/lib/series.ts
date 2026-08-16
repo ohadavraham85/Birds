@@ -42,7 +42,7 @@ export function isSeriesOverdue(series: Pick<SeriesRow, 'startDate' | 'expectedD
 }
 
 export const SERIES_STATUS_LABELS: Record<SeriesRow['status'], string> = {
-  active: 'פעיל', completed: 'הושלם', abandoned: 'ננטש',
+  active: 'פעיל', completed: 'הושלם', abandoned: 'נכשל',
 };
 
 /** Every photo attached to any observation linked to this series, most

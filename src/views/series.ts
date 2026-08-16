@@ -101,7 +101,7 @@ function renderList(): string {
     { key: 'all', label: 'הכל' },
     { key: 'active', label: 'פעיל' },
     { key: 'completed', label: 'הושלם' },
-    { key: 'abandoned', label: 'ננטש' },
+    { key: 'abandoned', label: 'נכשל' },
   ];
   const tabsHtml = `
     <div class="series-lib-tabs">
@@ -245,7 +245,7 @@ function renderDetail(series: SeriesRow | undefined): string {
             <button type="button" id="series-detail-next-phase">${icon('link')} המשך לשלב הבא</button>
             ${series.status !== 'active' ? `<button type="button" data-series-status="active">${icon('refresh')} החזרה לפעיל</button>` : ''}
             ${series.status !== 'completed' ? `<button type="button" data-series-status="completed">${icon('check')} סימון כהושלם</button>` : ''}
-            ${series.status !== 'abandoned' ? `<button type="button" data-series-status="abandoned">✕ סימון כננטש</button>` : ''}
+            ${series.status !== 'abandoned' ? `<button type="button" data-series-status="abandoned">✕ סימון כנכשל</button>` : ''}
             <button type="button" id="series-detail-open-journal">${icon('journal')} פתיחה ביומן</button>
             <button type="button" id="series-detail-delete">${icon('trash')} מחיקת מעקב</button>
           </div>
@@ -269,11 +269,25 @@ function renderDetail(series: SeriesRow | undefined): string {
 
 /** Observation cards are DOM elements (not HTML strings), so they're
  * appended after the innerHTML write above — same two-step pattern used by
- * the journal feed itself (views/cards.ts). */
+ * the journal feed itself (views/cards.ts). Each card is made clickable to
+ * open the observation's own full detail view, the same way the journal
+ * feed's cards do (views/cards.ts's cardWithClick) — the card's own
+ * interactive bits (star, tag badges, photo thumbnails, track-delete) all
+ * stop the click from bubbling, so this only fires for a tap on the card
+ * itself. */
 function mountObservationCards(): void {
   const wrap = container.querySelector<HTMLElement>('#series-detail-obs-list');
   if (!wrap || !detailId) return;
-  for (const o of linkedObservations(detailId)) wrap.appendChild(renderObservationCard(o));
+  for (const o of linkedObservations(detailId)) {
+    const card = renderObservationCard(o);
+    card.classList.add('series-obs-card-clickable');
+    card.addEventListener('click', (e) => {
+      const target = e.target as HTMLElement;
+      if (target.closest('.place-link, .media-link-icon')) return;
+      navigate('detail', { viewId: o.id });
+    });
+    wrap.appendChild(card);
+  }
 }
 
 /* ---------- link existing observations ---------- */
