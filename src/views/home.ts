@@ -15,7 +15,7 @@ import { fmtDateTime, confirmDialog } from '../lib/ui';
 import { icon } from '../lib/icons';
 import { loadDraft, clearDraft } from '../lib/draft';
 import { openSmartVoiceModal } from '../lib/voice-observation-modal';
-import { seriesDayLabel, isSeriesOverdue, openCreateSeriesModal } from '../lib/series';
+import { seriesDayLabel, isSeriesOverdue, openCreateSeriesModal, seriesPhotoCandidates } from '../lib/series';
 import { qs } from '../lib/dom';
 import { navigate } from '../main';
 import type { Observation, ObservationImage, SeriesRow } from '../types';
@@ -101,8 +101,11 @@ function seriesWidgetHtml(): string {
     return `
       <div class="series-widget-row${overdue ? ' overdue' : ''}">
         <button type="button" class="series-widget-main" data-series-open="${s.id}">
-          <span class="series-widget-name">${overdue ? icon('alert') : ''}${escapeHtml(s.name)}${s.species ? ` <span class="series-widget-species">· ${escapeHtml(s.species)}</span>` : ''}</span>
-          <span class="series-widget-day">${escapeHtml(seriesDayLabel(s, now))}</span>
+          <span class="series-widget-thumb" data-thumb-series="${s.id}">${icon('target')}</span>
+          <span class="series-widget-text">
+            <span class="series-widget-name">${overdue ? icon('alert') : ''}${escapeHtml(s.name)}${s.species ? ` <span class="series-widget-species">· ${escapeHtml(s.species)}</span>` : ''}</span>
+            <span class="series-widget-day">${escapeHtml(seriesDayLabel(s, now))}</span>
+          </span>
         </button>
         <div class="series-widget-actions">
           <button type="button" class="btn btn-icon" data-series-complete="${s.id}" title="סימון כהושלם" aria-label="סימון כהושלם">${icon('check')}</button>
@@ -112,6 +115,31 @@ function seriesWidgetHtml(): string {
       </div>`;
   }).join('');
   return `<div class="stat-card series-widget">${head}<div class="series-widget-list">${rows}</div></div>`;
+}
+
+/** Fills in each widget row's round cover thumbnail — a photo from one of
+ * the series' own linked observations — same approach and fallback (the
+ * generic target icon) as the series library's own list rows. */
+function renderSeriesWidgetThumbnails(): void {
+  for (const el of container.querySelectorAll<HTMLElement>('.series-widget-thumb[data-thumb-series]')) {
+    const series = activeSeries.find((s) => s.id === el.dataset.thumbSeries);
+    if (!series) continue;
+    const candidates = seriesPhotoCandidates(series, allObservations);
+    if (!candidates.length) continue;
+    void (async () => {
+      for (const { img, obsId } of candidates) {
+        const url = await getImageObjectUrl(img, obsId);
+        if (!url) continue;
+        el.innerHTML = '';
+        const imgEl = document.createElement('img');
+        imgEl.src = url;
+        imgEl.alt = series.name;
+        imgEl.loading = 'lazy';
+        el.appendChild(imgEl);
+        return;
+      }
+    })();
+  }
 }
 
 async function onSeriesStatusChange(id: string, status: SeriesRow['status']): Promise<void> {
@@ -792,6 +820,7 @@ function render(): void {
   qs(container, '#home-body').innerHTML = draftBannerHtml() + smartVoiceButtonHtml() + seriesWidgetHtml() + birdOfDayHtml() + onThisDayHtml() + rangeBarHtml() + statsHtml(filteredObservations());
   renderBirdOfDayPhoto();
   renderOnThisDayPhoto();
+  renderSeriesWidgetThumbnails();
 }
 
 function onClick(e: Event): void {

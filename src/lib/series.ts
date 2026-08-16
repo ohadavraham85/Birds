@@ -9,7 +9,8 @@ import { saveSeries } from '../db/repository';
 import { escapeHtml } from './markdown';
 import { showModal, toast } from './ui';
 import { input } from './dom';
-import type { SeriesRow } from '../types';
+import { entriesOf, entryImages } from './observation';
+import type { SeriesRow, Observation, ObservationImage } from '../types';
 
 const DAY_MS = 86400000;
 
@@ -43,6 +44,26 @@ export function isSeriesOverdue(series: Pick<SeriesRow, 'startDate' | 'expectedD
 export const SERIES_STATUS_LABELS: Record<SeriesRow['status'], string> = {
   active: 'פעיל', completed: 'הושלם', abandoned: 'ננטש',
 };
+
+/** Every photo attached to any observation linked to this series, most
+ * recent observation first — used as the cover thumbnail everywhere a
+ * series is shown as a row (library list, home widget). Returns candidates
+ * rather than a single pick since a photo's blob can be missing locally
+ * (still downloading, or never synced); the caller tries each in order via
+ * `getImageObjectUrl` until one actually resolves, same pattern as the
+ * species tiles' own thumbnail fallback (views/species.ts). */
+export function seriesPhotoCandidates(series: Pick<SeriesRow, 'id'>, observations: Observation[]): { img: ObservationImage; obsId: string }[] {
+  const linked = observations
+    .filter((o) => o.seriesId === series.id)
+    .sort((a, b) => b.dateTime.localeCompare(a.dateTime));
+  const candidates: { img: ObservationImage; obsId: string }[] = [];
+  for (const o of linked) {
+    for (const entry of entriesOf(o)) {
+      for (const img of entryImages(entry)) candidates.push({ img, obsId: o.id });
+    }
+  }
+  return candidates;
+}
 
 export interface CreateSeriesDefaults {
   species?: string;

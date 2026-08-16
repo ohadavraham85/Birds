@@ -9,10 +9,11 @@ import {
 } from '../db/repository';
 import {
   seriesDayLabel, isSeriesOverdue, SERIES_STATUS_LABELS,
-  openCreateSeriesModal, openEditSeriesModal,
+  openCreateSeriesModal, openEditSeriesModal, seriesPhotoCandidates,
 } from '../lib/series';
 import { renderObservationCard } from '../lib/obs-card';
 import { speciesNames, speciesLabel } from '../lib/observation';
+import { getImageObjectUrl } from '../lib/media';
 import { escapeHtml } from '../lib/markdown';
 import { confirmDialog, toast, fmtDateTime, showModal } from '../lib/ui';
 import { icon } from '../lib/icons';
@@ -87,6 +88,7 @@ function render(): void {
   qs(container, '#series-lib-title').textContent = mode === 'detail' ? (series?.name || 'מעקב') : 'ספריית מעקבים';
   qs(container, '#series-lib-body').innerHTML = mode === 'detail' ? renderDetail(series) : renderList();
   if (mode === 'detail' && series) mountObservationCards();
+  renderSeriesThumbnails();
 }
 
 /* ---------- library (list) ---------- */
@@ -126,9 +128,12 @@ function renderList(): string {
     const count = counts.get(s.id) || 0;
     return `
       <button type="button" class="series-lib-row${overdue ? ' overdue' : ''}" data-series-id="${s.id}">
-        <span class="series-lib-row-main">
-          <span class="series-lib-row-name">${overdue ? icon('alert') : ''}${escapeHtml(s.name)}</span>
-          ${s.species ? `<span class="series-lib-row-species">${escapeHtml(s.species)}</span>` : ''}
+        <span class="series-lib-row-lead">
+          <span class="series-lib-row-thumb" data-thumb-series="${s.id}">${icon('target')}</span>
+          <span class="series-lib-row-main">
+            <span class="series-lib-row-name">${overdue ? icon('alert') : ''}${escapeHtml(s.name)}</span>
+            ${s.species ? `<span class="series-lib-row-species">${escapeHtml(s.species)}</span>` : ''}
+          </span>
         </span>
         <span class="series-lib-row-meta">
           <span class="series-status-badge series-status-${s.status}">${SERIES_STATUS_LABELS[s.status]}</span>
@@ -138,6 +143,34 @@ function renderList(): string {
       </button>`;
   }).join('');
   return `${tabsHtml}<div class="series-lib-list">${rows}</div>`;
+}
+
+/** Fills in every round cover thumbnail currently on screen — library rows
+ * and the detail page's own header alike (both mark their placeholder with
+ * `data-thumb-series`) — with a photo from one of the series' own linked
+ * observations (most recent first), falling back to the generic target icon
+ * already shown by default if the series has no photos yet, or none of its
+ * candidates actually resolve to a blob. */
+function renderSeriesThumbnails(): void {
+  for (const el of container.querySelectorAll<HTMLElement>('[data-thumb-series]')) {
+    const series = allSeries.find((s) => s.id === el.dataset.thumbSeries);
+    if (!series) continue;
+    const candidates = seriesPhotoCandidates(series, allObservations);
+    if (!candidates.length) continue;
+    void (async () => {
+      for (const { img, obsId } of candidates) {
+        const url = await getImageObjectUrl(img, obsId);
+        if (!url) continue;
+        el.innerHTML = '';
+        const imgEl = document.createElement('img');
+        imgEl.src = url;
+        imgEl.alt = series.name;
+        imgEl.loading = 'lazy';
+        el.appendChild(imgEl);
+        return;
+      }
+    })();
+  }
 }
 
 /* ---------- series detail ---------- */
@@ -159,7 +192,10 @@ function renderDetail(series: SeriesRow | undefined): string {
   const infoCard = `
     <div class="stat-card series-detail-card">
       <div class="stat-card-head">
-        <h3><span class="series-status-badge series-status-${series.status}">${SERIES_STATUS_LABELS[series.status]}</span> ${escapeHtml(series.name)}</h3>
+        <div class="series-detail-head-lead">
+          <span class="series-detail-thumb" data-thumb-series="${series.id}">${icon('target')}</span>
+          <h3><span class="series-status-badge series-status-${series.status}">${SERIES_STATUS_LABELS[series.status]}</span> ${escapeHtml(series.name)}</h3>
+        </div>
       </div>
       ${series.species ? `<p class="series-detail-species">${icon('bird')} ${escapeHtml(series.species)}</p>` : ''}
       <p class="series-detail-day">${series.status === 'active' ? escapeHtml(seriesDayLabel(series, now)) : `התחיל ${escapeHtml(fmtDateOnly(series.startDate))}`}${series.expectedDurationDays && series.status !== 'active' ? ` · משך צפוי: ${series.expectedDurationDays} ימים` : ''}</p>
