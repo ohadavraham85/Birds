@@ -1382,7 +1382,7 @@ async function onForceResync(): Promise<void> {
   btn.disabled = true;
   try {
     const n = await forceResyncListsFromCloud();
-    toast(`הרשימות סונכרנו מחדש (${n.species} מינים, ${n.locations} מיקומים, ${n.tags} תגיות, ${n.observers} צופים)`);
+    toast(`הרשימות סונכרנו מחדש (${n.species} מינים, ${n.locations} מיקומים, ${n.tags} תגיות, ${n.observers} צופים, ${n.series} מעקבים)`);
   } catch (err) {
     toast('סנכרון מחדש נכשל: ' + (err as Error).message, true, 6000);
   } finally {

@@ -13,6 +13,7 @@ import type {
   OutboxEntry,
   ObservationTrack,
   StoredFile,
+  SeriesRow,
 } from '../types';
 
 /** Cycled through when migrating old projects (which had no color) into tags. */
@@ -30,6 +31,7 @@ export class BirdsDatabase extends Dexie {
   outbox!: EntityTable<OutboxEntry, 'id'>;
   tracks!: EntityTable<ObservationTrack, 'id'>;
   files!: EntityTable<StoredFile, 'id'>;
+  series!: EntityTable<SeriesRow, 'id'>;
 
   constructor() {
     super('birds-db');
@@ -132,6 +134,16 @@ export class BirdsDatabase extends Dexie {
       observations: 'id, dateTime, updatedAt, synced, deleted, seqNo',
       observers: 'name, updatedAt',
       media: 'id, obsId, contentHash',
+    });
+    // v12: series ("מעקב") — generic tracking of related, chronologically-
+    // ordered observations over time (nesting, migration, molting, etc.).
+    this.version(12).stores({
+      ...stores, locations: 'name, updatedAt', projects: 'name, updatedAt', tracks: 'id, updatedAt',
+      files: 'id, kind, createdAt', tags: 'name, updatedAt',
+      observations: 'id, dateTime, updatedAt, synced, deleted, seqNo',
+      observers: 'name, updatedAt',
+      media: 'id, obsId, contentHash',
+      series: 'id, updatedAt, status, species',
     });
   }
 }

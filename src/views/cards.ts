@@ -39,6 +39,9 @@ let selectedTags = new Set<string>();
 let selectedLocations = new Set<string>();
 let selectedSpecies = new Set<string>();
 let starredOnly = false;
+/** Drill-down from the home screen's "מעקבים פעילים" widget — restricts the
+ * journal to observations linked to exactly one series. */
+let filterSeriesId = '';
 /** Date-range drill-down from the home screen's "תצפיות" stats tile (YYYY-MM-DD, inclusive; '' = unbounded). */
 let filterFrom = '';
 let filterTo = '';
@@ -164,8 +167,21 @@ export function setParams(params: ViewParams): void {
     selectedTags = params.filterTag ? new Set([params.filterTag]) : new Set();
     filterFrom = '';
     filterTo = '';
+    filterSeriesId = '';
     query = '';
     groupBy = 'none';
+    return;
+  }
+  if (params.filterSeriesId) {
+    filterSeriesId = params.filterSeriesId;
+    selectedSpecies = new Set();
+    selectedLocations = new Set();
+    selectedTags = new Set();
+    filterFrom = '';
+    filterTo = '';
+    query = '';
+    groupBy = 'none';
+    sortDir = 'asc';
     return;
   }
   if (params.filterFrom !== undefined || params.filterTo !== undefined) {
@@ -174,6 +190,7 @@ export function setParams(params: ViewParams): void {
     selectedSpecies = new Set();
     selectedLocations = new Set();
     selectedTags = new Set();
+    filterSeriesId = '';
     query = '';
     groupBy = 'none';
     return;
@@ -185,6 +202,7 @@ export function setParams(params: ViewParams): void {
     selectedTags = new Set();
     filterFrom = '';
     filterTo = '';
+    filterSeriesId = '';
     query = '';
   }
 }
@@ -207,6 +225,7 @@ function matches(o: Observation): boolean {
   if (selectedLocations.size && !selectedLocations.has(o.locationName || '(ללא מיקום)')) return false;
   if (selectedSpecies.size && !speciesNames(o).some((s) => selectedSpecies.has(s))) return false;
   if (starredOnly && !o.starred) return false;
+  if (filterSeriesId && o.seriesId !== filterSeriesId) return false;
   const day = o.dateTime.slice(0, 10);
   if (filterFrom && day < filterFrom) return false;
   if (filterTo && day > filterTo) return false;
@@ -263,6 +282,7 @@ function openFilterModal(): void {
     selectedTags = localSets.tag;
     selectedLocations = localSets.location;
     selectedSpecies = localSets.species;
+    filterSeriesId = '';
     close();
     render();
   });
@@ -270,6 +290,7 @@ function openFilterModal(): void {
     selectedTags = new Set();
     selectedLocations = new Set();
     selectedSpecies = new Set();
+    filterSeriesId = '';
     close();
     render();
   });

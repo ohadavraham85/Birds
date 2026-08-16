@@ -50,6 +50,10 @@ export interface Observation {
   /** Names of ObserverRow entries — other people present for this
    * observation, in addition to whoever's keeping the journal. */
   observers?: string[];
+  /** Links this observation to a SeriesRow ("מעקב") — a run of related,
+   * chronologically-ordered observations tracking the same ongoing subject
+   * (nesting, migration, molting, etc.) over time. */
+  seriesId?: string;
   /** Soft-delete tombstone — kept so the deletion propagates on sync. */
   deleted: boolean;
   /** Last local modification, ISO. Used for last-write-wins merging. */
@@ -90,6 +94,32 @@ export interface SpeciesRow {
    * photo's star in the species detail gallery. Absent means auto-pick the
    * first resolvable photo instead (species.ts's renderTileThumbnails). */
   coverPhotoId?: string;
+}
+
+/** A "מעקב" (tracking series) — a run of related, chronologically-ordered
+ * observations tracking the same ongoing subject over time (nesting,
+ * migration, molting, or anything else the user wants to follow day-by-day),
+ * generic on purpose rather than nesting-specific. Observations opt in by
+ * setting `Observation.seriesId`; the day-counter shown everywhere the
+ * series appears is computed from `startDate` against either "now" (Home
+ * widget) or the observation's own date (form/detail views). */
+export interface SeriesRow {
+  id: string;
+  name: string;
+  /** Species this series is about, if any — pre-fills the day-counter
+   * default duration from the last series logged for the same species. */
+  species?: string;
+  startDate: string; // ISO date the series began
+  /** Expected total length in days, if known (e.g. typical incubation +
+   * fledging period for the species) — enables a countdown/overdue display
+   * in addition to the plain elapsed-day count. */
+  expectedDurationDays?: number;
+  status: 'active' | 'completed' | 'abandoned';
+  notes?: string;
+  /** Soft-delete tombstone so the deletion propagates on sync. */
+  deleted?: boolean;
+  /** Last local modification, ISO. Used for last-write-wins merging. */
+  updatedAt: string;
 }
 
 /** Master locations-list entry: a saved place name with canonical

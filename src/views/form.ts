@@ -5,8 +5,10 @@
 import {
   saveObservation, getObservation, listObservations, listSpecies,
   saveMedia, getMedia, mediaForObservation, deleteMedia, listLocationRows, listTagRows, addTag, listObserverRows, addObserver, saveTrack, getTrack,
+  listSeriesRows, getSeries, saveSeries, lastSeriesForSpecies,
 } from '../db/repository';
-import { toast, toLocalInputValue, fromLocalInputValue, safeHttpUrl, confirmDialog } from '../lib/ui';
+import { seriesDayLabel } from '../lib/series';
+import { toast, toLocalInputValue, fromLocalInputValue, safeHttpUrl, confirmDialog, showModal } from '../lib/ui';
 import { haptic } from '../lib/haptics';
 import { escapeHtml } from '../lib/markdown';
 import { getImageObjectUrl } from '../lib/media';
@@ -25,7 +27,7 @@ import { icon } from '../lib/icons';
 import { wireDropdown } from '../lib/dropdown-select';
 import { navigate, goBack } from '../main';
 import type { ViewParams } from './view';
-import type { Observation, ObservationImage, SpeciesEntry, LocationRow, ObservationTrack, TagRow, ObserverRow, TrackReportPin } from '../types';
+import type { Observation, ObservationImage, SpeciesEntry, LocationRow, ObservationTrack, TagRow, ObserverRow, TrackReportPin, SeriesRow } from '../types';
 
 interface PendingImage { id: string; file: File; url: string }
 interface RowImages { pending: PendingImage[]; kept: ObservationImage[] }
@@ -42,6 +44,10 @@ let availableTags: TagRow[] = [];
 let selectedTags = new Set<string>();
 let availableObservers: ObserverRow[] = [];
 let selectedObservers = new Set<string>();
+/** The "מעקב" (tracking series) this observation is linked to, if any — see
+ * types.ts's SeriesRow / Observation.seriesId and lib/series.ts. */
+let linkedSeriesId: string | null = null;
+let linkedSeriesCache: SeriesRow | null = null;
 let locationSuggestions: string[] = [];
 let editId: string | null = null;
 let prefillSpecies: string | null = null;
@@ -176,6 +182,11 @@ export function init(el: HTMLElement): void {
             </div>
           </div>
         </div>
+        <div class="field">
+          <button type="button" class="btn btn-block series-link-btn" id="series-link-btn">
+            ${icon('target')} <span id="series-link-label">קישור למעקב (קינון / נדידה...)</span>
+          </button>
+        </div>
       </div>
 
       <div class="field-frame species-frame">
@@ -217,6 +228,8 @@ export function init(el: HTMLElement): void {
   });
   input(container, '#f-location').addEventListener('input', (e) => applyLocationName((e.target as HTMLInputElement).value));
   qs(container, '#pick-map-btn').addEventListener('click', () => void openPicker());
+  qs(container, '#series-link-btn').addEventListener('click', () => void openSeriesPicker());
+  input(container, '#f-datetime').addEventListener('change', () => void renderSeriesButton());
   qs(container, '#add-species-row').addEventListener('click', () => addSpeciesRow({ species: '', quantity: 1 }, true));
   qs(container, '#back-btn').addEventListener('click', () => { stopAndDiscardTrack(); stopDictation(); goBack(); });
   qs(container, '#voice-dictate-btn').addEventListener('click', () => onVoiceDictateClick());
@@ -401,6 +414,7 @@ function persistDraft(): void {
       notes: qs<HTMLTextAreaElement>(container, '#f-notes').value,
       mediaLink: input(container, '#f-media-link').value,
       entries: collectDraftEntries(),
+      ...(linkedSeriesId ? { seriesId: linkedSeriesId } : {}),
     },
     track,
   };
@@ -448,6 +462,8 @@ function resumeFromDraft(): void {
   qs<HTMLTextAreaElement>(container, '#f-notes').value = draft.fields.notes;
   input(container, '#f-media-link').value = draft.fields.mediaLink ?? '';
   setEntries(draft.fields.entries.length ? draft.fields.entries : [{ species: '', quantity: 1 }]);
+  linkedSeriesId = draft.fields.seriesId || null;
+  void renderSeriesButton();
   if (draft.track && draft.track.points.length) {
     seedFromDraft(draft.track.points, draft.track.startedAt);
     seededFromExistingTrack = true; // the draft already carries any pre-existing track's history — don't let beginTrack() re-seed and clobber it
@@ -596,6 +612,8 @@ function resetForm(locate = true): void {
   renderTagPicker();
   selectedObservers = new Set();
   renderObserverPicker();
+  linkedSeriesId = null;
+  void renderSeriesButton();
   currentLat = null;
   currentLng = null;
   coordsLocked = false;
@@ -643,6 +661,154 @@ async function loadForEdit(id: string): Promise<void> {
   input(container, '#f-media-link').value = obs.mediaLink || '';
   selectedObservers = new Set(obs.observers ?? []);
   renderObserverPicker();
+  linkedSeriesId = obs.seriesId || null;
+  await renderSeriesButton();
+}
+
+/* ---------- series ("מעקב") linking ---------- */
+
+/** Updates the link button's label to reflect the current linked series (if
+ * any), with its day-counter computed against this form's own date field —
+ * not "now" — so editing an old observation shows what day of the series it
+ * actually was, and a brand-new one shows where "today" falls. */
+async function renderSeriesButton(): Promise<void> {
+  const btn = qs<HTMLButtonElement>(container, '#series-link-btn');
+  const label = qs(container, '#series-link-label');
+  if (!linkedSeriesId) {
+    btn.classList.remove('active');
+    label.textContent = 'קישור למעקב (קינון / נדידה...)';
+    linkedSeriesCache = null;
+    return;
+  }
+  const series = linkedSeriesCache?.id === linkedSeriesId ? linkedSeriesCache : ((await getSeries(linkedSeriesId)) ?? null);
+  linkedSeriesCache = series;
+  btn.classList.add('active');
+  if (!series) { label.textContent = 'מעקב (נמחק)'; return; }
+  const iso = fromLocalInputValue(input(container, '#f-datetime').value);
+  const asOf = iso ? new Date(iso) : new Date();
+  label.textContent = `${series.name} · ${seriesDayLabel(series, asOf)}`;
+}
+
+/** Lists active series (matching this form's own species entries surfaced
+ * first) to link this observation to, with actions to create a brand-new
+ * series or unlink the currently-linked one. */
+async function openSeriesPicker(): Promise<void> {
+  const active = (await listSeriesRows()).filter((s) => s.status === 'active');
+  const currentSpecies = new Set(collectDraftEntries().map((e) => e.species));
+  const iso = fromLocalInputValue(input(container, '#f-datetime').value);
+  const asOf = iso ? new Date(iso) : new Date();
+  const sorted = [...active].sort((a, b) => {
+    const am = a.species && currentSpecies.has(a.species) ? 0 : 1;
+    const bm = b.species && currentSpecies.has(b.species) ? 0 : 1;
+    return am - bm;
+  });
+
+  const wrap = document.createElement('div');
+  wrap.className = 'series-modal';
+  const rowHtml = (s: SeriesRow): string => `
+    <button type="button" class="series-pick-row ${linkedSeriesId === s.id ? 'active' : ''}" data-series-id="${s.id}">
+      <span class="series-pick-main">
+        <span class="series-pick-name">${escapeHtml(s.name)}</span>
+        ${s.species ? `<span class="series-pick-species">${escapeHtml(s.species)}</span>` : ''}
+      </span>
+      <span class="series-pick-day">${escapeHtml(seriesDayLabel(s, asOf))}</span>
+    </button>`;
+  wrap.innerHTML = `
+    <h3>קישור למעקב</h3>
+    ${sorted.length ? `<div class="series-pick-list">${sorted.map(rowHtml).join('')}</div>` : '<p class="hint">אין מעקבים פעילים כרגע.</p>'}
+    <div class="modal-actions">
+      <button type="button" class="btn btn-sm btn-primary" id="series-create-new">${icon('plus')} מעקב חדש</button>
+      ${linkedSeriesId ? `<button type="button" class="btn btn-sm" id="series-unlink">ביטול קישור</button>` : ''}
+      <button type="button" class="btn btn-sm" id="series-modal-close">סגירה</button>
+    </div>`;
+  const close = showModal(wrap);
+
+  wrap.querySelectorAll<HTMLElement>('.series-pick-row').forEach((row) => {
+    row.addEventListener('click', () => {
+      linkedSeriesId = row.dataset.seriesId!;
+      close();
+      void renderSeriesButton();
+      scheduleDraftSave();
+    });
+  });
+  wrap.querySelector('#series-create-new')?.addEventListener('click', () => {
+    close();
+    void openCreateSeriesModal();
+  });
+  wrap.querySelector('#series-unlink')?.addEventListener('click', () => {
+    linkedSeriesId = null;
+    close();
+    void renderSeriesButton();
+    scheduleDraftSave();
+  });
+  wrap.querySelector('#series-modal-close')?.addEventListener('click', () => close());
+}
+
+/** Creates a brand-new series and links this observation to it in one step
+ * — name/species/start-date/expected-duration all pre-filled from this
+ * form's own state (species from the form's single entry if there's exactly
+ * one, start date from the form's own date, expected duration remembered
+ * from the last series logged for the same species per the user's request). */
+async function openCreateSeriesModal(): Promise<void> {
+  const entries = collectDraftEntries();
+  const defaultSpecies = entries.length === 1 ? entries[0]!.species : '';
+  const iso = fromLocalInputValue(input(container, '#f-datetime').value) || new Date().toISOString();
+  const defaultStart = iso.slice(0, 10);
+  const lastForSpecies = defaultSpecies ? await lastSeriesForSpecies(defaultSpecies) : undefined;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'series-modal';
+  wrap.innerHTML = `
+    <h3>מעקב חדש</h3>
+    <div class="field">
+      <label for="series-name">שם המעקב</label>
+      <input type="text" id="series-name" value="${escapeHtml(defaultSpecies ? `קינון — ${defaultSpecies}` : '')}" placeholder="לדוגמה: קינון בול״ץ 2026">
+    </div>
+    <div class="field">
+      <label for="series-species">מין (לא חובה)</label>
+      <input type="text" id="series-species" value="${escapeHtml(defaultSpecies)}" list="series-species-datalist">
+      <datalist id="series-species-datalist">${speciesCache.map((s) => `<option value="${escapeHtml(s)}">`).join('')}</datalist>
+    </div>
+    <div class="field-row two-up">
+      <div class="field">
+        <label for="series-start">תאריך התחלה</label>
+        <input type="date" id="series-start" value="${defaultStart}">
+      </div>
+      <div class="field">
+        <label for="series-duration">משך צפוי (ימים)</label>
+        <input type="number" id="series-duration" min="1" value="${lastForSpecies?.expectedDurationDays ?? ''}">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-sm btn-primary" id="series-create-save">יצירה וקישור</button>
+      <button type="button" class="btn btn-sm" id="series-create-cancel">ביטול</button>
+    </div>`;
+  const close = showModal(wrap);
+
+  input(wrap, '#series-name').focus();
+  wrap.querySelector('#series-create-cancel')?.addEventListener('click', () => close());
+  wrap.querySelector('#series-create-save')?.addEventListener('click', () => {
+    const name = input(wrap, '#series-name').value.trim();
+    if (!name) { toast('יש להזין שם למעקב', true); return; }
+    const species = input(wrap, '#series-species').value.trim();
+    const startDate = input(wrap, '#series-start').value || defaultStart;
+    const durationRaw = input(wrap, '#series-duration').value.trim();
+    const expectedDurationDays = durationRaw ? Math.max(1, parseInt(durationRaw, 10)) : undefined;
+    void (async () => {
+      const row: SeriesRow = {
+        id: crypto.randomUUID(), name, status: 'active', updatedAt: '',
+        ...(species ? { species } : {}),
+        startDate: new Date(startDate).toISOString(),
+        ...(expectedDurationDays ? { expectedDurationDays } : {}),
+      };
+      await saveSeries(row);
+      linkedSeriesId = row.id;
+      close();
+      await renderSeriesButton();
+      scheduleDraftSave();
+      toast(`המעקב "${name}" נוצר וקושר ✓`);
+    })();
+  });
 }
 
 /** Deterministic color for entities that have no stored color of their own
@@ -1231,6 +1397,7 @@ async function onSave(e: Event): Promise<void> {
       notes: qs<HTMLTextAreaElement>(container, '#f-notes').value,
       mediaLink,
       observers: [...selectedObservers],
+      seriesId: linkedSeriesId || undefined,
       deleted: false,
       updatedAt: '',
     };
