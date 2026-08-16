@@ -11,12 +11,12 @@ import { getSpeciesDetail } from '../lib/species-details-cache';
 import { speciesNames, speciesLabel, entriesOf, entryImages } from '../lib/observation';
 import { getImageObjectUrl } from '../lib/media';
 import { escapeHtml } from '../lib/markdown';
-import { fmtDateTime, showModal, confirmDialog, toast } from '../lib/ui';
+import { fmtDateTime, confirmDialog } from '../lib/ui';
 import { icon } from '../lib/icons';
 import { loadDraft, clearDraft } from '../lib/draft';
 import { openSmartVoiceModal } from '../lib/voice-observation-modal';
-import { seriesDayLabel, isSeriesOverdue } from '../lib/series';
-import { qs, input } from '../lib/dom';
+import { seriesDayLabel, isSeriesOverdue, openCreateSeriesModal } from '../lib/series';
+import { qs } from '../lib/dom';
 import { navigate } from '../main';
 import type { Observation, ObservationImage, SeriesRow } from '../types';
 
@@ -82,7 +82,10 @@ function seriesWidgetHtml(): string {
   const head = `
     <div class="stat-card-head">
       <h3>${icon('target')} מעקבים פעילים</h3>
-      <button type="button" class="btn btn-icon" id="series-widget-add" title="מעקב חדש" aria-label="מעקב חדש">${icon('plus')}</button>
+      <div class="series-widget-head-actions">
+        <button type="button" class="btn btn-sm" id="series-widget-library">${icon('folder')} ספריית מעקבים</button>
+        <button type="button" class="btn btn-icon" id="series-widget-add" title="מעקב חדש" aria-label="מעקב חדש">${icon('plus')}</button>
+      </div>
     </div>`;
   if (!activeSeries.length) {
     return `<div class="stat-card series-widget">${head}<p class="hint">אין מעקבים פעילים כרגע — לחצו על ${icon('plus')} כדי להתחיל אחד.</p></div>`;
@@ -109,63 +112,6 @@ function seriesWidgetHtml(): string {
       </div>`;
   }).join('');
   return `<div class="stat-card series-widget">${head}<div class="series-widget-list">${rows}</div></div>`;
-}
-
-/** Create/link a brand-new series directly from the home widget — mirrors
- * the observation form's own create-series modal (views/form.ts), but with
- * no per-observation context to pre-fill from since it's opened standalone. */
-function openCreateSeriesModal(): void {
-  const wrap = document.createElement('div');
-  wrap.className = 'series-modal';
-  wrap.innerHTML = `
-    <h3>מעקב חדש</h3>
-    <div class="field">
-      <label for="series-name">שם המעקב</label>
-      <input type="text" id="series-name" placeholder="לדוגמה: קינון בול״ץ 2026">
-    </div>
-    <div class="field">
-      <label for="series-species">מין (לא חובה)</label>
-      <input type="text" id="series-species" list="series-species-datalist">
-      <datalist id="series-species-datalist">${speciesMasterList.map((s) => `<option value="${escapeHtml(s)}">`).join('')}</datalist>
-    </div>
-    <div class="field-row two-up">
-      <div class="field">
-        <label for="series-start">תאריך התחלה</label>
-        <input type="date" id="series-start" value="${new Date().toISOString().slice(0, 10)}">
-      </div>
-      <div class="field">
-        <label for="series-duration">משך צפוי (ימים)</label>
-        <input type="number" id="series-duration" min="1">
-      </div>
-    </div>
-    <div class="modal-actions">
-      <button type="button" class="btn btn-sm btn-primary" id="series-create-save">יצירה</button>
-      <button type="button" class="btn btn-sm" id="series-create-cancel">ביטול</button>
-    </div>`;
-  const close = showModal(wrap);
-  input(wrap, '#series-name').focus();
-  wrap.querySelector('#series-create-cancel')?.addEventListener('click', () => close());
-  wrap.querySelector('#series-create-save')?.addEventListener('click', () => {
-    const name = input(wrap, '#series-name').value.trim();
-    if (!name) { toast('יש להזין שם למעקב', true); return; }
-    const species = input(wrap, '#series-species').value.trim();
-    const startDate = input(wrap, '#series-start').value || new Date().toISOString().slice(0, 10);
-    const durationRaw = input(wrap, '#series-duration').value.trim();
-    const expectedDurationDays = durationRaw ? Math.max(1, parseInt(durationRaw, 10)) : undefined;
-    void (async () => {
-      const row: SeriesRow = {
-        id: crypto.randomUUID(), name, status: 'active', updatedAt: '',
-        ...(species ? { species } : {}),
-        startDate: new Date(startDate).toISOString(),
-        ...(expectedDurationDays ? { expectedDurationDays } : {}),
-      };
-      await saveSeries(row);
-      activeSeries = (await listSeriesRows()).filter((s) => s.status === 'active');
-      close();
-      render();
-      toast(`המעקב "${name}" נוצר ✓`);
-    })();
-  });
 }
 
 async function onSeriesStatusChange(id: string, status: SeriesRow['status']): Promise<void> {
@@ -853,9 +799,17 @@ function onClick(e: Event): void {
 
   if (target.closest('#smart-voice-btn')) { openSmartVoiceModal(); return; }
 
-  if (target.closest('#series-widget-add')) { openCreateSeriesModal(); return; }
+  if (target.closest('#series-widget-library')) { navigate('series'); return; }
+  if (target.closest('#series-widget-add')) {
+    void openCreateSeriesModal(speciesMasterList).then(async (created) => {
+      if (!created) return;
+      activeSeries = (await listSeriesRows()).filter((s) => s.status === 'active');
+      render();
+    });
+    return;
+  }
   const seriesOpen = target.closest<HTMLElement>('[data-series-open]');
-  if (seriesOpen) { navigate('cards', { filterSeriesId: seriesOpen.dataset.seriesOpen! }); return; }
+  if (seriesOpen) { navigate('series', { seriesId: seriesOpen.dataset.seriesOpen! }); return; }
   const seriesComplete = target.closest<HTMLElement>('[data-series-complete]');
   if (seriesComplete) { void onSeriesStatusChange(seriesComplete.dataset.seriesComplete!, 'completed'); return; }
   const seriesAbandon = target.closest<HTMLElement>('[data-series-abandon]');
