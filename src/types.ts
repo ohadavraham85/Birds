@@ -116,6 +116,12 @@ export interface SeriesRow {
   expectedDurationDays?: number;
   status: 'active' | 'completed' | 'abandoned';
   notes?: string;
+  /** The prior-phase series this one continues from (e.g. nesting →
+   * chick-rearing for the same pair) — set via "המשך לשלב הבא", which also
+   * marks that prior series completed. Chains any number of phases into one
+   * followable sequence; the chain is derived on the fly (lib/series.ts's
+   * seriesChain) rather than stored as its own list. */
+  previousSeriesId?: string;
   /** Soft-delete tombstone so the deletion propagates on sync. */
   deleted?: boolean;
   /** Last local modification, ISO. Used for last-write-wins merging. */

@@ -70,23 +70,32 @@ export interface CreateSeriesDefaults {
   /** YYYY-MM-DD */
   startDate?: string;
   expectedDurationDays?: number;
+  /** Overrides the auto "קינון — <species>" name suggestion — used for a
+   * follow-on phase, where that default would be misleading (e.g. the next
+   * phase after nesting is chick-rearing, not another "קינון —"). */
+  name?: string;
+  /** Chains the new series onto a prior phase (see SeriesRow.previousSeriesId
+   * / seriesChain below) — used by "המשך לשלב הבא". */
+  previousSeriesId?: string;
 }
 
 /** The "מעקב חדש" modal — shared by every place a new series can be created
- * (the home screen's library/widget, the observation form's link-picker) so
- * the fields/behavior stay identical everywhere. Saves the series itself
- * (status 'active') and resolves it, or resolves null if cancelled —
- * callers decide what to do with the result (link it, refresh a list, etc). */
+ * (the home screen's library/widget, the observation form's link-picker, and
+ * chaining on a follow-on phase) so the fields/behavior stay identical
+ * everywhere. Saves the series itself (status 'active') and resolves it, or
+ * resolves null if cancelled — callers decide what to do with the result
+ * (link it, refresh a list, etc). */
 export function openCreateSeriesModal(speciesList: string[], defaults: CreateSeriesDefaults = {}): Promise<SeriesRow | null> {
   return new Promise((resolve) => {
     const defaultStart = defaults.startDate || new Date().toISOString().slice(0, 10);
+    const defaultName = defaults.name ?? (defaults.species ? `קינון — ${defaults.species}` : '');
     const wrap = document.createElement('div');
     wrap.className = 'series-modal';
     wrap.innerHTML = `
-      <h3>מעקב חדש</h3>
+      <h3>מעקב חדש${defaults.previousSeriesId ? ' — שלב הבא' : ''}</h3>
       <div class="field">
         <label for="series-name">שם המעקב</label>
-        <input type="text" id="series-name" value="${escapeHtml(defaults.species ? `קינון — ${defaults.species}` : '')}" placeholder="לדוגמה: קינון בול״ץ 2026">
+        <input type="text" id="series-name" value="${escapeHtml(defaultName)}" placeholder="לדוגמה: טיפול בגוזלים">
       </div>
       <div class="field">
         <label for="series-species">מין (לא חובה)</label>
@@ -125,6 +134,7 @@ export function openCreateSeriesModal(speciesList: string[], defaults: CreateSer
           ...(species ? { species } : {}),
           startDate: new Date(startDate).toISOString(),
           ...(expectedDurationDays ? { expectedDurationDays } : {}),
+          ...(defaults.previousSeriesId ? { previousSeriesId: defaults.previousSeriesId } : {}),
         };
         await saveSeries(row);
         close();
@@ -133,6 +143,49 @@ export function openCreateSeriesModal(speciesList: string[], defaults: CreateSer
       })();
     });
   });
+}
+
+/** Every series belonging to the same multi-phase chain as `series` —
+ * walking backward via `previousSeriesId` to find the first phase, then
+ * forward by finding whichever series names each step as its own previous
+ * phase — oldest phase first. A series with no chain returns just itself. */
+export function seriesChain(series: SeriesRow, all: SeriesRow[]): SeriesRow[] {
+  const byId = new Map(all.map((s) => [s.id, s]));
+  let first = series;
+  const seenBack = new Set([series.id]);
+  while (first.previousSeriesId && byId.has(first.previousSeriesId) && !seenBack.has(first.previousSeriesId)) {
+    first = byId.get(first.previousSeriesId)!;
+    seenBack.add(first.id);
+  }
+  const chain: SeriesRow[] = [first];
+  const seenFwd = new Set([first.id]);
+  let current = first;
+  for (;;) {
+    const next = all.find((s) => s.previousSeriesId === current.id);
+    if (!next || seenFwd.has(next.id)) break;
+    chain.push(next);
+    seenFwd.add(next.id);
+    current = next;
+  }
+  return chain;
+}
+
+/** Starts the next phase of a multi-phase campaign (e.g. nesting → chick-
+ * rearing for the same pair): opens the create-series modal pre-filled with
+ * the same species and today as the start date, chains it onto `previous`
+ * via `previousSeriesId`, and marks `previous` completed if it was still
+ * active — a follow-on phase starting means the prior one is done. Resolves
+ * the new series, or null if cancelled. */
+export async function continueToNextPhase(previous: SeriesRow, speciesList: string[]): Promise<SeriesRow | null> {
+  const created = await openCreateSeriesModal(speciesList, {
+    species: previous.species,
+    startDate: new Date().toISOString().slice(0, 10),
+    name: '',
+    previousSeriesId: previous.id,
+  });
+  if (!created) return null;
+  if (previous.status === 'active') await saveSeries({ ...previous, status: 'completed' });
+  return created;
 }
 
 /** Edits an existing series' fields in place (name/species/start
