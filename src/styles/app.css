@@ -2019,9 +2019,17 @@ a.media-link-icon:hover { color: var(--accent-700); }
 }
 .series-widget-row.overdue { border-color: #e03131; background: #e0313110; }
 .series-widget-main {
-  flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  flex: 1; display: flex; align-items: center; gap: 8px;
   border: 0; background: none; padding: 6px 4px; text-align: right; font: inherit; color: inherit; cursor: pointer; min-width: 0;
 }
+.series-widget-thumb {
+  flex-shrink: 0; width: 36px; height: 36px; border-radius: 50%; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--accent-100); color: var(--accent-700);
+}
+.series-widget-thumb .icon { width: 17px; height: 17px; }
+.series-widget-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.series-widget-text { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
 .series-widget-name { display: flex; align-items: center; gap: 4px; font-weight: 600; }
 .series-widget-name .icon { width: 15px; height: 15px; color: #e03131; flex-shrink: 0; }
 .series-widget-species { font-weight: 400; color: var(--ink-soft); }
@@ -2075,6 +2083,14 @@ a.media-link-icon:hover { color: var(--accent-700); }
 }
 .series-lib-row:hover { background: var(--accent-50); }
 .series-lib-row.overdue { border-color: #e03131; }
+.series-lib-row-lead { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.series-lib-row-thumb {
+  flex-shrink: 0; width: 44px; height: 44px; border-radius: 50%; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--accent-100); color: var(--accent-700);
+}
+.series-lib-row-thumb .icon { width: 19px; height: 19px; }
+.series-lib-row-thumb img { width: 100%; height: 100%; object-fit: cover; }
 .series-lib-row-main { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
 .series-lib-row-name { display: flex; align-items: center; gap: 4px; font-weight: 700; font-size: 1.02rem; }
 .series-lib-row-name .icon { width: 15px; height: 15px; color: #e03131; flex-shrink: 0; }
@@ -2091,7 +2107,15 @@ a.media-link-icon:hover { color: var(--accent-700); }
 .series-status-completed { background: #2f9e4422; color: #2f9e44; }
 .series-status-abandoned { background: #86909522; color: #869095; }
 
-.series-detail-card h3 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.series-detail-head-lead { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.series-detail-thumb {
+  flex-shrink: 0; width: 52px; height: 52px; border-radius: 50%; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--accent-100); color: var(--accent-700);
+}
+.series-detail-thumb .icon { width: 22px; height: 22px; }
+.series-detail-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.series-detail-card h3 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0; }
 .series-detail-species { display: flex; align-items: center; gap: 6px; color: var(--ink-soft); margin: 4px 0; }
 .series-detail-species .icon { width: 15px; height: 15px; }
 .series-detail-day { font-weight: 600; color: var(--accent-700); margin: 4px 0; }
