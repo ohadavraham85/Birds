@@ -5,15 +5,16 @@
  * "מעקבים פעילים" widget ("ספריית מעקבים" button, or tapping a series row). */
 
 import {
-  listSeriesRows, listObservations, listSpeciesRows, saveSeries, deleteSeries,
+  listSeriesRows, listObservations, listSpeciesRows, saveSeries, deleteSeries, getObservation, saveObservation,
 } from '../db/repository';
 import {
   seriesDayLabel, isSeriesOverdue, SERIES_STATUS_LABELS,
   openCreateSeriesModal, openEditSeriesModal,
 } from '../lib/series';
 import { renderObservationCard } from '../lib/obs-card';
+import { speciesNames, speciesLabel } from '../lib/observation';
 import { escapeHtml } from '../lib/markdown';
-import { confirmDialog, toast } from '../lib/ui';
+import { confirmDialog, toast, fmtDateTime, showModal } from '../lib/ui';
 import { icon } from '../lib/icons';
 import { qs } from '../lib/dom';
 import { navigate } from '../main';
@@ -21,6 +22,7 @@ import type { ViewParams } from './view';
 import type { SeriesRow, Observation } from '../types';
 
 type StatusFilter = 'all' | 'active' | 'completed' | 'abandoned';
+type ObsSortDir = 'asc' | 'desc';
 
 let container: HTMLElement;
 let mode: 'list' | 'detail' = 'list';
@@ -29,6 +31,9 @@ let allSeries: SeriesRow[] = [];
 let allObservations: Observation[] = [];
 let speciesMasterList: string[] = [];
 let statusFilter: StatusFilter = 'all';
+/** Chronological order for the observation list on a series' detail page —
+ * defaults to oldest-first (day 1, day 2, ...), toggleable to newest-first. */
+let obsSortDir: ObsSortDir = 'asc';
 
 export function init(el: HTMLElement): void {
   container = el;
@@ -41,6 +46,13 @@ export function init(el: HTMLElement): void {
   `;
   qs(container, '#series-back-btn').addEventListener('click', () => navigate('series'));
   qs(container, '#series-lib-body').addEventListener('click', (e) => void onClick(e));
+  // Closes the two overflow menus rendered on a series' detail page whenever
+  // a click lands outside either of them — same pattern as the journal's own
+  // bulk-export dropdown (views/cards.ts).
+  document.addEventListener('click', (e) => {
+    if ((e.target as HTMLElement).closest('.export-wrap')) return;
+    container.querySelectorAll<HTMLElement>('#series-add-obs-menu, #series-more-menu').forEach((m) => { m.hidden = true; });
+  });
 }
 
 export function setParams(params: ViewParams): void {
@@ -130,37 +142,60 @@ function renderList(): string {
 
 /* ---------- series detail ---------- */
 
+function linkedObservations(seriesId: string): Observation[] {
+  const sorted = allObservations
+    .filter((o) => o.seriesId === seriesId)
+    .sort((a, b) => a.dateTime.localeCompare(b.dateTime));
+  return obsSortDir === 'desc' ? sorted.reverse() : sorted;
+}
+
 function renderDetail(series: SeriesRow | undefined): string {
   if (!series) {
     return '<p class="hint">המעקב הזה נמחק או לא נמצא.</p>';
   }
   const now = new Date();
-  const linked = allObservations
-    .filter((o) => o.seriesId === series.id)
-    .sort((a, b) => a.dateTime.localeCompare(b.dateTime));
+  const linked = linkedObservations(series.id);
 
   const infoCard = `
     <div class="stat-card series-detail-card">
       <div class="stat-card-head">
         <h3><span class="series-status-badge series-status-${series.status}">${SERIES_STATUS_LABELS[series.status]}</span> ${escapeHtml(series.name)}</h3>
-        <button type="button" class="btn btn-icon" id="series-detail-edit" title="עריכת מעקב" aria-label="עריכת מעקב">${icon('edit')}</button>
       </div>
       ${series.species ? `<p class="series-detail-species">${icon('bird')} ${escapeHtml(series.species)}</p>` : ''}
       <p class="series-detail-day">${series.status === 'active' ? escapeHtml(seriesDayLabel(series, now)) : `התחיל ${escapeHtml(fmtDateOnly(series.startDate))}`}${series.expectedDurationDays && series.status !== 'active' ? ` · משך צפוי: ${series.expectedDurationDays} ימים` : ''}</p>
       ${series.notes ? `<p class="series-detail-notes">${escapeHtml(series.notes)}</p>` : ''}
       <div class="series-detail-actions">
-        ${series.status !== 'active' ? `<button type="button" class="btn btn-sm" data-series-status="active">${icon('refresh')} החזרה לפעיל</button>` : ''}
-        ${series.status !== 'completed' ? `<button type="button" class="btn btn-sm" data-series-status="completed">${icon('check')} סימון כהושלם</button>` : ''}
-        ${series.status !== 'abandoned' ? `<button type="button" class="btn btn-sm" data-series-status="abandoned">✕ סימון כננטש</button>` : ''}
-        <button type="button" class="btn btn-sm" id="series-detail-open-journal">${icon('journal')} פתיחה ביומן</button>
-        <button type="button" class="btn btn-sm" id="series-detail-add-obs">${icon('plus')} תצפית חדשה למעקב זה</button>
-        <button type="button" class="btn btn-sm btn-danger" id="series-detail-delete">${icon('trash')} מחיקת מעקב</button>
+        <div class="export-wrap">
+          <button type="button" class="btn btn-sm btn-primary" id="series-add-obs-btn">${icon('plus')} הוספת תצפיות ▾</button>
+          <div class="export-menu" id="series-add-obs-menu" hidden>
+            <button type="button" id="series-add-obs-new">${icon('plus')} תצפית חדשה</button>
+            <button type="button" id="series-add-obs-existing">${icon('link')} שיוך תצפיות קיימות</button>
+          </div>
+        </div>
+        <div class="export-wrap">
+          <button type="button" class="btn btn-sm btn-icon" id="series-more-btn" title="פעולות נוספות" aria-label="פעולות נוספות">⋯</button>
+          <div class="export-menu" id="series-more-menu" hidden>
+            <button type="button" id="series-detail-edit">${icon('edit')} עריכת מעקב</button>
+            ${series.status !== 'active' ? `<button type="button" data-series-status="active">${icon('refresh')} החזרה לפעיל</button>` : ''}
+            ${series.status !== 'completed' ? `<button type="button" data-series-status="completed">${icon('check')} סימון כהושלם</button>` : ''}
+            ${series.status !== 'abandoned' ? `<button type="button" data-series-status="abandoned">✕ סימון כננטש</button>` : ''}
+            <button type="button" id="series-detail-open-journal">${icon('journal')} פתיחה ביומן</button>
+            <button type="button" id="series-detail-delete">${icon('trash')} מחיקת מעקב</button>
+          </div>
+        </div>
       </div>
     </div>`;
 
   const obsHtml = linked.length
-    ? `<h3 class="series-detail-obs-title">${linked.length} תצפיות במעקב זה</h3><div class="series-detail-obs-list" id="series-detail-obs-list"></div>`
-    : '<p class="hint">אין עדיין תצפיות משויכות למעקב זה — אפשר להוסיף תצפית חדשה, או לשייך תצפיות קיימות דרך עריכה מרוכזת ביומן.</p>';
+    ? `
+      <div class="series-detail-obs-head">
+        <h3 class="series-detail-obs-title">${linked.length} תצפיות במעקב זה</h3>
+        <button type="button" class="btn btn-icon" id="series-obs-sort-btn" title="היפוך סדר כרונולוגי" aria-label="היפוך סדר כרונולוגי">
+          ${icon('sortArrows', obsSortDir === 'desc' ? 'icon-flip' : '')}
+        </button>
+      </div>
+      <div class="series-detail-obs-list" id="series-detail-obs-list"></div>`
+    : '<p class="hint">אין עדיין תצפיות משויכות למעקב זה — לחצו "הוספת תצפיות" כדי להוסיף תצפית חדשה או לשייך תצפיות קיימות.</p>';
 
   return infoCard + obsHtml;
 }
@@ -171,10 +206,83 @@ function renderDetail(series: SeriesRow | undefined): string {
 function mountObservationCards(): void {
   const wrap = container.querySelector<HTMLElement>('#series-detail-obs-list');
   if (!wrap || !detailId) return;
-  const linked = allObservations
-    .filter((o) => o.seriesId === detailId)
-    .sort((a, b) => a.dateTime.localeCompare(b.dateTime));
-  for (const o of linked) wrap.appendChild(renderObservationCard(o));
+  for (const o of linkedObservations(detailId)) wrap.appendChild(renderObservationCard(o));
+}
+
+/* ---------- link existing observations ---------- */
+
+/** Lets you attach observations already in the journal to this series
+ * directly from its detail page, without opening the journal — the
+ * complement to "תצפית חדשה" for building a series' history retroactively.
+ * Observations already matching the series' own species are listed first. */
+function openLinkExistingObservationsModal(series: SeriesRow): void {
+  const candidates = allObservations
+    .filter((o) => o.seriesId !== series.id)
+    .sort((a, b) => {
+      const am = series.species && speciesNames(a).includes(series.species) ? 0 : 1;
+      const bm = series.species && speciesNames(b).includes(series.species) ? 0 : 1;
+      return am !== bm ? am - bm : b.dateTime.localeCompare(a.dateTime);
+    });
+  const selected = new Set<string>();
+
+  const wrap = document.createElement('div');
+  wrap.className = 'series-modal series-link-obs-modal';
+  const rowHtml = (o: Observation): string => `
+    <label class="filter-modal-check series-link-obs-row">
+      <input type="checkbox" class="series-link-obs-check" value="${o.id}">
+      <span class="series-link-obs-summary">
+        <strong>${escapeHtml(speciesLabel(o) || 'ללא מין')}</strong>
+        <span class="hint">${escapeHtml(fmtDateTime(o.dateTime))}${o.locationName ? ` · ${escapeHtml(o.locationName)}` : ''}${o.seriesId ? ' · כבר משויכת למעקב אחר' : ''}</span>
+      </span>
+    </label>`;
+  wrap.innerHTML = `
+    <h3>שיוך תצפיות קיימות</h3>
+    <input type="search" id="series-link-obs-q" placeholder="חיפוש (מין, מיקום)..." class="filter-search">
+    <div class="series-link-obs-list" id="series-link-obs-list">
+      ${candidates.length ? candidates.map(rowHtml).join('') : '<p class="hint">אין תצפיות אחרות ביומן.</p>'}
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-sm btn-primary" id="series-link-obs-apply" disabled>שיוך תצפיות (<span id="series-link-obs-count">0</span>)</button>
+      <button type="button" class="btn btn-sm" id="series-link-obs-cancel">ביטול</button>
+    </div>`;
+  const close = showModal(wrap);
+
+  const applyBtn = wrap.querySelector<HTMLButtonElement>('#series-link-obs-apply')!;
+  const countEl = wrap.querySelector('#series-link-obs-count')!;
+  const updateCount = (): void => {
+    countEl.textContent = String(selected.size);
+    applyBtn.disabled = !selected.size;
+  };
+  wrap.querySelector('#series-link-obs-list')!.addEventListener('change', (e) => {
+    const cb = (e.target as HTMLElement).closest<HTMLInputElement>('.series-link-obs-check');
+    if (!cb) return;
+    if (cb.checked) selected.add(cb.value); else selected.delete(cb.value);
+    updateCount();
+  });
+  const searchInput = wrap.querySelector<HTMLInputElement>('#series-link-obs-q')!;
+  searchInput.addEventListener('input', () => {
+    const q = searchInput.value.trim().toLowerCase();
+    wrap.querySelectorAll<HTMLElement>('.series-link-obs-row').forEach((row) => {
+      row.hidden = !!q && !row.textContent!.toLowerCase().includes(q);
+    });
+  });
+  wrap.querySelector('#series-link-obs-cancel')?.addEventListener('click', () => close());
+  applyBtn.addEventListener('click', () => {
+    void (async () => {
+      let linked = 0;
+      for (const id of selected) {
+        const obs = await getObservation(id);
+        if (!obs) continue;
+        obs.seriesId = series.id;
+        await saveObservation(obs);
+        linked++;
+      }
+      close();
+      allObservations = await listObservations();
+      render();
+      toast(`${linked} תצפיות שויכו למעקב ✓`);
+    })();
+  });
 }
 
 /* ---------- events ---------- */
@@ -200,6 +308,26 @@ async function onClick(e: Event): Promise<void> {
   const series = allSeries.find((s) => s.id === detailId);
   if (!series) return;
 
+  if (target.closest('#series-obs-sort-btn')) { obsSortDir = obsSortDir === 'asc' ? 'desc' : 'asc'; render(); return; }
+
+  if (target.closest('#series-add-obs-btn')) {
+    e.stopPropagation();
+    qs(container, '#series-add-obs-menu').hidden = !qs(container, '#series-add-obs-menu').hidden;
+    const moreMenu = container.querySelector<HTMLElement>('#series-more-menu');
+    if (moreMenu) moreMenu.hidden = true;
+    return;
+  }
+  if (target.closest('#series-more-btn')) {
+    e.stopPropagation();
+    qs(container, '#series-more-menu').hidden = !qs(container, '#series-more-menu').hidden;
+    const addMenu = container.querySelector<HTMLElement>('#series-add-obs-menu');
+    if (addMenu) addMenu.hidden = true;
+    return;
+  }
+
+  if (target.closest('#series-add-obs-new')) { navigate('form', { prefillSeriesId: series.id, species: series.species }); return; }
+  if (target.closest('#series-add-obs-existing')) { openLinkExistingObservationsModal(series); return; }
+
   if (target.closest('#series-detail-edit')) {
     const updated = await openEditSeriesModal(series, speciesMasterList);
     if (!updated) return;
@@ -218,7 +346,6 @@ async function onClick(e: Event): Promise<void> {
   }
 
   if (target.closest('#series-detail-open-journal')) { navigate('cards', { filterSeriesId: series.id }); return; }
-  if (target.closest('#series-detail-add-obs')) { navigate('form', { prefillSeriesId: series.id, species: series.species }); return; }
 
   if (target.closest('#series-detail-delete')) {
     if (!(await confirmDialog(`למחוק את המעקב "${series.name}"? התצפיות המקושרות אליו יישארו, אך יאבדו את הקישור.`, 'מחיקת מעקב'))) return;
