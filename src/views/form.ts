@@ -5,9 +5,9 @@
 import {
   saveObservation, getObservation, listObservations, listSpecies,
   saveMedia, getMedia, mediaForObservation, deleteMedia, listLocationRows, listTagRows, addTag, listObserverRows, addObserver, saveTrack, getTrack,
-  listSeriesRows, getSeries, saveSeries, lastSeriesForSpecies,
+  listSeriesRows, getSeries, lastSeriesForSpecies,
 } from '../db/repository';
-import { seriesDayLabel } from '../lib/series';
+import { seriesDayLabel, openCreateSeriesModal } from '../lib/series';
 import { toast, toLocalInputValue, fromLocalInputValue, safeHttpUrl, confirmDialog, showModal } from '../lib/ui';
 import { haptic } from '../lib/haptics';
 import { escapeHtml } from '../lib/markdown';
@@ -58,6 +58,7 @@ let prefillEntries: { species: string; quantity: number; note?: string }[] | nul
 let prefillTags: string[] | null = null;
 let prefillNotes: string | null = null;
 let prefillMediaId: string | null = null;
+let prefillSeriesId: string | null = null;
 let resumeDraftRequested = false;
 let draftInterval: ReturnType<typeof setInterval> | null = null;
 let draftSaveDebounce: ReturnType<typeof setTimeout> | null = null;
@@ -508,6 +509,7 @@ export function setParams(params: ViewParams): void {
   prefillTags = params?.prefillTags?.length ? params.prefillTags : null;
   prefillNotes = params?.prefillNotes || null;
   prefillMediaId = params?.prefillMediaId || null;
+  prefillSeriesId = params?.prefillSeriesId || null;
   resumeDraftRequested = params?.resumeDraft || false;
 }
 
@@ -563,6 +565,10 @@ export async function activate(): Promise<void> {
   }
   if (prefillNotes) qs<HTMLTextAreaElement>(container, '#f-notes').value = prefillNotes;
   if (prefillMediaId) await attachPrefillMedia(prefillMediaId);
+  if (prefillSeriesId) {
+    linkedSeriesId = prefillSeriesId;
+    await renderSeriesButton();
+  }
   prefillSpecies = null;
   prefillCoords = null;
   prefillLocationName = null;
@@ -571,6 +577,7 @@ export async function activate(): Promise<void> {
   prefillTags = null;
   prefillNotes = null;
   prefillMediaId = null;
+  prefillSeriesId = null;
 
   if (resumeDraftRequested) resumeFromDraft();
   resumeDraftRequested = false;
@@ -733,7 +740,7 @@ async function openSeriesPicker(): Promise<void> {
   });
   wrap.querySelector('#series-create-new')?.addEventListener('click', () => {
     close();
-    void openCreateSeriesModal();
+    void openNewSeriesForLinking();
   });
   wrap.querySelector('#series-unlink')?.addEventListener('click', () => {
     linkedSeriesId = null;
@@ -748,67 +755,23 @@ async function openSeriesPicker(): Promise<void> {
  * — name/species/start-date/expected-duration all pre-filled from this
  * form's own state (species from the form's single entry if there's exactly
  * one, start date from the form's own date, expected duration remembered
- * from the last series logged for the same species per the user's request). */
-async function openCreateSeriesModal(): Promise<void> {
+ * from the last series logged for the same species per the user's request).
+ * Uses the shared modal (lib/series.ts) so its fields/behavior stay
+ * identical to every other place a series gets created. */
+async function openNewSeriesForLinking(): Promise<void> {
   const entries = collectDraftEntries();
   const defaultSpecies = entries.length === 1 ? entries[0]!.species : '';
   const iso = fromLocalInputValue(input(container, '#f-datetime').value) || new Date().toISOString();
-  const defaultStart = iso.slice(0, 10);
   const lastForSpecies = defaultSpecies ? await lastSeriesForSpecies(defaultSpecies) : undefined;
-
-  const wrap = document.createElement('div');
-  wrap.className = 'series-modal';
-  wrap.innerHTML = `
-    <h3>מעקב חדש</h3>
-    <div class="field">
-      <label for="series-name">שם המעקב</label>
-      <input type="text" id="series-name" value="${escapeHtml(defaultSpecies ? `קינון — ${defaultSpecies}` : '')}" placeholder="לדוגמה: קינון בול״ץ 2026">
-    </div>
-    <div class="field">
-      <label for="series-species">מין (לא חובה)</label>
-      <input type="text" id="series-species" value="${escapeHtml(defaultSpecies)}" list="series-species-datalist">
-      <datalist id="series-species-datalist">${speciesCache.map((s) => `<option value="${escapeHtml(s)}">`).join('')}</datalist>
-    </div>
-    <div class="field-row two-up">
-      <div class="field">
-        <label for="series-start">תאריך התחלה</label>
-        <input type="date" id="series-start" value="${defaultStart}">
-      </div>
-      <div class="field">
-        <label for="series-duration">משך צפוי (ימים)</label>
-        <input type="number" id="series-duration" min="1" value="${lastForSpecies?.expectedDurationDays ?? ''}">
-      </div>
-    </div>
-    <div class="modal-actions">
-      <button type="button" class="btn btn-sm btn-primary" id="series-create-save">יצירה וקישור</button>
-      <button type="button" class="btn btn-sm" id="series-create-cancel">ביטול</button>
-    </div>`;
-  const close = showModal(wrap);
-
-  input(wrap, '#series-name').focus();
-  wrap.querySelector('#series-create-cancel')?.addEventListener('click', () => close());
-  wrap.querySelector('#series-create-save')?.addEventListener('click', () => {
-    const name = input(wrap, '#series-name').value.trim();
-    if (!name) { toast('יש להזין שם למעקב', true); return; }
-    const species = input(wrap, '#series-species').value.trim();
-    const startDate = input(wrap, '#series-start').value || defaultStart;
-    const durationRaw = input(wrap, '#series-duration').value.trim();
-    const expectedDurationDays = durationRaw ? Math.max(1, parseInt(durationRaw, 10)) : undefined;
-    void (async () => {
-      const row: SeriesRow = {
-        id: crypto.randomUUID(), name, status: 'active', updatedAt: '',
-        ...(species ? { species } : {}),
-        startDate: new Date(startDate).toISOString(),
-        ...(expectedDurationDays ? { expectedDurationDays } : {}),
-      };
-      await saveSeries(row);
-      linkedSeriesId = row.id;
-      close();
-      await renderSeriesButton();
-      scheduleDraftSave();
-      toast(`המעקב "${name}" נוצר וקושר ✓`);
-    })();
+  const created = await openCreateSeriesModal(speciesCache, {
+    species: defaultSpecies || undefined,
+    startDate: iso.slice(0, 10),
+    expectedDurationDays: lastForSpecies?.expectedDurationDays,
   });
+  if (!created) return;
+  linkedSeriesId = created.id;
+  await renderSeriesButton();
+  scheduleDraftSave();
 }
 
 /** Deterministic color for entities that have no stored color of their own

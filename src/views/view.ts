@@ -43,6 +43,13 @@ export interface ViewParams {
    * journal to just the observations linked to one series (see types.ts's
    * SeriesRow / Observation.seriesId). */
   filterSeriesId?: string;
+  /** Opens the "series" view directly on one series' detail screen instead
+   * of its library list — used by the home widget, the journal's series
+   * badge, and the species detail view. */
+  seriesId?: string;
+  /** From the series detail screen's "תצפית חדשה למעקב זה" action: a brand
+   * new observation opens already linked to this series. */
+  prefillSeriesId?: string;
 }
 
 export interface View {

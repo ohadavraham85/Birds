@@ -104,7 +104,7 @@ function headMetaHtml(o: Observation, collapsible = true): string {
 /** Fills in the series badge placeholder rendered by `headMetaHtml()` (if
  * this observation is linked to one) once its series row loads — async
  * since obs-card renders synchronously but the series lookup isn't. Clicking
- * the badge jumps to the journal filtered to just that series. */
+ * the badge opens that series' page in the series library. */
 function wireSeriesBadge(root: HTMLElement, o: Observation): void {
   if (!o.seriesId) return;
   const slot = root.querySelector<HTMLElement>('[data-series-badge]');
@@ -113,12 +113,12 @@ function wireSeriesBadge(root: HTMLElement, o: Observation): void {
     if (!series) return;
     slot.hidden = false;
     slot.innerHTML = `
-      <button type="button" class="series-badge" title="מעבר ליומן המעקב">
+      <button type="button" class="series-badge" title="מעבר לדף המעקב">
         ${icon('target')} ${escapeHtml(series.name)} · ${escapeHtml(seriesDayLabel(series, new Date(o.dateTime)))}
       </button>`;
     slot.querySelector('button')!.addEventListener('click', (e) => {
       e.stopPropagation();
-      navigate('cards', { filterSeriesId: series.id });
+      navigate('series', { seriesId: series.id });
     });
   });
 }

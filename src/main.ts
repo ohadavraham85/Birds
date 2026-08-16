@@ -30,6 +30,7 @@ import * as detailView from './views/detail';
 import * as speciesView from './views/species';
 import * as galleryView from './views/gallery';
 import * as settingsView from './views/settings';
+import * as seriesView from './views/series';
 
 // Calendar is no longer a standalone routable view — it's folded into the
 // journal (views/cards.ts) as a display mode, which imports it directly, so
@@ -44,6 +45,7 @@ const VIEWS: Record<string, View> = {
   species: speciesView,
   gallery: galleryView,
   settings: settingsView,
+  series: seriesView,
 };
 
 /** Views reachable from the bottom tab bar (order matters). */

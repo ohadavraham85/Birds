@@ -5,6 +5,10 @@
  * observation's own date) and the home screen's active-series widget
  * (counts against "now"). */
 
+import { saveSeries } from '../db/repository';
+import { escapeHtml } from './markdown';
+import { showModal, toast } from './ui';
+import { input } from './dom';
 import type { SeriesRow } from '../types';
 
 const DAY_MS = 86400000;
@@ -39,3 +43,139 @@ export function isSeriesOverdue(series: Pick<SeriesRow, 'startDate' | 'expectedD
 export const SERIES_STATUS_LABELS: Record<SeriesRow['status'], string> = {
   active: 'פעיל', completed: 'הושלם', abandoned: 'ננטש',
 };
+
+export interface CreateSeriesDefaults {
+  species?: string;
+  /** YYYY-MM-DD */
+  startDate?: string;
+  expectedDurationDays?: number;
+}
+
+/** The "מעקב חדש" modal — shared by every place a new series can be created
+ * (the home screen's library/widget, the observation form's link-picker) so
+ * the fields/behavior stay identical everywhere. Saves the series itself
+ * (status 'active') and resolves it, or resolves null if cancelled —
+ * callers decide what to do with the result (link it, refresh a list, etc). */
+export function openCreateSeriesModal(speciesList: string[], defaults: CreateSeriesDefaults = {}): Promise<SeriesRow | null> {
+  return new Promise((resolve) => {
+    const defaultStart = defaults.startDate || new Date().toISOString().slice(0, 10);
+    const wrap = document.createElement('div');
+    wrap.className = 'series-modal';
+    wrap.innerHTML = `
+      <h3>מעקב חדש</h3>
+      <div class="field">
+        <label for="series-name">שם המעקב</label>
+        <input type="text" id="series-name" value="${escapeHtml(defaults.species ? `קינון — ${defaults.species}` : '')}" placeholder="לדוגמה: קינון בול״ץ 2026">
+      </div>
+      <div class="field">
+        <label for="series-species">מין (לא חובה)</label>
+        <input type="text" id="series-species" value="${escapeHtml(defaults.species || '')}" list="series-species-datalist">
+        <datalist id="series-species-datalist">${speciesList.map((s) => `<option value="${escapeHtml(s)}">`).join('')}</datalist>
+      </div>
+      <div class="field-row two-up">
+        <div class="field">
+          <label for="series-start">תאריך התחלה</label>
+          <input type="date" id="series-start" value="${defaultStart}">
+        </div>
+        <div class="field">
+          <label for="series-duration">משך צפוי (ימים)</label>
+          <input type="number" id="series-duration" min="1" value="${defaults.expectedDurationDays ?? ''}">
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-sm btn-primary" id="series-create-save">יצירה</button>
+        <button type="button" class="btn btn-sm" id="series-create-cancel">ביטול</button>
+      </div>`;
+    const close = showModal(wrap);
+    input(wrap, '#series-name').focus();
+    let settled = false;
+    const finish = (row: SeriesRow | null): void => { if (settled) return; settled = true; resolve(row); };
+    wrap.querySelector('#series-create-cancel')?.addEventListener('click', () => { close(); finish(null); });
+    wrap.querySelector('#series-create-save')?.addEventListener('click', () => {
+      const name = input(wrap, '#series-name').value.trim();
+      if (!name) { toast('יש להזין שם למעקב', true); return; }
+      const species = input(wrap, '#series-species').value.trim();
+      const startDate = input(wrap, '#series-start').value || defaultStart;
+      const durationRaw = input(wrap, '#series-duration').value.trim();
+      const expectedDurationDays = durationRaw ? Math.max(1, parseInt(durationRaw, 10)) : undefined;
+      void (async () => {
+        const row: SeriesRow = {
+          id: crypto.randomUUID(), name, status: 'active', updatedAt: '',
+          ...(species ? { species } : {}),
+          startDate: new Date(startDate).toISOString(),
+          ...(expectedDurationDays ? { expectedDurationDays } : {}),
+        };
+        await saveSeries(row);
+        close();
+        toast(`המעקב "${name}" נוצר ✓`);
+        finish(row);
+      })();
+    });
+  });
+}
+
+/** Edits an existing series' fields in place (name/species/start
+ * date/expected duration/notes) — used by the series library's detail
+ * screen. Resolves the updated row, or null if cancelled. */
+export function openEditSeriesModal(series: SeriesRow, speciesList: string[]): Promise<SeriesRow | null> {
+  return new Promise((resolve) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'series-modal';
+    wrap.innerHTML = `
+      <h3>עריכת מעקב</h3>
+      <div class="field">
+        <label for="series-name">שם המעקב</label>
+        <input type="text" id="series-name" value="${escapeHtml(series.name)}">
+      </div>
+      <div class="field">
+        <label for="series-species">מין (לא חובה)</label>
+        <input type="text" id="series-species" value="${escapeHtml(series.species || '')}" list="series-species-datalist">
+        <datalist id="series-species-datalist">${speciesList.map((s) => `<option value="${escapeHtml(s)}">`).join('')}</datalist>
+      </div>
+      <div class="field-row two-up">
+        <div class="field">
+          <label for="series-start">תאריך התחלה</label>
+          <input type="date" id="series-start" value="${series.startDate.slice(0, 10)}">
+        </div>
+        <div class="field">
+          <label for="series-duration">משך צפוי (ימים)</label>
+          <input type="number" id="series-duration" min="1" value="${series.expectedDurationDays ?? ''}">
+        </div>
+      </div>
+      <div class="field">
+        <label for="series-notes">הערות</label>
+        <textarea id="series-notes" rows="2">${escapeHtml(series.notes || '')}</textarea>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-sm btn-primary" id="series-edit-save">שמירה</button>
+        <button type="button" class="btn btn-sm" id="series-edit-cancel">ביטול</button>
+      </div>`;
+    const close = showModal(wrap);
+    input(wrap, '#series-name').focus();
+    let settled = false;
+    const finish = (row: SeriesRow | null): void => { if (settled) return; settled = true; resolve(row); };
+    wrap.querySelector('#series-edit-cancel')?.addEventListener('click', () => { close(); finish(null); });
+    wrap.querySelector('#series-edit-save')?.addEventListener('click', () => {
+      const name = input(wrap, '#series-name').value.trim();
+      if (!name) { toast('יש להזין שם למעקב', true); return; }
+      const species = input(wrap, '#series-species').value.trim();
+      const startDate = input(wrap, '#series-start').value || series.startDate.slice(0, 10);
+      const durationRaw = input(wrap, '#series-duration').value.trim();
+      const expectedDurationDays = durationRaw ? Math.max(1, parseInt(durationRaw, 10)) : undefined;
+      const notes = wrap.querySelector<HTMLTextAreaElement>('#series-notes')!.value.trim();
+      void (async () => {
+        const updated: SeriesRow = {
+          ...series, name,
+          startDate: new Date(startDate).toISOString(),
+          species: species || undefined,
+          expectedDurationDays,
+          notes: notes || undefined,
+        };
+        await saveSeries(updated);
+        close();
+        toast(`המעקב "${name}" עודכן ✓`);
+        finish(updated);
+      })();
+    });
+  });
+}
