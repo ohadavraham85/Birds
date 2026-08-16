@@ -214,10 +214,14 @@ function mountObservationCards(): void {
 /** Lets you attach observations already in the journal to this series
  * directly from its detail page, without opening the journal — the
  * complement to "תצפית חדשה" for building a series' history retroactively.
- * Observations already matching the series' own species are listed first. */
+ * Only offers observations not already linked to any series (this one or
+ * another) — an observation already tracked somewhere is never shown as a
+ * candidate here; unlinking it first (bulk-edit in the journal, or the
+ * "שיוך תצפיות קיימות" flow on its own series) is a separate, deliberate
+ * action. Observations matching the series' own species are listed first. */
 function openLinkExistingObservationsModal(series: SeriesRow): void {
   const candidates = allObservations
-    .filter((o) => o.seriesId !== series.id)
+    .filter((o) => !o.seriesId)
     .sort((a, b) => {
       const am = series.species && speciesNames(a).includes(series.species) ? 0 : 1;
       const bm = series.species && speciesNames(b).includes(series.species) ? 0 : 1;
@@ -232,14 +236,14 @@ function openLinkExistingObservationsModal(series: SeriesRow): void {
       <input type="checkbox" class="series-link-obs-check" value="${o.id}">
       <span class="series-link-obs-summary">
         <strong>${escapeHtml(speciesLabel(o) || 'ללא מין')}</strong>
-        <span class="hint">${escapeHtml(fmtDateTime(o.dateTime))}${o.locationName ? ` · ${escapeHtml(o.locationName)}` : ''}${o.seriesId ? ' · כבר משויכת למעקב אחר' : ''}</span>
+        <span class="hint">${escapeHtml(fmtDateTime(o.dateTime))}${o.locationName ? ` · ${escapeHtml(o.locationName)}` : ''}</span>
       </span>
     </label>`;
   wrap.innerHTML = `
     <h3>שיוך תצפיות קיימות</h3>
     <input type="search" id="series-link-obs-q" placeholder="חיפוש (מין, מיקום)..." class="filter-search">
     <div class="series-link-obs-list" id="series-link-obs-list">
-      ${candidates.length ? candidates.map(rowHtml).join('') : '<p class="hint">אין תצפיות אחרות ביומן.</p>'}
+      ${candidates.length ? candidates.map(rowHtml).join('') : '<p class="hint">אין תצפיות פנויות לשיוך — כל התצפיות ביומן כבר משויכות למעקב כלשהו.</p>'}
     </div>
     <div class="modal-actions">
       <button type="button" class="btn btn-sm btn-primary" id="series-link-obs-apply" disabled>שיוך תצפיות (<span id="series-link-obs-count">0</span>)</button>
