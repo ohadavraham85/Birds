@@ -2096,10 +2096,21 @@ a.media-link-icon:hover { color: var(--accent-700); }
 .series-detail-species .icon { width: 15px; height: 15px; }
 .series-detail-day { font-weight: 600; color: var(--accent-700); margin: 4px 0; }
 .series-detail-notes { color: var(--ink); white-space: pre-wrap; margin: 8px 0; }
-.series-detail-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.series-detail-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.series-detail-actions .export-menu { min-width: 200px; }
+.series-detail-actions .export-menu button { display: flex; align-items: center; gap: 8px; }
+.series-detail-actions .export-menu #series-detail-delete { color: var(--danger); }
 
-.series-detail-obs-title { margin: 18px 0 10px; color: var(--accent-700); font-size: 1rem; }
+.series-detail-obs-head { display: flex; align-items: center; justify-content: space-between; margin: 18px 0 10px; }
+.series-detail-obs-title { margin: 0; color: var(--accent-700); font-size: 1rem; }
 .series-detail-obs-list { display: flex; flex-direction: column; gap: 12px; }
+
+.series-link-obs-modal { max-width: 440px; }
+.series-link-obs-modal .filter-search { width: 100%; margin-bottom: 10px; }
+.series-link-obs-list { display: flex; flex-direction: column; gap: 2px; max-height: 340px; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--radius); padding: 4px 8px; margin-bottom: 12px; }
+.series-link-obs-row { align-items: flex-start !important; padding: 7px 0 !important; }
+.series-link-obs-row input { margin-top: 3px; }
+.series-link-obs-summary { display: flex; flex-direction: column; gap: 1px; }
 
 @media print {
   .topbar, .tabbar, .toast { display: none !important; }
