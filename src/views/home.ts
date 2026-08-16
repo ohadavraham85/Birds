@@ -15,7 +15,7 @@ import { fmtDateTime, confirmDialog } from '../lib/ui';
 import { icon } from '../lib/icons';
 import { loadDraft, clearDraft } from '../lib/draft';
 import { openSmartVoiceModal } from '../lib/voice-observation-modal';
-import { seriesDayLabel, isSeriesOverdue, openCreateSeriesModal, seriesPhotoCandidates } from '../lib/series';
+import { seriesDayLabel, isSeriesOverdue, openCreateSeriesModal, seriesPhotoCandidates, seriesChain } from '../lib/series';
 import { qs } from '../lib/dom';
 import { navigate } from '../main';
 import type { Observation, ObservationImage, SeriesRow } from '../types';
@@ -46,6 +46,10 @@ let orphanPhotoBySpecies: Record<string, ObservationImage> = {};
  * counter, so opening a new observation for an ongoing nesting/migration
  * watch always shows exactly how far along it is. */
 let activeSeries: SeriesRow[] = [];
+/** Every series (any status) — only needed to compute multi-phase chains
+ * (lib/series.ts's seriesChain) for the widget's rows, since a chain's
+ * earlier phase can be 'completed' while the current one is still active. */
+let allSeriesRows: SeriesRow[] = [];
 
 const chartMode: Record<BreakdownKind, ChartMode> = { species: 'pie', location: 'bar', tag: 'bar' };
 let yearMode: 'bar' | 'line' = 'bar';
@@ -67,7 +71,8 @@ export function init(el: HTMLElement): void {
 export async function activate(): Promise<void> {
   allObservations = await listObservations();
   speciesMasterList = (await listSpeciesRows()).map((r) => r.name);
-  activeSeries = (await listSeriesRows()).filter((s) => s.status === 'active');
+  allSeriesRows = await listSeriesRows();
+  activeSeries = allSeriesRows.filter((s) => s.status === 'active');
   orphanPhotoBySpecies = {};
   for (const m of await listAllMedia()) {
     if (m.obsId || !m.species || orphanPhotoBySpecies[m.species]) continue;
@@ -98,12 +103,14 @@ function seriesWidgetHtml(): string {
   });
   const rows = sorted.map((s) => {
     const overdue = isSeriesOverdue(s, now);
+    const chain = seriesChain(s, allSeriesRows);
+    const phaseLabel = chain.length > 1 ? ` <span class="series-widget-phase">${icon('link')} שלב ${chain.findIndex((c) => c.id === s.id) + 1}/${chain.length}</span>` : '';
     return `
       <div class="series-widget-row${overdue ? ' overdue' : ''}">
         <button type="button" class="series-widget-main" data-series-open="${s.id}">
           <span class="series-widget-thumb" data-thumb-series="${s.id}">${icon('target')}</span>
           <span class="series-widget-text">
-            <span class="series-widget-name">${overdue ? icon('alert') : ''}${escapeHtml(s.name)}${s.species ? ` <span class="series-widget-species">· ${escapeHtml(s.species)}</span>` : ''}</span>
+            <span class="series-widget-name">${overdue ? icon('alert') : ''}${escapeHtml(s.name)}${s.species ? ` <span class="series-widget-species">· ${escapeHtml(s.species)}</span>` : ''}${phaseLabel}</span>
             <span class="series-widget-day">${escapeHtml(seriesDayLabel(s, now))}</span>
           </span>
         </button>
@@ -146,7 +153,8 @@ async function onSeriesStatusChange(id: string, status: SeriesRow['status']): Pr
   const series = activeSeries.find((s) => s.id === id);
   if (!series) return;
   await saveSeries({ ...series, status });
-  activeSeries = (await listSeriesRows()).filter((s) => s.status === 'active');
+  allSeriesRows = await listSeriesRows();
+  activeSeries = allSeriesRows.filter((s) => s.status === 'active');
   render();
 }
 
@@ -155,7 +163,8 @@ async function onSeriesDelete(id: string): Promise<void> {
   if (!series) return;
   if (!(await confirmDialog(`למחוק את המעקב "${series.name}"? התצפיות המקושרות אליו יישארו, אך יאבדו את הקישור.`, 'מחיקת מעקב'))) return;
   await deleteSeries(id);
-  activeSeries = (await listSeriesRows()).filter((s) => s.status === 'active');
+  allSeriesRows = await listSeriesRows();
+  activeSeries = allSeriesRows.filter((s) => s.status === 'active');
   render();
 }
 
@@ -832,7 +841,8 @@ function onClick(e: Event): void {
   if (target.closest('#series-widget-add')) {
     void openCreateSeriesModal(speciesMasterList).then(async (created) => {
       if (!created) return;
-      activeSeries = (await listSeriesRows()).filter((s) => s.status === 'active');
+      allSeriesRows = await listSeriesRows();
+      activeSeries = allSeriesRows.filter((s) => s.status === 'active');
       render();
     });
     return;

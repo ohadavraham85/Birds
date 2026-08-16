@@ -10,6 +10,7 @@ import {
 import {
   seriesDayLabel, isSeriesOverdue, SERIES_STATUS_LABELS,
   openCreateSeriesModal, openEditSeriesModal, seriesPhotoCandidates,
+  seriesChain, continueToNextPhase, seriesDayNumber,
 } from '../lib/series';
 import { renderObservationCard } from '../lib/obs-card';
 import { speciesNames, speciesLabel } from '../lib/observation';
@@ -126,6 +127,8 @@ function renderList(): string {
   const rows = sorted.map((s) => {
     const overdue = isSeriesOverdue(s, now);
     const count = counts.get(s.id) || 0;
+    const chain = seriesChain(s, allSeries);
+    const phaseLabel = chain.length > 1 ? `שלב ${chain.findIndex((c) => c.id === s.id) + 1}/${chain.length}` : '';
     return `
       <button type="button" class="series-lib-row${overdue ? ' overdue' : ''}" data-series-id="${s.id}">
         <span class="series-lib-row-lead">
@@ -133,6 +136,7 @@ function renderList(): string {
           <span class="series-lib-row-main">
             <span class="series-lib-row-name">${overdue ? icon('alert') : ''}${escapeHtml(s.name)}</span>
             ${s.species ? `<span class="series-lib-row-species">${escapeHtml(s.species)}</span>` : ''}
+            ${phaseLabel ? `<span class="series-lib-row-phase">${icon('link')} ${phaseLabel}</span>` : ''}
           </span>
         </span>
         <span class="series-lib-row-meta">
@@ -182,6 +186,31 @@ function linkedObservations(seriesId: string): Observation[] {
   return obsSortDir === 'desc' ? sorted.reverse() : sorted;
 }
 
+/** Combined stats across a multi-phase chain: total elapsed days since the
+ * very first phase started, and total observations logged across every
+ * phase — shown under the chain strip so a two-cycle campaign (e.g. nesting
+ * → chick-rearing) still has one "how far along is this whole thing" figure,
+ * not just each phase's own separate day-counter. */
+function chainTotalsLabel(chain: SeriesRow[], now: Date): string {
+  const counts = obsCountBySeries();
+  const totalObs = chain.reduce((sum, s) => sum + (counts.get(s.id) || 0), 0);
+  const totalDays = seriesDayNumber({ startDate: chain[0]!.startDate }, now);
+  return `סה״כ מתחילת המחזור: יום ${totalDays} · ${totalObs} תצפיות בכל השלבים`;
+}
+
+function chainStripHtml(series: SeriesRow, now: Date): string {
+  const chain = seriesChain(series, allSeries);
+  if (chain.length < 2) return '';
+  const pills = chain.map((s, i) => `
+    ${i > 0 ? '<span class="series-chain-arrow">‹</span>' : ''}
+    <button type="button" class="series-chain-pill${s.id === series.id ? ' active' : ''}" data-series-id="${s.id}">
+      <span class="series-chain-num">${i + 1}</span> ${escapeHtml(s.name)}
+    </button>`).join('');
+  return `
+    <div class="series-chain-strip">${pills}</div>
+    <p class="series-chain-total">${escapeHtml(chainTotalsLabel(chain, now))}</p>`;
+}
+
 function renderDetail(series: SeriesRow | undefined): string {
   if (!series) {
     return '<p class="hint">המעקב הזה נמחק או לא נמצא.</p>';
@@ -200,6 +229,7 @@ function renderDetail(series: SeriesRow | undefined): string {
       ${series.species ? `<p class="series-detail-species">${icon('bird')} ${escapeHtml(series.species)}</p>` : ''}
       <p class="series-detail-day">${series.status === 'active' ? escapeHtml(seriesDayLabel(series, now)) : `התחיל ${escapeHtml(fmtDateOnly(series.startDate))}`}${series.expectedDurationDays && series.status !== 'active' ? ` · משך צפוי: ${series.expectedDurationDays} ימים` : ''}</p>
       ${series.notes ? `<p class="series-detail-notes">${escapeHtml(series.notes)}</p>` : ''}
+      ${chainStripHtml(series, now)}
       <div class="series-detail-actions">
         <div class="export-wrap">
           <button type="button" class="btn btn-sm btn-primary" id="series-add-obs-btn">${icon('plus')} הוספת תצפיות ▾</button>
@@ -212,6 +242,7 @@ function renderDetail(series: SeriesRow | undefined): string {
           <button type="button" class="btn btn-sm btn-icon" id="series-more-btn" title="פעולות נוספות" aria-label="פעולות נוספות">⋯</button>
           <div class="export-menu" id="series-more-menu" hidden>
             <button type="button" id="series-detail-edit">${icon('edit')} עריכת מעקב</button>
+            <button type="button" id="series-detail-next-phase">${icon('link')} המשך לשלב הבא</button>
             ${series.status !== 'active' ? `<button type="button" data-series-status="active">${icon('refresh')} החזרה לפעיל</button>` : ''}
             ${series.status !== 'completed' ? `<button type="button" data-series-status="completed">${icon('check')} סימון כהושלם</button>` : ''}
             ${series.status !== 'abandoned' ? `<button type="button" data-series-status="abandoned">✕ סימון כננטש</button>` : ''}
@@ -373,6 +404,14 @@ async function onClick(e: Event): Promise<void> {
     if (!updated) return;
     allSeries = await listSeriesRows();
     render();
+    return;
+  }
+
+  if (target.closest('#series-detail-next-phase')) {
+    const next = await continueToNextPhase(series, speciesMasterList);
+    if (!next) return;
+    allSeries = await listSeriesRows();
+    navigate('series', { seriesId: next.id });
     return;
   }
 
