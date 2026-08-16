@@ -39,6 +39,10 @@ export interface ViewParams {
   /** From the Gallery's "תצפית חדשה" action on an unassociated photo: the
    * media id to claim and attach as the first species row's photo. */
   prefillMediaId?: string;
+  /** Drill-down from the home screen's "מעקבים פעילים" widget: filters the
+   * journal to just the observations linked to one series (see types.ts's
+   * SeriesRow / Observation.seriesId). */
+  filterSeriesId?: string;
 }
 
 export interface View {

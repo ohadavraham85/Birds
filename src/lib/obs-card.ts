@@ -12,10 +12,12 @@ import { entriesOf, entryImages, allImages, primarySpecies } from './observation
 import { icon } from './icons';
 import { renderTrackMap } from './track-map';
 import { fmtDistance } from './gps-track';
-import { getTrack, deleteTrack, toggleStarred } from '../db/repository';
+import { getTrack, deleteTrack, toggleStarred, getSeries } from '../db/repository';
 import { tagBadgesHtml, wireTagBadges } from './tag-badge';
 import { familyColor } from './family-color';
 import { getSpeciesDetail } from './species-details-cache';
+import { seriesDayLabel } from './series';
+import { navigate } from '../main';
 import type { Observation } from '../types';
 
 /** Sets the --family-color custom property (read by .obs-card's left
@@ -95,7 +97,30 @@ function headMetaHtml(o: Observation, collapsible = true): string {
       ${hasPhotos ? `<span class="media-indicator" title="כולל תמונות מצורפות">${icon('camera')}</span>` : ''}
       ${mediaHref ? `<a href="${escapeHtml(mediaHref)}" target="_blank" rel="noopener" class="media-indicator media-link-icon" title="פתיחת התמונות/סרטונים בענן">${icon('link')}</a>` : ''}
     </div>
+    ${o.seriesId ? `<div class="series-badge-row" data-series-badge="${escapeHtml(o.seriesId)}" hidden></div>` : ''}
     ${tagsObserversHtml}`;
+}
+
+/** Fills in the series badge placeholder rendered by `headMetaHtml()` (if
+ * this observation is linked to one) once its series row loads — async
+ * since obs-card renders synchronously but the series lookup isn't. Clicking
+ * the badge jumps to the journal filtered to just that series. */
+function wireSeriesBadge(root: HTMLElement, o: Observation): void {
+  if (!o.seriesId) return;
+  const slot = root.querySelector<HTMLElement>('[data-series-badge]');
+  if (!slot) return;
+  void getSeries(o.seriesId).then((series) => {
+    if (!series) return;
+    slot.hidden = false;
+    slot.innerHTML = `
+      <button type="button" class="series-badge" title="מעבר ליומן המעקב">
+        ${icon('target')} ${escapeHtml(series.name)} · ${escapeHtml(seriesDayLabel(series, new Date(o.dateTime)))}
+      </button>`;
+    slot.querySelector('button')!.addEventListener('click', (e) => {
+      e.stopPropagation();
+      navigate('cards', { filterSeriesId: series.id });
+    });
+  });
 }
 
 /** Wires the collapsed tags/observers toggle rendered by `headMetaHtml()` —
@@ -122,6 +147,7 @@ export function renderObservationSummary(o: Observation): HTMLElement {
   wireStarButton(card);
   wireTagBadges(card);
   wireCardMetaToggle(card);
+  wireSeriesBadge(card, o);
   return card;
 }
 
@@ -140,6 +166,7 @@ export function renderObservationCard(o: Observation): HTMLElement {
   wireStarButton(card);
   wireTagBadges(card);
   wireCardMetaToggle(card);
+  wireSeriesBadge(card, o);
 
   void getTrack(o.id).then((track) => {
     if (!track || track.points.length < 2) return;

@@ -20,6 +20,7 @@ import type {
   MediaRecord,
   ObservationTrack,
   StoredFile,
+  SeriesRow,
 } from '../types';
 
 /* ---------- change notifications ---------- */
@@ -39,7 +40,7 @@ function emitChange(): void {
  * "something changed, re-render"). Sync backends that need to know exactly
  * which record changed (e.g. the Firebase sync engine) subscribe here
  * instead of re-scanning the whole database on every change. */
-export type MutationEntity = 'observation' | 'species' | 'location' | 'project' | 'file' | 'tag' | 'observer' | 'track' | 'media';
+export type MutationEntity = 'observation' | 'species' | 'location' | 'project' | 'file' | 'tag' | 'observer' | 'track' | 'media' | 'series';
 export type MutationOp = 'upsert' | 'delete';
 type MutationListener = (entity: MutationEntity, id: string, op: MutationOp, payload: unknown) => void;
 const mutationListeners = new Set<MutationListener>();
@@ -585,6 +586,68 @@ export async function putTagRaw(row: TagRow): Promise<void> {
   await db.tags.put(row);
   emitChange();
   emitMutation('tag', row.name, row.deleted ? 'delete' : 'upsert', row);
+}
+
+/* ---------- series ("מעקב" — generic tracking of related, chronologically-
+ * ordered observations over time: nesting, migration, molting, etc.) ---------- */
+
+/** All non-deleted series, newest-started first. */
+export async function listSeriesRows(): Promise<SeriesRow[]> {
+  const all = await db.series.toArray();
+  return all.filter((s) => !s.deleted).sort((a, b) => b.startDate.localeCompare(a.startDate));
+}
+
+export async function getSeries(id: string): Promise<SeriesRow | undefined> {
+  const row = await db.series.get(id);
+  return row && !row.deleted ? row : undefined;
+}
+
+/** Raw fetch including tombstones — for last-write-wins comparisons. */
+export function getSeriesRaw(id: string): Promise<SeriesRow | undefined> {
+  return db.series.get(id);
+}
+
+export async function saveSeries(row: SeriesRow): Promise<SeriesRow> {
+  row.updatedAt = now();
+  await db.series.put(row);
+  emitChange();
+  emitMutation('series', row.id, 'upsert', row);
+  return row;
+}
+
+/** Soft-deletes a series (matches the app's established master-list policy —
+ * never retroactively edits observations that already reference it; they
+ * simply keep a `seriesId` pointing at a now-deleted row). */
+export async function deleteSeries(id: string): Promise<void> {
+  const row = await db.series.get(id);
+  if (!row) return;
+  row.deleted = true;
+  row.updatedAt = now();
+  await db.series.put(row);
+  emitChange();
+  emitMutation('series', id, 'delete', row);
+}
+
+export async function putSeriesRaw(row: SeriesRow): Promise<void> {
+  await db.series.put(row);
+  emitChange();
+  emitMutation('series', row.id, row.deleted ? 'delete' : 'upsert', row);
+}
+
+/** Every observation currently linked to a given series, chronological. */
+export async function listObservationsForSeries(seriesId: string): Promise<Observation[]> {
+  const obs = await listObservations();
+  return obs.filter((o) => o.seriesId === seriesId).sort((a, b) => a.dateTime.localeCompare(b.dateTime));
+}
+
+/** The most recently *started* series for a species (any status) — used to
+ * default a new series' expected duration to whatever was last used for the
+ * same species, per the user's request to "remember by species". */
+export async function lastSeriesForSpecies(species: string): Promise<SeriesRow | undefined> {
+  if (!species) return undefined;
+  const all = await listSeriesRows();
+  const matches = all.filter((s) => s.species === species);
+  return matches[0]; // listSeriesRows is already newest-started-first
 }
 
 /* ---------- duplicate detection & merge (species / locations / projects) ----------

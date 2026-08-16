@@ -27,6 +27,7 @@ export interface ObservationDraft {
     notes: string;
     mediaLink: string;
     entries: { species: string; quantity: number; note?: string }[];
+    seriesId?: string;
   };
   track: { points: TrackPoint[]; startedAt: number } | null;
 }

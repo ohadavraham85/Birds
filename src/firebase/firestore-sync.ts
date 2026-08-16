@@ -21,10 +21,11 @@ import {
   listObserverRows, putObserverRaw, getObserverRaw,
   listFilesRaw, putFileRaw, getFile,
   listTracksRaw, putTrackRaw, getTrack,
+  listSeriesRows, putSeriesRaw, getSeriesRaw,
   getMedia, listAllMedia, saveMedia, deleteMediaAndUnlink,
   type MutationEntity, type MutationOp,
 } from '../db/repository';
-import type { Observation, SpeciesRow, LocationRow, ProjectRow, TagRow, ObserverRow, StoredFile, ObservationTrack, MediaRecord } from '../types';
+import type { Observation, SpeciesRow, LocationRow, ProjectRow, TagRow, ObserverRow, StoredFile, ObservationTrack, MediaRecord, SeriesRow } from '../types';
 
 const COLLECTION_BY_ENTITY: Record<MutationEntity, string> = {
   observation: 'observations',
@@ -36,6 +37,7 @@ const COLLECTION_BY_ENTITY: Record<MutationEntity, string> = {
   observer: 'observers',
   track: 'tracks',
   media: 'media',
+  series: 'series',
 };
 
 /** The `files` Firestore collection only ever holds this shape — the blob
@@ -130,12 +132,13 @@ let pendingTags = false;
 let pendingObservers = false;
 let pendingTracks = false;
 let pendingMedia = false;
+let pendingSeries = false;
 
 /** Recomputes the derived state from the last-known pending-writes flags and
  * live connectivity — called whenever either changes. */
 function recomputeStatus(): void {
   if (!activeCode) { setStatus({ state: 'disabled', pending: false }); return; }
-  const pending = pendingObs || pendingSpecies || pendingLocations || pendingProjects || pendingFiles || pendingTags || pendingObservers || pendingTracks || pendingMedia;
+  const pending = pendingObs || pendingSpecies || pendingLocations || pendingProjects || pendingFiles || pendingTags || pendingObservers || pendingTracks || pendingMedia || pendingSeries;
   if (!navigator.onLine) { setStatus({ state: 'offline', pending }); return; }
   setStatus({ state: pending ? 'syncing' : 'idle', pending, lastSync: pending ? status.lastSync : new Date().toISOString() });
 }
@@ -212,10 +215,10 @@ export async function initFirebaseSyncFromSettings(): Promise<void> {
  * reset) can otherwise keep silently rejecting real edits/deletions made on
  * another device forever — this lets the user force this device back in
  * line with the shared cloud state on demand. */
-export async function forceResyncListsFromCloud(): Promise<{ species: number; locations: number; projects: number; tags: number; observers: number }> {
+export async function forceResyncListsFromCloud(): Promise<{ species: number; locations: number; projects: number; tags: number; observers: number; series: number }> {
   if (!activeCode) throw new Error('סנכרון Firebase אינו מופעל');
   const db = firebaseDb();
-  const counts = { species: 0, locations: 0, projects: 0, tags: 0, observers: 0 };
+  const counts = { species: 0, locations: 0, projects: 0, tags: 0, observers: 0, series: 0 };
   await withSuppressedPush(async () => {
     const speciesSnap = await getDocs(collection(db, 'households', activeCode!, 'species'));
     for (const d of speciesSnap.docs) { await putSpeciesRaw(d.data() as SpeciesRow); counts.species++; }
@@ -227,6 +230,8 @@ export async function forceResyncListsFromCloud(): Promise<{ species: number; lo
     for (const d of tagsSnap.docs) { await putTagRaw(d.data() as TagRow); counts.tags++; }
     const observersSnap = await getDocs(collection(db, 'households', activeCode!, 'observers'));
     for (const d of observersSnap.docs) { await putObserverRaw(d.data() as ObserverRow); counts.observers++; }
+    const seriesSnap = await getDocs(collection(db, 'households', activeCode!, 'series'));
+    for (const d of seriesSnap.docs) { await putSeriesRaw(d.data() as SeriesRow); counts.series++; }
   });
   return counts;
 }
@@ -329,7 +334,7 @@ export function stopFirebaseSync(): void {
   stopMutationListener?.();
   stopMutationListener = null;
   activeCode = null;
-  pendingObs = pendingSpecies = pendingLocations = pendingProjects = pendingFiles = pendingTags = pendingObservers = pendingTracks = pendingMedia = false;
+  pendingObs = pendingSpecies = pendingLocations = pendingProjects = pendingFiles = pendingTags = pendingObservers = pendingTracks = pendingMedia = pendingSeries = false;
   setStatus({ state: 'disabled', pending: false, message: undefined });
 }
 
@@ -368,6 +373,7 @@ async function startFirebaseSync(code: string): Promise<void> {
         for (const p of await listProjectRows()) await pushDoc('projects', p.name, p);
         for (const t of await listTagRows()) await pushDoc('tags', t.name, t);
         for (const ob of await listObserverRows()) await pushDoc('observers', ob.name, ob);
+        for (const s of await listSeriesRows()) await pushDoc('series', s.id, s);
         // Photo upload (Storage) is best-effort and optional — a project that
         // hasn't enabled Storage yet (e.g. still on the free Spark plan) must
         // not lose text-data sync (Firestore) just because photos can't upload.
@@ -463,6 +469,14 @@ async function startFirebaseSync(code: string): Promise<void> {
     snap.docChanges().forEach((change) => {
       if (change.type === 'removed') return;
       void mergeRemoteMedia(change.doc.data() as MediaMeta);
+    });
+    recomputeStatus();
+  }, onSnapError));
+  unsubs.push(onSnapshot(collection(db, 'households', code, 'series'), { includeMetadataChanges: true }, (snap: QuerySnapshot<DocumentData>) => {
+    pendingSeries = snap.metadata.hasPendingWrites;
+    snap.docChanges().forEach((change) => {
+      if (change.type === 'removed') return;
+      void mergeRemoteSeries(change.doc.data() as SeriesRow);
     });
     recomputeStatus();
   }, onSnapError));
@@ -584,6 +598,12 @@ async function mergeRemoteObserver(remote: ObserverRow): Promise<void> {
   const local = await getObserverRaw(remote.name);
   if (local && new Date(local.updatedAt) >= new Date(remote.updatedAt)) return;
   await withSuppressedPush(() => putObserverRaw(remote));
+}
+
+async function mergeRemoteSeries(remote: SeriesRow): Promise<void> {
+  const local = await getSeriesRaw(remote.id);
+  if (local && new Date(local.updatedAt) >= new Date(remote.updatedAt)) return;
+  await withSuppressedPush(() => putSeriesRaw(remote));
 }
 
 /** Uploads an "orphan" Gallery photo's blob to Storage and pushes its
