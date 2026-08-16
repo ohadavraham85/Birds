@@ -2153,6 +2153,8 @@ a.media-link-icon:hover { color: var(--accent-700); }
 .series-detail-obs-head { display: flex; align-items: center; justify-content: space-between; margin: 18px 0 10px; }
 .series-detail-obs-title { margin: 0; color: var(--accent-700); font-size: 1rem; }
 .series-detail-obs-list { display: flex; flex-direction: column; gap: 12px; }
+.series-obs-card-clickable { cursor: pointer; }
+.series-obs-card-clickable:hover { box-shadow: var(--shadow-lg); }
 
 .series-link-obs-modal { max-width: 440px; }
 .series-link-obs-modal .filter-search { width: 100%; margin-bottom: 10px; }

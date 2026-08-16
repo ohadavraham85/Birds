@@ -116,7 +116,7 @@ function seriesWidgetHtml(): string {
         </button>
         <div class="series-widget-actions">
           <button type="button" class="btn btn-icon" data-series-complete="${s.id}" title="סימון כהושלם" aria-label="סימון כהושלם">${icon('check')}</button>
-          <button type="button" class="btn btn-icon" data-series-abandon="${s.id}" title="סימון כננטש" aria-label="סימון כננטש">✕</button>
+          <button type="button" class="btn btn-icon" data-series-abandon="${s.id}" title="סימון כנכשל" aria-label="סימון כנכשל">✕</button>
           <button type="button" class="btn btn-icon" data-series-delete="${s.id}" title="מחיקת המעקב" aria-label="מחיקת המעקב">${icon('trash')}</button>
         </div>
       </div>`;
