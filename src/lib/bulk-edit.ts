@@ -2,7 +2,7 @@
  * a batch of observations at once) and the mutation that applies it. Shared
  * by the table view and the journal's long-press multi-select. */
 
-import { listTagRows, listLocationRows, listObserverRows, addObserver, addTag, getObservation, saveObservation } from '../db/repository';
+import { listTagRows, listLocationRows, listObserverRows, listSeriesRows, addObserver, addTag, getObservation, saveObservation } from '../db/repository';
 import { wireCombo } from './combo';
 import { wireDropdown } from './dropdown-select';
 import { escapeHtml } from './markdown';
@@ -20,12 +20,21 @@ export interface BulkEditResult {
   /** Appended to each selected observation's existing notes (on a new line), never overwritten. */
   appendNotes?: string;
   starred?: boolean;
+  /** Links every selected observation to this series (retroactively, e.g.
+   * building a series' history from past observations already in the
+   * journal) — '' unlinks them from any series. */
+  seriesId?: string;
+  /** The chosen series' display name, carried alongside `seriesId` purely so
+   * `summarizeBulkEdit()` can show it in the confirm-dialog prompt without
+   * needing its own lookup. */
+  seriesName?: string;
 }
 
 export async function openBulkEditModal(count: number, observations: Observation[]): Promise<BulkEditResult | null> {
   let tagRows = await listTagRows();
   const locationRows = await listLocationRows();
   let observerRows = await listObserverRows();
+  const seriesRows = (await listSeriesRows()).filter((s) => s.status === 'active');
   const savedLocations = new Map<string, LocationRow>(locationRows.map((l) => [l.name, l]));
   const locationSuggestions = [...new Set([...observations.map((o) => o.locationName), ...locationRows.map((l) => l.name)].filter(Boolean))]
     .sort((a, b) => a.localeCompare(b, 'he'));
@@ -69,6 +78,14 @@ export async function openBulkEditModal(count: number, observations: Observation
               <button type="button" class="btn btn-sm" id="be-observer-add">${icon('plus')} הוספה</button>
             </div>
           </div>
+        </div>
+        <label class="notif-toggle-row"><span>שיוך למעקב</span><input type="checkbox" id="be-series-toggle"></label>
+        <div class="field" id="be-series-field" hidden>
+          <select id="be-series-select" class="filter-sel">
+            <option value="">ללא מעקב (ביטול שיוך)</option>
+            ${seriesRows.map((s) => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)}${s.species ? ` · ${escapeHtml(s.species)}` : ''}</option>`).join('')}
+          </select>
+          ${!seriesRows.length ? '<p class="hint">אין מעקבים פעילים — אפשר ליצור אחד ממסך הבית.</p>' : ''}
         </div>
         <label class="notif-toggle-row"><span>הוספת הערה</span><input type="checkbox" id="be-notes-toggle"></label>
         <div class="field" id="be-notes-field" hidden>
@@ -191,6 +208,10 @@ export async function openBulkEditModal(count: number, observations: Observation
       updateObserversLabel();
     });
 
+    const seriesToggle = backdrop.querySelector<HTMLInputElement>('#be-series-toggle')!;
+    const seriesField = backdrop.querySelector<HTMLElement>('#be-series-field')!;
+    seriesToggle.addEventListener('change', () => { seriesField.hidden = !seriesToggle.checked; });
+
     const notesToggle = backdrop.querySelector<HTMLInputElement>('#be-notes-toggle')!;
     const notesField = backdrop.querySelector<HTMLElement>('#be-notes-field')!;
     notesToggle.addEventListener('change', () => { notesField.hidden = !notesToggle.checked; });
@@ -211,6 +232,11 @@ export async function openBulkEditModal(count: number, observations: Observation
       }
       if (observersToggle.checked) {
         result.observers = [...selectedObservers];
+      }
+      if (seriesToggle.checked) {
+        const id = backdrop.querySelector<HTMLSelectElement>('#be-series-select')!.value;
+        result.seriesId = id;
+        result.seriesName = id ? seriesRows.find((s) => s.id === id)?.name : undefined;
       }
       if (notesToggle.checked) {
         const text = backdrop.querySelector<HTMLTextAreaElement>('#be-notes')!.value.trim();
@@ -233,6 +259,7 @@ export function summarizeBulkEdit(result: BulkEditResult): string[] {
   if ('tags' in result) parts.push(`תגיות → ${result.tags!.length ? result.tags!.join(', ') : '(ללא תגית)'}`);
   if ('location' in result) parts.push(`מיקום → "${result.location!.name}"`);
   if ('observers' in result) parts.push(`צופים → ${result.observers!.length ? result.observers!.join(', ') : '(ללא)'}`);
+  if ('seriesId' in result) parts.push(`מעקב → ${result.seriesId ? (result.seriesName ?? result.seriesId) : '(ללא מעקב)'}`);
   if ('appendNotes' in result) parts.push('הוספת הערה');
   if ('starred' in result) parts.push(result.starred ? 'סימון כמועדף' : 'ביטול סימון מועדף');
   return parts;
@@ -255,6 +282,9 @@ export async function applyBulkEdit(ids: string[], result: BulkEditResult): Prom
     }
     if ('observers' in result) {
       obs.observers = result.observers!;
+    }
+    if ('seriesId' in result) {
+      obs.seriesId = result.seriesId || undefined;
     }
     if ('appendNotes' in result) {
       obs.notes = obs.notes ? `${obs.notes}\n${result.appendNotes!}` : result.appendNotes!;
