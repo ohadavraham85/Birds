@@ -2022,6 +2022,11 @@ a.media-link-icon:hover { color: var(--accent-700); }
   flex: 1; display: flex; align-items: center; gap: 8px;
   border: 0; background: none; padding: 6px 4px; text-align: right; font: inherit; color: inherit; cursor: pointer; min-width: 0;
 }
+.series-widget-year {
+  flex-shrink: 0; min-width: 38px; height: 36px; padding: 0 5px; border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--accent-700); color: #fff; font-weight: 800; font-size: .85rem; letter-spacing: -.2px;
+}
 .series-widget-thumb {
   flex-shrink: 0; width: 36px; height: 36px; border-radius: 50%; overflow: hidden;
   display: flex; align-items: center; justify-content: center;
@@ -2089,6 +2094,11 @@ a.media-link-icon:hover { color: var(--accent-700); }
 .series-lib-row:hover { background: var(--accent-50); }
 .series-lib-row.overdue { border-color: #e03131; }
 .series-lib-row-lead { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.series-lib-row-year {
+  flex-shrink: 0; min-width: 44px; height: 44px; padding: 0 6px; border-radius: 11px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--accent-700); color: #fff; font-weight: 800; font-size: 1rem; letter-spacing: -.2px;
+}
 .series-lib-row-thumb {
   flex-shrink: 0; width: 44px; height: 44px; border-radius: 50%; overflow: hidden;
   display: flex; align-items: center; justify-content: center;
@@ -2118,6 +2128,11 @@ a.media-link-icon:hover { color: var(--accent-700); }
 .series-status-abandoned { background: #86909522; color: #869095; }
 
 .series-detail-head-lead { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.series-detail-year {
+  flex-shrink: 0; min-width: 52px; height: 52px; padding: 0 7px; border-radius: 13px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--accent-700); color: #fff; font-weight: 800; font-size: 1.15rem; letter-spacing: -.3px;
+}
 .series-detail-thumb {
   flex-shrink: 0; width: 52px; height: 52px; border-radius: 50%; overflow: hidden;
   display: flex; align-items: center; justify-content: center;

@@ -41,6 +41,14 @@ export function isSeriesOverdue(series: Pick<SeriesRow, 'startDate' | 'expectedD
   return seriesDayNumber(series, asOf) > series.expectedDurationDays;
 }
 
+/** The calendar year a series started in — shown as a large front-of-row
+ * badge everywhere a series is listed, so a recurring site (e.g. the same
+ * nesting spot tracked year after year) is distinguishable at a glance
+ * without opening it. */
+export function seriesYear(series: Pick<SeriesRow, 'startDate'>): number {
+  return new Date(series.startDate).getFullYear();
+}
+
 export const SERIES_STATUS_LABELS: Record<SeriesRow['status'], string> = {
   active: 'פעיל', completed: 'הושלם', abandoned: 'נכשל',
 };
