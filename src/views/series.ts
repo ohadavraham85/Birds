@@ -11,6 +11,7 @@ import {
   seriesDayLabel, isSeriesOverdue, SERIES_STATUS_LABELS,
   openCreateSeriesModal, openEditSeriesModal, seriesPhotoCandidates,
   seriesChain, continueToNextPhase, seriesDayNumber, seriesYear,
+  isDateWithinSeriesRange, seriesEndDate,
 } from '../lib/series';
 import { renderObservationCard } from '../lib/obs-card';
 import { speciesNames, speciesLabel } from '../lib/observation';
@@ -299,20 +300,26 @@ function mountObservationCards(): void {
 /** Lets you attach observations already in the journal to this series
  * directly from its detail page, without opening the journal — the
  * complement to "תצפית חדשה" for building a series' history retroactively.
- * Only offers observations not already linked to any series (this one or
- * another) — an observation already tracked somewhere is never shown as a
- * candidate here; unlinking it first (bulk-edit in the journal, or the
- * "שיוך תצפיות קיימות" flow on its own series) is a separate, deliberate
- * action. Observations matching the series' own species are listed first. */
+ * Only offers observations that are (a) not already linked to any series
+ * (this one or another) — unlinking one first is a separate, deliberate
+ * action — and (b) fall within the series' own date range (on or after its
+ * start date, and within its expected duration if one is set), so an
+ * observation from well outside the season never shows up as an option.
+ * Observations matching the series' own species are listed first. */
 function openLinkExistingObservationsModal(series: SeriesRow): void {
   const candidates = allObservations
-    .filter((o) => !o.seriesId)
+    .filter((o) => !o.seriesId && isDateWithinSeriesRange(series, o.dateTime))
     .sort((a, b) => {
       const am = series.species && speciesNames(a).includes(series.species) ? 0 : 1;
       const bm = series.species && speciesNames(b).includes(series.species) ? 0 : 1;
       return am !== bm ? am - bm : b.dateTime.localeCompare(a.dateTime);
     });
   const selected = new Set<string>();
+
+  const end = seriesEndDate(series);
+  const rangeHint = end
+    ? `מוצגות רק תצפיות מ-${escapeHtml(fmtDateOnly(series.startDate))} עד ${escapeHtml(fmtDateOnly(end))} (טווח המעקב)`
+    : `מוצגות רק תצפיות מ-${escapeHtml(fmtDateOnly(series.startDate))} ואילך (תאריך התחלת המעקב)`;
 
   const wrap = document.createElement('div');
   wrap.className = 'series-modal series-link-obs-modal';
@@ -326,9 +333,10 @@ function openLinkExistingObservationsModal(series: SeriesRow): void {
     </label>`;
   wrap.innerHTML = `
     <h3>שיוך תצפיות קיימות</h3>
+    <p class="hint">${rangeHint}</p>
     <input type="search" id="series-link-obs-q" placeholder="חיפוש (מין, מיקום)..." class="filter-search">
     <div class="series-link-obs-list" id="series-link-obs-list">
-      ${candidates.length ? candidates.map(rowHtml).join('') : '<p class="hint">אין תצפיות פנויות לשיוך — כל התצפיות ביומן כבר משויכות למעקב כלשהו.</p>'}
+      ${candidates.length ? candidates.map(rowHtml).join('') : '<p class="hint">אין תצפיות פנויות לשיוך בטווח התאריכים של המעקב.</p>'}
     </div>
     <div class="modal-actions">
       <button type="button" class="btn btn-sm btn-primary" id="series-link-obs-apply" disabled>שיוך תצפיות (<span id="series-link-obs-count">0</span>)</button>
