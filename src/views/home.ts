@@ -97,6 +97,8 @@ function seriesWidgetHtml(): string {
   }
   const now = new Date();
   const sorted = [...activeSeries].sort((a, b) => {
+    const ya = seriesYear(a), yb = seriesYear(b);
+    if (ya !== yb) return yb - ya; // newest year first
     const ao = isSeriesOverdue(a, now) ? 0 : 1;
     const bo = isSeriesOverdue(b, now) ? 0 : 1;
     return ao !== bo ? ao - bo : b.startDate.localeCompare(a.startDate);
