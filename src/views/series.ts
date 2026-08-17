@@ -111,6 +111,8 @@ function renderList(): string {
 
   const filtered = statusFilter === 'all' ? allSeries : allSeries.filter((s) => s.status === statusFilter);
   const sorted = [...filtered].sort((a, b) => {
+    const ya = seriesYear(a), yb = seriesYear(b);
+    if (ya !== yb) return yb - ya; // newest year first
     if (a.status !== b.status) return a.status === 'active' ? -1 : b.status === 'active' ? 1 : 0;
     if (a.status === 'active') {
       const ao = isSeriesOverdue(a, now) ? 0 : 1;
