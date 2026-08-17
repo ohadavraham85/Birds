@@ -147,11 +147,23 @@ async function onBulkEditSelected(): Promise<void> {
   const result = await openBulkEditModal(selectedIds.size, observations);
   if (!result) return;
   const changeParts = summarizeBulkEdit(result);
-  if (!(await confirmDialog(`לעדכן ${selectedIds.size} תצפיות: ${changeParts.join(', ')}? הפעולה אינה הפיכה אוטומטית.`, 'עדכון'))) return;
-  const updated = await applyBulkEdit([...selectedIds], result);
+  let confirmMsg = `לעדכן ${selectedIds.size} תצפיות: ${changeParts.join(', ')}? הפעולה אינה הפיכה אוטומטית.`;
+  if (result.seriesId) {
+    // An observation belongs to at most one series ever — flag upfront how
+    // many of the selection would be skipped rather than silently moved out
+    // of whatever series they're already tracked under.
+    const alreadyElsewhere = observations.filter((o) => selectedIds.has(o.id) && o.seriesId && o.seriesId !== result.seriesId).length;
+    if (alreadyElsewhere) {
+      confirmMsg += ` שימו לב: ${alreadyElsewhere} מהתצפיות שנבחרו כבר משויכות למעקב אחר ולא ישויכו מחדש — תצפית משויכת ליומן מעקב אחד בלבד.`;
+    }
+  }
+  if (!(await confirmDialog(confirmMsg, 'עדכון'))) return;
+  const { updated, seriesSkipped } = await applyBulkEdit([...selectedIds], result);
   exitSelectionMode();
   await activate();
-  toast(`${updated} תצפיות עודכנו ✓`);
+  toast(seriesSkipped
+    ? `${updated} תצפיות עודכנו ✓ (${seriesSkipped} כבר היו משויכות למעקב אחר ולא שונו)`
+    : `${updated} תצפיות עודכנו ✓`);
 }
 
 /** Drill-down from the stats tab / home screen: pre-applies exactly one of a
