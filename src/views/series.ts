@@ -10,7 +10,7 @@ import {
 import {
   seriesDayLabel, isSeriesOverdue, SERIES_STATUS_LABELS,
   openCreateSeriesModal, openEditSeriesModal, seriesPhotoCandidates,
-  seriesChain, continueToNextPhase, seriesDayNumber,
+  seriesChain, continueToNextPhase, seriesDayNumber, seriesYear,
 } from '../lib/series';
 import { renderObservationCard } from '../lib/obs-card';
 import { speciesNames, speciesLabel } from '../lib/observation';
@@ -132,6 +132,7 @@ function renderList(): string {
     return `
       <button type="button" class="series-lib-row${overdue ? ' overdue' : ''}" data-series-id="${s.id}">
         <span class="series-lib-row-lead">
+          <span class="series-lib-row-year">${seriesYear(s)}</span>
           <span class="series-lib-row-thumb" data-thumb-series="${s.id}">${icon('target')}</span>
           <span class="series-lib-row-main">
             <span class="series-lib-row-name">${overdue ? icon('alert') : ''}${escapeHtml(s.name)}</span>
@@ -222,6 +223,7 @@ function renderDetail(series: SeriesRow | undefined): string {
     <div class="stat-card series-detail-card">
       <div class="stat-card-head">
         <div class="series-detail-head-lead">
+          <span class="series-detail-year">${seriesYear(series)}</span>
           <span class="series-detail-thumb" data-thumb-series="${series.id}">${icon('target')}</span>
           <h3><span class="series-status-badge series-status-${series.status}">${SERIES_STATUS_LABELS[series.status]}</span> ${escapeHtml(series.name)}</h3>
         </div>

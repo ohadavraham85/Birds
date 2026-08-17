@@ -15,7 +15,7 @@ import { fmtDateTime, confirmDialog } from '../lib/ui';
 import { icon } from '../lib/icons';
 import { loadDraft, clearDraft } from '../lib/draft';
 import { openSmartVoiceModal } from '../lib/voice-observation-modal';
-import { seriesDayLabel, isSeriesOverdue, openCreateSeriesModal, seriesPhotoCandidates, seriesChain } from '../lib/series';
+import { seriesDayLabel, isSeriesOverdue, openCreateSeriesModal, seriesPhotoCandidates, seriesChain, seriesYear } from '../lib/series';
 import { qs } from '../lib/dom';
 import { navigate } from '../main';
 import type { Observation, ObservationImage, SeriesRow } from '../types';
@@ -108,6 +108,7 @@ function seriesWidgetHtml(): string {
     return `
       <div class="series-widget-row${overdue ? ' overdue' : ''}">
         <button type="button" class="series-widget-main" data-series-open="${s.id}">
+          <span class="series-widget-year">${seriesYear(s)}</span>
           <span class="series-widget-thumb" data-thumb-series="${s.id}">${icon('target')}</span>
           <span class="series-widget-text">
             <span class="series-widget-name">${overdue ? icon('alert') : ''}${escapeHtml(s.name)}${s.species ? ` <span class="series-widget-species">· ${escapeHtml(s.species)}</span>` : ''}${phaseLabel}</span>
