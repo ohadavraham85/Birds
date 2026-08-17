@@ -375,12 +375,21 @@ async function onBulkEdit(): Promise<void> {
   if (!result) return;
 
   const changeParts = summarizeBulkEdit(result);
-  if (!(await confirmDialog(`לעדכן ${selected.size} תצפיות: ${changeParts.join(', ')}? הפעולה אינה הפיכה אוטומטית.`, 'עדכון'))) return;
+  let confirmMsg = `לעדכן ${selected.size} תצפיות: ${changeParts.join(', ')}? הפעולה אינה הפיכה אוטומטית.`;
+  if (result.seriesId) {
+    const alreadyElsewhere = observations.filter((o) => selected.has(o.id) && o.seriesId && o.seriesId !== result.seriesId).length;
+    if (alreadyElsewhere) {
+      confirmMsg += ` שימו לב: ${alreadyElsewhere} מהתצפיות שנבחרו כבר משויכות למעקב אחר ולא ישויכו מחדש — תצפית משויכת ליומן מעקב אחד בלבד.`;
+    }
+  }
+  if (!(await confirmDialog(confirmMsg, 'עדכון'))) return;
 
-  const updated = await applyBulkEdit([...selected], result);
+  const { updated, seriesSkipped } = await applyBulkEdit([...selected], result);
   selected.clear();
   await activate();
-  toast(`${updated} תצפיות עודכנו ✓`);
+  toast(seriesSkipped
+    ? `${updated} תצפיות עודכנו ✓ (${seriesSkipped} כבר היו משויכות למעקב אחר ולא שונו)`
+    : `${updated} תצפיות עודכנו ✓`);
 }
 
 /* ---------- export ---------- */

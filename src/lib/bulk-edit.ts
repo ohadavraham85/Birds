@@ -265,9 +265,22 @@ export function summarizeBulkEdit(result: BulkEditResult): string[] {
   return parts;
 }
 
-/** Applies `result` to every observation in `ids`; returns how many were actually found and updated. */
-export async function applyBulkEdit(ids: string[], result: BulkEditResult): Promise<number> {
+export interface ApplyBulkEditResult {
+  updated: number;
+  /** How many selected observations were skipped for the series-link field
+   * specifically, because they were already tracked under a *different*
+   * series — an observation belongs to at most one series ever, so bulk
+   * "שיוך למעקב" never silently steals one away from its current series.
+   * (Every other field in the same bulk edit still applies to them.) */
+  seriesSkipped: number;
+}
+
+/** Applies `result` to every observation in `ids`; returns how many were
+ * actually found and updated, plus how many were skipped for the series
+ * link specifically (see `seriesSkipped` above). */
+export async function applyBulkEdit(ids: string[], result: BulkEditResult): Promise<ApplyBulkEditResult> {
   let updated = 0;
+  let seriesSkipped = 0;
   for (const id of ids) {
     const obs = await getObservation(id);
     if (!obs) continue;
@@ -284,7 +297,11 @@ export async function applyBulkEdit(ids: string[], result: BulkEditResult): Prom
       obs.observers = result.observers!;
     }
     if ('seriesId' in result) {
-      obs.seriesId = result.seriesId || undefined;
+      if (result.seriesId && obs.seriesId && obs.seriesId !== result.seriesId) {
+        seriesSkipped++;
+      } else {
+        obs.seriesId = result.seriesId || undefined;
+      }
     }
     if ('appendNotes' in result) {
       obs.notes = obs.notes ? `${obs.notes}\n${result.appendNotes!}` : result.appendNotes!;
@@ -295,5 +312,5 @@ export async function applyBulkEdit(ids: string[], result: BulkEditResult): Prom
     await saveObservation(obs);
     updated++;
   }
-  return updated;
+  return { updated, seriesSkipped };
 }
