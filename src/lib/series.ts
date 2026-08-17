@@ -49,6 +49,30 @@ export function seriesYear(series: Pick<SeriesRow, 'startDate'>): number {
   return new Date(series.startDate).getFullYear();
 }
 
+/** The last day of a series' expected date range (start date + expected
+ * duration - 1, since the start date itself is day 1) — undefined when no
+ * expected duration is set, meaning the range is open-ended going forward. */
+export function seriesEndDate(series: Pick<SeriesRow, 'startDate' | 'expectedDurationDays'>): string | undefined {
+  if (!series.expectedDurationDays) return undefined;
+  const end = new Date(series.startDate.slice(0, 10));
+  end.setUTCDate(end.getUTCDate() + series.expectedDurationDays - 1);
+  return end.toISOString().slice(0, 10);
+}
+
+/** True if a given ISO date/datetime falls within a series' own date range —
+ * on or after its start date, and (only when an expected duration is set)
+ * on or before that range's end. Ignores time-of-day, comparing calendar
+ * dates only. Used to filter which existing observations are worth offering
+ * as candidates for retroactively linking to a series, so an observation
+ * from well outside its season doesn't show up as an option. */
+export function isDateWithinSeriesRange(series: Pick<SeriesRow, 'startDate' | 'expectedDurationDays'>, iso: string): boolean {
+  const date = iso.slice(0, 10);
+  const start = series.startDate.slice(0, 10);
+  if (date < start) return false;
+  const end = seriesEndDate(series);
+  return !end || date <= end;
+}
+
 export const SERIES_STATUS_LABELS: Record<SeriesRow['status'], string> = {
   active: 'פעיל', completed: 'הושלם', abandoned: 'נכשל',
 };
