@@ -23,6 +23,20 @@ let watchId: number | null = null;
 let points: TrackPoint[] = [];
 let startedAt = 0;
 let wakeLock: { release(): Promise<void> } | null = null;
+
+/** Fired whenever the underlying `watchPosition` call reports an error
+ * (permission denied, position unavailable, or a fix timing out) — the
+ * recording UI shows this as it happens, since otherwise a session that
+ * never actually captures a real fix looks identical to one that's working
+ * (the toggle is on, the timer is ticking) until save time, when it quietly
+ * produces no track at all (buildTrack requires at least 2 points). Does
+ * NOT stop the recording — `watchPosition` keeps retrying on its own, and a
+ * weak-signal start often does resolve once a fix comes through. */
+const errorListeners = new Set<(err: GeolocationPositionError) => void>();
+export function onTrackError(fn: (err: GeolocationPositionError) => void): () => void {
+  errorListeners.add(fn);
+  return () => errorListeners.delete(fn);
+}
 /** Set while a recording's GPS watch was torn down because the tab went to
  * the background — tells the visibilitychange handler to re-arm it (rather
  * than start a brand-new session) once the tab is foregrounded again. */
@@ -145,7 +159,7 @@ export function startTracking(): void {
       if (last && p.t - last.t < MIN_INTERVAL_MS) return;
       points.push(p);
     },
-    () => { /* permission denied / unavailable — the recording just stays empty */ },
+    (err) => { for (const fn of errorListeners) fn(err); },
     { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 },
   );
 }

@@ -17,7 +17,7 @@ import { resolvePhotoDate } from '../lib/exif';
 import { pickLocation } from '../lib/location-picker';
 import { wireCombo } from '../lib/combo';
 import { entriesOf, entryImages, speciesNames } from '../lib/observation';
-import { startTracking, stopTracking, isTracking, elapsedMs, snapshot, seedFromDraft, distanceMetersSoFar, fmtDistance, lastPoint, haversineMeters } from '../lib/gps-track';
+import { startTracking, stopTracking, isTracking, elapsedMs, snapshot, seedFromDraft, distanceMetersSoFar, fmtDistance, lastPoint, haversineMeters, onTrackError } from '../lib/gps-track';
 import { isVoiceDictationSupported, startDictation, stopDictation, isDictating } from '../lib/voice-dictation';
 import { parseObservationVoice } from '../lib/voice-parse';
 import { renderTrackPreview } from '../lib/track-preview';
@@ -154,6 +154,7 @@ export function init(el: HTMLElement): void {
           <span class="track-dot"></span>
           <span>מקליט מסלול GPS · <span id="track-timer">00:00</span> · <span id="track-distance">0 מ'</span></span>
         </div>
+        <div class="track-gps-warning" id="track-gps-warning" hidden>${icon('alert')} <span id="track-gps-warning-text"></span></div>
 
         <div class="field-frame">
           <div class="field-row two-up">
@@ -329,6 +330,28 @@ function applyVoiceResult(result: ReturnType<typeof parseObservationVoice>): voi
  * saved — turning the toggle off is "pause and keep what I have", not
  * "discard". Toggling back on starts a fresh recording, replacing this. */
 let pendingTrack: Omit<ObservationTrack, 'id' | 'updatedAt'> | null = null;
+/** Live while a recording is in progress — lets the warning banner below
+ * react to `watchPosition` errors as they happen, instead of the toggle
+ * silently looking like it's working (timer ticking, "מקליט" showing) right
+ * up until save time, when a session that never captured a real fix quietly
+ * produces no track at all. */
+let trackErrorUnsub: (() => void) | null = null;
+
+/** Messages shown for each `GeolocationPositionError.code` — see
+ * https://developer.mozilla.org/docs/Web/API/GeolocationPositionError. */
+const GPS_ERROR_MESSAGES: Record<number, string> = {
+  1: 'אין הרשאת מיקום — יש לאשר גישה למיקום בהגדרות הדפדפן/המכשיר כדי שהמסלול יתועד',
+  2: 'לא ניתן לקבל מיקום כרגע — ודאו שה-GPS פעיל במכשיר',
+  3: 'מחפש אות GPS... אם זה נמשך, נסו לצאת לאזור פתוח יותר',
+};
+
+function handleTrackGpsError(err: GeolocationPositionError): void {
+  const warning = container.querySelector<HTMLElement>('#track-gps-warning');
+  const text = container.querySelector<HTMLElement>('#track-gps-warning-text');
+  if (!warning || !text) return;
+  text.textContent = GPS_ERROR_MESSAGES[err.code] || 'תקלה בקבלת מיקום GPS';
+  warning.hidden = false;
+}
 
 function beginTrack(): void {
   pendingTrack = null;
@@ -338,6 +361,9 @@ function beginTrack(): void {
   }
   startTracking();
   qs(container, '#track-status').hidden = false;
+  qs(container, '#track-gps-warning').hidden = true;
+  trackErrorUnsub?.();
+  trackErrorUnsub = onTrackError(handleTrackGpsError);
   updateTrackTimer();
   if (trackTimerHandle) clearInterval(trackTimerHandle);
   trackTimerHandle = setInterval(updateTrackTimer, 1000);
@@ -351,12 +377,22 @@ function updateTrackTimer(): void {
   if (timerEl) timerEl.textContent = `${mm}:${ss}`;
   const distEl = container.querySelector<HTMLElement>('#track-distance');
   if (distEl) distEl.textContent = fmtDistance(distanceMetersSoFar());
+  // A real fix has come through — whatever GPS trouble caused an earlier
+  // warning (if any) has resolved, so stop showing it.
+  if (lastPoint()) {
+    const warning = container.querySelector<HTMLElement>('#track-gps-warning');
+    if (warning) warning.hidden = true;
+  }
 }
 
 function stopTrackTimer(): void {
   if (trackTimerHandle) { clearInterval(trackTimerHandle); trackTimerHandle = null; }
+  trackErrorUnsub?.();
+  trackErrorUnsub = null;
   const status = container.querySelector<HTMLElement>('#track-status');
   if (status) status.hidden = true;
+  const warning = container.querySelector<HTMLElement>('#track-gps-warning');
+  if (warning) warning.hidden = true;
 }
 
 /** Turning the toggle off: stop watching GPS but keep whatever was captured
