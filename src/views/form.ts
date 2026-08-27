@@ -330,6 +330,13 @@ function applyVoiceResult(result: ReturnType<typeof parseObservationVoice>): voi
  * saved — turning the toggle off is "pause and keep what I have", not
  * "discard". Toggling back on starts a fresh recording, replacing this. */
 let pendingTrack: Omit<ObservationTrack, 'id' | 'updatedAt'> | null = null;
+/** True once the track toggle has been switched on at least once this form
+ * session (reset on resetForm()/loadForEdit()) — lets stopAndSaveTrack()
+ * tell "the toggle was never turned on" (nothing to report) apart from "it
+ * was turned on but ended up with fewer than 2 points" (buildTrack silently
+ * discards those — worth telling the user about, since a route that never
+ * saved otherwise looks identical to one that was simply never started). */
+let trackEngagedThisSession = false;
 /** Live while a recording is in progress — lets the warning banner below
  * react to `watchPosition` errors as they happen, instead of the toggle
  * silently looking like it's working (timer ticking, "מקליט" showing) right
@@ -355,6 +362,7 @@ function handleTrackGpsError(err: GeolocationPositionError): void {
 
 function beginTrack(): void {
   pendingTrack = null;
+  trackEngagedThisSession = true;
   if (existingTrackForEdit && !seededFromExistingTrack) {
     seedFromDraft(existingTrackForEdit.points, new Date(existingTrackForEdit.startedAt).getTime());
     seededFromExistingTrack = true;
@@ -526,13 +534,20 @@ function buildTrack(result: { points: ObservationTrack['points']; segments: Obse
 
 /** Finalizes whichever track exists (still actively recording, or already
  * stashed by toggling off earlier) and persists it keyed by the just-saved
- * observation's id. No-ops if the toggle was never turned on. */
-async function stopAndSaveTrack(id: string): Promise<void> {
+ * observation's id. Returns 'saved', 'not-started' (the toggle was never
+ * turned on — nothing to report), or 'insufficient-points' (the toggle WAS
+ * on, but buildTrack ended up with fewer than 2 fixes — e.g. a very brief
+ * recording, or a weak GPS signal that only ever managed a single fix — and
+ * silently discarded it) so the caller can tell the user when a route they
+ * thought was being recorded didn't actually save. */
+async function stopAndSaveTrack(id: string): Promise<'saved' | 'not-started' | 'insufficient-points'> {
   stopTrackTimer();
   const finalTrack = isTracking() ? buildTrack(stopTracking()) : pendingTrack;
+  const engaged = trackEngagedThisSession;
   pendingTrack = null;
-  if (!finalTrack) return;
+  if (!finalTrack) return engaged ? 'insufficient-points' : 'not-started';
   await saveTrack({ ...finalTrack, id, updatedAt: '' });
+  return 'saved';
 }
 
 export function setParams(params: ViewParams): void {
@@ -663,6 +678,7 @@ function resetForm(locate = true): void {
   updateLocationPinUI();
   if (locate) autoFillGps();
   pendingTrack = null;
+  trackEngagedThisSession = false;
   existingTrackForEdit = null;
   seededFromExistingTrack = false;
   reportPins = [];
@@ -677,6 +693,7 @@ async function loadForEdit(id: string): Promise<void> {
   if (!obs) { resetForm(); return; }
   obsId = id;
   pendingTrack = null;
+  trackEngagedThisSession = false;
   seededFromExistingTrack = false;
   existingTrackForEdit = (await getTrack(id)) ?? null;
   // Continuing a recording on an existing track keeps its prior pins and
@@ -1401,10 +1418,15 @@ async function onSave(e: Event): Promise<void> {
       updatedAt: '',
     };
     await withTimeout(saveObservation(obs), 20000, 'שמירת התצפית ארכה זמן רב מדי');
-    await withTimeout(stopAndSaveTrack(obsId), 20000, 'שמירת מסלול ה-GPS ארכה זמן רב מדי');
+    const trackResult = await withTimeout(stopAndSaveTrack(obsId), 20000, 'שמירת מסלול ה-GPS ארכה זמן רב מדי');
     stopDraftAutosave();
     clearDraft();
-    toast(editId ? 'התצפית עודכנה ✓' : 'התצפית נשמרה ✓');
+    const savedMsg = editId ? 'התצפית עודכנה ✓' : 'התצפית נשמרה ✓';
+    if (trackResult === 'insufficient-points') {
+      toast(`${savedMsg} — אך מסלול ה-GPS לא נשמר: נאספו פחות מ-2 נקודות מיקום (ההקלטה הייתה קצרה מדי, או שהמכשיר לא הספיק לקבל מיקום)`, true, 8000);
+    } else {
+      toast(savedMsg);
+    }
     navigate('cards');
   } catch (err) {
     console.error('Observation save failed:', err);
