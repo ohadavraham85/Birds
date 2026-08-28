@@ -1963,6 +1963,14 @@ a.media-link-icon:hover { color: var(--accent-700); }
 .goal-attainment-card .stat-card-head h4 { margin: 0; color: var(--accent-700); font-size: .92rem; }
 .stat-donut-sm { width: 90px; height: 90px; }
 
+.goals-edit-modal { max-width: 380px; }
+.goals-edit-modal h3 { margin-top: 0; color: var(--accent-900); display: flex; align-items: center; gap: 8px; }
+.goal-monthly-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 4px 0 14px; }
+.goal-monthly-grid[hidden] { display: none; }
+.goal-monthly-field { margin-bottom: 0; }
+.goal-monthly-field label { font-size: .78rem; margin-bottom: 3px; }
+.goal-month-input { width: 100%; }
+
 /* ---------- PDF report template (rendered off-screen) ---------- */
 
 .pdf-report { direction: rtl; font-family: Arial, "Noto Sans Hebrew", sans-serif; color: #1d2721; padding: 24px; background: #fff; width: 720px; }

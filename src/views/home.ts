@@ -6,17 +6,17 @@
  * ולחיצה על כל נתון שמפנה ליומן/ללוח השנה המסונן. חוזרים למסך הזה תמיד
  * באותו מצב סינון/גרפים וגלילה שהיו כשיצאת ממנו (למשל אחרי לחיצה על גרף). */
 
-import { listObservations, listSpeciesRows, listAllMedia, listSeriesRows, saveSeries, deleteSeries } from '../db/repository';
+import { listObservations, listSpeciesRows, listAllMedia, listSeriesRows, saveSeries, deleteSeries, getSetting, setSetting } from '../db/repository';
 import { getSpeciesDetail } from '../lib/species-details-cache';
 import { speciesNames, speciesLabel, entriesOf, entryImages } from '../lib/observation';
 import { getImageObjectUrl } from '../lib/media';
 import { escapeHtml } from '../lib/markdown';
-import { fmtDateTime, confirmDialog } from '../lib/ui';
+import { fmtDateTime, confirmDialog, showModal, toast } from '../lib/ui';
 import { icon } from '../lib/icons';
 import { loadDraft, clearDraft } from '../lib/draft';
 import { openSmartVoiceModal } from '../lib/voice-observation-modal';
 import { seriesDayLabel, isSeriesOverdue, openCreateSeriesModal, seriesPhotoCandidates, seriesChain, seriesYear } from '../lib/series';
-import { qs } from '../lib/dom';
+import { qs, input } from '../lib/dom';
 import { navigate } from '../main';
 import type { Observation, ObservationImage, SeriesRow } from '../types';
 
@@ -73,6 +73,7 @@ export async function activate(): Promise<void> {
   speciesMasterList = (await listSpeciesRows()).map((r) => r.name);
   allSeriesRows = await listSeriesRows();
   activeSeries = allSeriesRows.filter((s) => s.status === 'active');
+  goalsSettings = await getSetting<GoalsSettings>('birdingGoals', DEFAULT_GOALS_SETTINGS);
   orphanPhotoBySpecies = {};
   for (const m of await listAllMedia()) {
     if (m.obsId || !m.species || orphanPhotoBySpecies[m.species]) continue;
@@ -486,11 +487,20 @@ function yearChartLine(rows: [string, number][]): string {
 
 /* ---------- birding goals ---------- */
 
-/** Fixed annual target the user asked for; the monthly breakdown below is
- * derived from real history rather than an even 200/12 split, so pacing
- * feedback matches this birder's own seasonal pattern (e.g. spring nesting
- * season naturally carries a bigger share of the year's observations). */
-const ANNUAL_GOAL = 200;
+/** Persisted per-device via the settings store (key 'birdingGoals') — the
+ * annual target and how the monthly breakdown is derived, both editable via
+ * the "עריכת יעדים" modal below. 'auto' keeps deriving the monthly shape
+ * from the busiest historical year (so pacing feedback matches this
+ * birder's own seasonal pattern); 'manual' uses month-by-month numbers the
+ * user typed in themselves. */
+interface GoalsSettings {
+  annual: number;
+  monthlyMode: 'auto' | 'manual';
+  /** Only present (and used) when monthlyMode === 'manual'; index 0=Jan..11=Dec. */
+  monthly?: number[];
+}
+const DEFAULT_GOALS_SETTINGS: GoalsSettings = { annual: 200, monthlyMode: 'auto' };
+let goalsSettings: GoalsSettings = DEFAULT_GOALS_SETTINGS;
 
 /** Fixed pass/fail semantics for goal charts — deliberately not the
  * qualitative PALETTE, so "met" always reads as green and "missed" as red
@@ -500,10 +510,13 @@ const GOAL_COLORS = { met: '#2f9e44', missed: '#e03131', upcoming: '#ced4da' } a
 let goalsViewMode: 'yearly' | 'monthly' = 'yearly';
 
 interface GoalsData {
+  annualGoal: number;
+  isManual: boolean;
   busiestYear: number;
   busiestYearTotal: number;
-  /** Observation counts per calendar month (index 0=Jan..11=Dec) during the
-   * busiest year — used as this birder's own monthly pace target. */
+  /** The monthly targets actually in effect — either the busiest year's own
+   * observation counts (auto mode) or the user's own manually-entered
+   * numbers (manual mode). Index 0=Jan..11=Dec. */
   monthlyGoals: number[];
   currentYear: number;
   currentYearTotal: number;
@@ -527,18 +540,25 @@ function computeGoals(): GoalsData | null {
     if (n > busiestYearTotal) { busiestYear = y; busiestYearTotal = n; }
   }
 
-  const monthlyGoals = new Array(12).fill(0) as number[];
+  const historicalMonthly = new Array(12).fill(0) as number[];
   const now = new Date();
   const currentYear = now.getFullYear();
   const currentYearMonthly = new Array(12).fill(0) as number[];
   let currentYearTotal = 0;
   for (const o of allObservations) {
     const d = new Date(o.dateTime);
-    if (d.getFullYear() === busiestYear) monthlyGoals[d.getMonth()]!++;
+    if (d.getFullYear() === busiestYear) historicalMonthly[d.getMonth()]!++;
     if (d.getFullYear() === currentYear) { currentYearMonthly[d.getMonth()]!++; currentYearTotal++; }
   }
 
-  return { busiestYear, busiestYearTotal, monthlyGoals, currentYear, currentYearTotal, currentYearMonthly, currentMonth: now.getMonth() };
+  const isManual = goalsSettings.monthlyMode === 'manual' && !!goalsSettings.monthly;
+  const monthlyGoals = isManual ? goalsSettings.monthly! : historicalMonthly;
+
+  return {
+    annualGoal: goalsSettings.annual, isManual,
+    busiestYear, busiestYearTotal, monthlyGoals, currentYear, currentYearTotal, currentYearMonthly,
+    currentMonth: now.getMonth(),
+  };
 }
 
 /** Per-month pass/fail against that month's historical-pace goal — months
@@ -579,26 +599,98 @@ function goalsHtml(): string {
       </div>`;
   }).join('');
 
+  const subtitle = g.isManual
+    ? 'פילוח היעד החודשי הוגדר ידנית על ידכם'
+    : `פילוח היעד החודשי מבוסס על השנה הפעילה ביותר שלכם — ${g.busiestYear} (${g.busiestYearTotal} תצפיות)`;
+
   return `
     <div class="stat-card">
-      <div class="stat-card-head"><h3>${icon('target')} יעדי צפרות</h3></div>
-      <p class="goal-sub">פילוח היעד החודשי מבוסס על השנה הפעילה ביותר שלך — ${g.busiestYear} (${g.busiestYearTotal} תצפיות)</p>
+      <div class="stat-card-head">
+        <h3>${icon('target')} יעדי צפרות</h3>
+        <button type="button" class="btn btn-icon" id="goals-edit-btn" title="עריכת יעדים" aria-label="עריכת יעדים">${icon('edit')}</button>
+      </div>
+      <p class="goal-sub">${escapeHtml(subtitle)}</p>
       <div class="stat-donut-wrap">
         <svg viewBox="0 0 42 42" class="stat-donut" role="img" aria-label="יעדי צפרות חודשיים">
           <g transform="rotate(-90 21 21)">
             <circle cx="21" cy="21" r="${R}" fill="none" stroke="var(--accent-50)" stroke-width="7.5"></circle>
             ${segments}
           </g>
-          <text x="21" y="19.5" text-anchor="middle" font-size="7" font-weight="700" fill="var(--accent-900)">${ANNUAL_GOAL}</text>
+          <text x="21" y="19.5" text-anchor="middle" font-size="7" font-weight="700" fill="var(--accent-900)">${g.annualGoal}</text>
           <text x="21" y="25" text-anchor="middle" font-size="3.4" fill="var(--ink-soft)">יעד שנתי</text>
         </svg>
         <div class="stat-donut-legend goal-legend">
           ${legend}
         </div>
       </div>
-      <p class="goal-progress">התקדמות ${g.currentYear}: <span dir="ltr">${g.currentYearTotal} / ${ANNUAL_GOAL}</span> תצפיות</p>
+      <p class="goal-progress">התקדמות ${g.currentYear}: <span dir="ltr">${g.currentYearTotal} / ${g.annualGoal}</span> תצפיות</p>
       ${attainmentHtml(g)}
     </div>`;
+}
+
+/** "עריכת יעדים" modal — lets the user set their own annual target and
+ * choose between the auto-derived monthly breakdown (busiest year's own
+ * pace) or typing in each month's target themselves. Saved to the settings
+ * store so it persists across sessions on this device. */
+function openGoalsEditModal(g: GoalsData): void {
+  const wrap = document.createElement('div');
+  wrap.className = 'goals-edit-modal';
+  const startingMonthly = g.isManual && goalsSettings.monthly ? goalsSettings.monthly : g.monthlyGoals;
+  wrap.innerHTML = `
+    <h3>${icon('target')} עריכת יעדי צפרות</h3>
+    <div class="field">
+      <label for="goal-annual">יעד שנתי (מספר תצפיות)</label>
+      <input type="number" id="goal-annual" min="1" value="${goalsSettings.annual}">
+    </div>
+    <div class="field">
+      <label>פילוח חודשי</label>
+      <label class="filter-modal-check">
+        <input type="radio" name="goal-monthly-mode" value="auto" ${goalsSettings.monthlyMode === 'auto' ? 'checked' : ''}>
+        <span>אוטומטי — לפי השנה הפעילה ביותר שלכם (${g.busiestYear}, ${g.busiestYearTotal} תצפיות)</span>
+      </label>
+      <label class="filter-modal-check">
+        <input type="radio" name="goal-monthly-mode" value="manual" ${goalsSettings.monthlyMode === 'manual' ? 'checked' : ''}>
+        <span>ידני — קביעת יעד לכל חודש בעצמכם</span>
+      </label>
+    </div>
+    <div class="goal-monthly-grid" id="goal-monthly-grid" ${goalsSettings.monthlyMode === 'manual' ? '' : 'hidden'}>
+      ${MONTH_NAMES.map((name, i) => `
+        <div class="field goal-monthly-field">
+          <label for="goal-month-${i}">${name}</label>
+          <input type="number" id="goal-month-${i}" min="0" class="goal-month-input" value="${startingMonthly[i] ?? 0}">
+        </div>`).join('')}
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-sm btn-primary" id="goal-save">שמירה</button>
+      <button type="button" class="btn btn-sm" id="goal-cancel">ביטול</button>
+    </div>`;
+  const close = showModal(wrap);
+  input(wrap, '#goal-annual').focus();
+
+  const monthlyGrid = qs(wrap, '#goal-monthly-grid');
+  const syncGridVisibility = (): void => {
+    const mode = wrap.querySelector<HTMLInputElement>('input[name="goal-monthly-mode"]:checked')!.value;
+    monthlyGrid.hidden = mode !== 'manual';
+  };
+  wrap.querySelectorAll<HTMLInputElement>('input[name="goal-monthly-mode"]').forEach((radio) => {
+    radio.addEventListener('change', syncGridVisibility);
+  });
+
+  wrap.querySelector('#goal-cancel')?.addEventListener('click', () => close());
+  wrap.querySelector('#goal-save')?.addEventListener('click', () => {
+    const annual = Math.max(1, parseInt(input(wrap, '#goal-annual').value, 10) || 1);
+    const mode = wrap.querySelector<HTMLInputElement>('input[name="goal-monthly-mode"]:checked')!.value as 'auto' | 'manual';
+    const monthly = mode === 'manual'
+      ? Array.from({ length: 12 }, (_, i) => Math.max(0, parseInt(input(wrap, `#goal-month-${i}`).value, 10) || 0))
+      : undefined;
+    void (async () => {
+      goalsSettings = { annual, monthlyMode: mode, ...(monthly ? { monthly } : {}) };
+      await setSetting('birdingGoals', goalsSettings);
+      close();
+      render();
+      toast('היעדים עודכנו ✓');
+    })();
+  });
 }
 
 /** Small secondary donut: how many (elapsed) months hit their monthly goal
@@ -839,6 +931,12 @@ function onClick(e: Event): void {
   const target = e.target as HTMLElement;
 
   if (target.closest('#smart-voice-btn')) { openSmartVoiceModal(); return; }
+
+  if (target.closest('#goals-edit-btn')) {
+    const g = computeGoals();
+    if (g) openGoalsEditModal(g);
+    return;
+  }
 
   if (target.closest('#series-widget-library')) { navigate('series'); return; }
   if (target.closest('#series-widget-add')) {
