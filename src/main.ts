@@ -17,6 +17,7 @@ import { refreshSpeciesDetailsCache } from './lib/species-details-cache';
 import { haptic } from './lib/haptics';
 import { isPatternLockEnabled, renderLockScreen } from './lib/pattern-lock';
 import { SHARE_TARGET_HASH } from './lib/share-target';
+import { APP_VERSION } from './version';
 import type { View, ViewParams } from './views/view';
 
 initTheme();
@@ -196,6 +197,11 @@ function setupClock(): void {
   setInterval(tick, 1000);
 }
 
+function setupVersionBadge(): void {
+  const el = document.getElementById('topbar-version');
+  if (el) el.textContent = `גרסה ${APP_VERSION}`;
+}
+
 /** Short haptic pulse on interactive taps app-wide — delegated at the
  * document level (capture phase) so every button/checkbox/tag badge gets
  * feedback for free, current and future, instead of threading a call
@@ -261,6 +267,7 @@ async function init(): Promise<void> {
   setupNav();
   setupStatusIndicator();
   setupClock();
+  setupVersionBadge();
   setupHaptics();
 
   // register the Workbox service worker (auto-updates on new deploys)
