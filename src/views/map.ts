@@ -159,12 +159,16 @@ async function onLayerCheckboxChange(e: Event): Promise<void> {
   applyLayerState();
 }
 
+/** A track is keyed 1:1 by its observation's id (types.ts), so clicking the
+ * drawn route can jump straight to that observation — opened in View Mode
+ * (views/detail.ts), which now also carries a delete action, so a track the
+ * user wants gone doesn't require hunting for it in the journal first. */
 function drawTrack(t: ObservationTrack): void {
   for (const seg of t.segments) {
     if (seg.points.length < 2) continue;
     L.polyline(seg.points.map((p) => [p.lat, p.lng]), {
       color: TRACK_SEGMENT_COLOR[seg.kind], weight: 4, opacity: 0.85,
-    }).addTo(tracksLayer!);
+    }).addTo(tracksLayer!).on('click', () => navigate('detail', { viewId: t.id }));
     if (seg.kind === 'walk') addDirectionArrows(tracksLayer!, seg);
   }
   if (t.reportPins?.length) addReportPins(tracksLayer!, t.reportPins);
