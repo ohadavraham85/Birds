@@ -585,6 +585,9 @@ label.notif-toggle-row.track-toggle-row input[type="checkbox"]:checked { backgro
   font-size: 1.05rem;
   margin-bottom: 12px;
 }
+.species-row-actions { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.species-row-actions .voice-dictate-btn { flex-shrink: 0; }
+.species-frame .voice-status { margin-top: 8px; }
 
 /* ---------- observation form: compact datetime row + location row with pin icon ---------- */
 
