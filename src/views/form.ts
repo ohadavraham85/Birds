@@ -137,13 +137,8 @@ export function init(el: HTMLElement): void {
               </div>
             </div>
             <button type="button" class="btn btn-icon location-pin-btn" id="pick-map-btn" title="בחירת מיקום על המפה" aria-label="בחירת מיקום על המפה">${icon('pin')}</button>
-            <button type="button" class="btn btn-icon voice-dictate-btn" id="voice-dictate-btn" title="הכתבת תצפית בקול" aria-label="הכתבת תצפית בקול">${icon('mic')}</button>
           </div>
           <span class="hint" id="gps-status"></span>
-          <div class="track-status voice-status" id="voice-status" hidden>
-            <span class="track-dot"></span>
-            <span id="voice-interim">מקשיב...</span>
-          </div>
         </div>
 
         <label class="notif-toggle-row track-toggle-row" id="track-toggle-row" hidden>
@@ -195,7 +190,14 @@ export function init(el: HTMLElement): void {
         <div class="field">
           <label>מיני הציפור</label>
           <div id="species-rows"></div>
-          <button type="button" class="btn btn-sm" id="add-species-row" style="margin-top:6px">${icon('plus')} הוספת מין</button>
+          <div class="species-row-actions">
+            <button type="button" class="btn btn-sm" id="add-species-row">${icon('plus')} הוספת מין</button>
+            <button type="button" class="btn btn-icon voice-dictate-btn" id="voice-dictate-btn" title="הכתבת תצפית בקול" aria-label="הכתבת תצפית בקול">${icon('mic')}</button>
+          </div>
+          <div class="track-status voice-status" id="voice-status" hidden>
+            <span class="track-dot"></span>
+            <span id="voice-interim">מקשיב...</span>
+          </div>
         </div>
       </div>
 
