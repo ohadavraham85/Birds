@@ -595,7 +595,7 @@ function goalsHtml(): string {
       <div class="goal-legend-row goal-${status}">
         <span class="stat-donut-dot" style="background:${GOAL_COLORS[status]}"></span>
         <span class="goal-legend-label">${escapeHtml(name)}</span>
-        <span class="goal-legend-value" dir="ltr">${actual} / ${goal}</span>
+        <button type="button" class="goal-legend-value goal-legend-value-btn" dir="ltr" data-month="${i}" title="עריכת יעד ${escapeHtml(name)}">${actual} / ${goal}</button>
       </div>`;
   }).join('');
 
@@ -691,6 +691,55 @@ function openGoalsEditModal(g: GoalsData): void {
       toast('היעדים עודכנו ✓');
     })();
   });
+}
+
+/** Swaps one month's legend row from its plain "actual / goal" button into
+ * an inline number input, so a single month's target can be tweaked without
+ * opening the full "עריכת יעדים" modal — the quick path for "just fix
+ * September's number", not a full re-plan of the year. */
+function startEditMonthGoal(btn: HTMLElement): void {
+  const month = Number(btn.dataset.month);
+  const g = computeGoals();
+  if (!g) return;
+  const currentGoal = g.monthlyGoals[month] ?? 0;
+
+  const inputEl = document.createElement('input');
+  inputEl.type = 'number';
+  inputEl.min = '0';
+  inputEl.className = 'goal-legend-inline-input';
+  inputEl.value = String(currentGoal);
+  inputEl.dir = 'ltr';
+  btn.replaceWith(inputEl);
+  inputEl.focus();
+  inputEl.select();
+
+  let settled = false;
+  const commit = (): void => {
+    if (settled) return;
+    settled = true;
+    const newGoal = Math.max(0, parseInt(inputEl.value, 10) || 0);
+    if (newGoal === currentGoal) { render(); return; }
+    void saveMonthGoal(month, newGoal);
+  };
+  inputEl.addEventListener('blur', commit);
+  inputEl.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') { ev.preventDefault(); inputEl.blur(); }
+    else if (ev.key === 'Escape') { settled = true; render(); }
+  });
+}
+
+/** Persists a single month's edited target — switches to manual monthly
+ * mode if this device was still on auto-derived goals, seeding every other
+ * month from whatever was in effect so only the edited one actually changes. */
+async function saveMonthGoal(month: number, newGoal: number): Promise<void> {
+  const g = computeGoals();
+  if (!g) return;
+  const monthly = [...g.monthlyGoals];
+  monthly[month] = newGoal;
+  goalsSettings = { ...goalsSettings, monthlyMode: 'manual', monthly };
+  await setSetting('birdingGoals', goalsSettings);
+  render();
+  toast('היעד עודכן ✓');
 }
 
 /** Small secondary donut: how many (elapsed) months hit their monthly goal
@@ -937,6 +986,9 @@ function onClick(e: Event): void {
     if (g) openGoalsEditModal(g);
     return;
   }
+
+  const monthValueBtn = target.closest<HTMLElement>('.goal-legend-value-btn');
+  if (monthValueBtn) { startEditMonthGoal(monthValueBtn); return; }
 
   if (target.closest('#series-widget-library')) { navigate('series'); return; }
   if (target.closest('#series-widget-add')) {
