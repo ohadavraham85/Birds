@@ -1958,6 +1958,15 @@ a.media-link-icon:hover { color: var(--accent-700); }
 .goal-legend-row.goal-missed .goal-legend-value { color: #e03131; font-weight: 700; }
 .goal-legend-row.goal-upcoming .goal-legend-label,
 .goal-legend-row.goal-upcoming .goal-legend-value { color: var(--ink-soft); }
+.goal-legend-value-btn {
+  border: 1px solid transparent; background: none; font: inherit; cursor: pointer;
+  border-radius: 5px; padding: 2px 6px; margin: -2px -6px;
+}
+.goal-legend-value-btn:hover { border-color: var(--line); background: var(--accent-50); }
+.goal-legend-inline-input {
+  width: 52px; font-size: .78rem; padding: 2px 6px; border-radius: 5px;
+  border: 1px solid var(--accent-700); text-align: center;
+}
 .goal-progress { font-size: .85rem; color: var(--ink-soft); margin: 12px 0 0; text-align: center; }
 .goal-attainment-card { margin: 16px -16px -16px; border-radius: 0 0 var(--radius) var(--radius); border-top: 1px solid var(--line); background: var(--paper); }
 .goal-attainment-card .stat-card-head h4 { margin: 0; color: var(--accent-700); font-size: .92rem; }
