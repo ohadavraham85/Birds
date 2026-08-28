@@ -268,6 +268,7 @@ body {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .topbar-datetime { font-size: .72rem; color: rgba(255, 255, 255, .8); line-height: 1.25; white-space: nowrap; }
+.topbar-version { font-size: .66rem; color: rgba(255, 255, 255, .6); line-height: 1.25; white-space: nowrap; }
 .logo { font-size: 1.4rem; flex-shrink: 0; }
 
 .topbar-actions { display: flex; align-items: center; gap: 10px; }
