@@ -1,8 +1,8 @@
 /* views/detail.ts — מסך צפייה בתצפית בודדת (View Mode): תצוגה נקייה וקריאה-בלבד
  * של פרטי התצפית, עם כפתור "עריכה" ייעודי שפותח את טופס העריכה, וייצוא PDF. */
 
-import { getObservation } from '../db/repository';
-import { toast, withBusyButton } from '../lib/ui';
+import { getObservation, deleteObservation } from '../db/repository';
+import { toast, withBusyButton, confirmDialog } from '../lib/ui';
 import { renderObservationCard } from '../lib/obs-card';
 import { exportObservationsPdf } from '../lib/pdf';
 import { icon } from '../lib/icons';
@@ -26,6 +26,7 @@ export function init(el: HTMLElement): void {
     <div class="detail-actions">
       <button class="btn btn-primary" id="detail-edit">${icon('edit')} עריכה</button>
       <button class="btn" id="detail-pdf">${icon('document')} ייצוא PDF</button>
+      <button class="btn btn-danger" id="detail-delete">${icon('trash')} מחיקה</button>
     </div>
   `;
   qs(container, '#detail-back').addEventListener('click', goBack);
@@ -33,6 +34,15 @@ export function init(el: HTMLElement): void {
     if (current) navigate('form', { editId: current.id });
   });
   qs(container, '#detail-pdf').addEventListener('click', (e) => void onExportPdf(e.currentTarget as HTMLButtonElement));
+  qs(container, '#detail-delete').addEventListener('click', () => void onDelete());
+}
+
+async function onDelete(): Promise<void> {
+  if (!current) return;
+  if (!(await confirmDialog('למחוק את התצפית?', 'מחיקה'))) return;
+  await deleteObservation(current.id);
+  toast('התצפית נמחקה');
+  goBack();
 }
 
 export function setParams(params: ViewParams): void {
@@ -46,10 +56,12 @@ export async function activate(): Promise<void> {
     body.innerHTML = '<p style="color:var(--ink-soft)">התצפית לא נמצאה — ייתכן שנמחקה.</p>';
     qs<HTMLButtonElement>(container, '#detail-edit').disabled = true;
     qs<HTMLButtonElement>(container, '#detail-pdf').disabled = true;
+    qs<HTMLButtonElement>(container, '#detail-delete').disabled = true;
     return;
   }
   qs<HTMLButtonElement>(container, '#detail-edit').disabled = false;
   qs<HTMLButtonElement>(container, '#detail-pdf').disabled = false;
+  qs<HTMLButtonElement>(container, '#detail-delete').disabled = false;
   body.innerHTML = '';
   const card = renderObservationCard(current);
   card.classList.add('static-card');
