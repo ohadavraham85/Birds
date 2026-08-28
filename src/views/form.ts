@@ -131,7 +131,7 @@ export function init(el: HTMLElement): void {
             <div class="field field-location-prominent">
               <label for="f-location">מיקום התצפית</label>
               <div class="combo with-arrow">
-                <input type="text" id="f-location">
+                <input type="text" id="f-location" required>
                 <button type="button" class="combo-toggle" title="פתיחת הרשימה" aria-label="פתיחת הרשימה">▾</button>
                 <div class="combo-list" id="location-list" hidden></div>
               </div>
@@ -1256,7 +1256,7 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
     spInput,
     row.querySelector<HTMLElement>('.sp-combo .combo-list')!,
     () => speciesCache,
-    { matchMode: 'prefix', getDefault: () => seenSpeciesCache, onSelect: () => maybeDropNewSpeciesPin() },
+    { getDefault: () => seenSpeciesCache, onSelect: () => maybeDropNewSpeciesPin() },
   );
 
   const fileInput = row.querySelector<HTMLInputElement>('.sp-file')!;
@@ -1373,6 +1373,7 @@ async function onSave(e: Event): Promise<void> {
   const rowEls = Array.from(container.querySelectorAll<HTMLElement>('#species-rows .sp-entry'));
   const iso = fromLocalInputValue(input(container, '#f-datetime').value);
   if (!iso) { toast('תאריך לא תקין', true); return; }
+  if (!input(container, '#f-location').value.trim()) { toast('יש להזין מיקום תצפית', true); return; }
   const mediaLink = input(container, '#f-media-link').value.trim();
   if (mediaLink && !safeHttpUrl(mediaLink)) {
     toast('קישור התמונות/סרטונים אינו תקין — יש להזין כתובת מלאה שמתחילה ב-https://', true, 5000);
