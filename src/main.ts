@@ -17,7 +17,6 @@ import { refreshSpeciesDetailsCache } from './lib/species-details-cache';
 import { haptic } from './lib/haptics';
 import { isPatternLockEnabled, renderLockScreen } from './lib/pattern-lock';
 import { SHARE_TARGET_HASH } from './lib/share-target';
-import { APP_VERSION } from './version';
 import type { View, ViewParams } from './views/view';
 
 initTheme();
@@ -197,9 +196,19 @@ function setupClock(): void {
   setInterval(tick, 1000);
 }
 
-function setupVersionBadge(): void {
+/** Shows the real deployed build version — the same `version.json` Settings'
+ * "נתונים מקומיים" screen already reads, stamped by the release workflow
+ * (.github/workflows/build-release.yml) on every push with the next
+ * `git tag`-derived version number. Not present in local dev (only written
+ * into the production build), so this silently shows nothing there — same
+ * as Settings' own fallback. */
+async function setupVersionBadge(): Promise<void> {
   const el = document.getElementById('topbar-version');
-  if (el) el.textContent = `גרסה ${APP_VERSION}`;
+  if (!el) return;
+  try {
+    const { version } = await (await fetch('version.json')).json();
+    if (version) el.textContent = `גרסה ${version}`;
+  } catch { /* dev — no version.json */ }
 }
 
 /** Short haptic pulse on interactive taps app-wide — delegated at the
@@ -267,7 +276,7 @@ async function init(): Promise<void> {
   setupNav();
   setupStatusIndicator();
   setupClock();
-  setupVersionBadge();
+  void setupVersionBadge();
   setupHaptics();
 
   // register the Workbox service worker (auto-updates on new deploys)
