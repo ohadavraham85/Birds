@@ -262,6 +262,12 @@ export function deactivate(): void {
 
 /* ---------- voice dictation (speak a whole observation instead of typing) ---------- */
 
+/** Each tap listens for exactly this long, then auto-stops — a fixed,
+ * predictable window instead of relying on the browser's own (inconsistent
+ * across devices) silence-detection cutoff. */
+const VOICE_DICTATE_MS = 5000;
+let voiceDictateAutoStop: ReturnType<typeof setTimeout> | null = null;
+
 function onVoiceDictateClick(): void {
   if (isDictating()) { stopDictation(); return; }
   if (!isVoiceDictationSupported()) {
@@ -271,6 +277,7 @@ function onVoiceDictateClick(): void {
   const btn = qs<HTMLButtonElement>(container, '#voice-dictate-btn');
   const status = qs(container, '#voice-status');
   const interim = qs(container, '#voice-interim');
+  haptic(15);
   btn.classList.add('recording');
   btn.title = 'הפסקת הקלטה';
   btn.setAttribute('aria-label', 'הפסקת הקלטה');
@@ -285,12 +292,15 @@ function onVoiceDictateClick(): void {
     },
     onError: (msg) => toast(msg, true, 5000),
     onEnd: () => {
+      if (voiceDictateAutoStop) { clearTimeout(voiceDictateAutoStop); voiceDictateAutoStop = null; }
+      haptic(15);
       btn.classList.remove('recording');
       btn.title = 'הכתבת תצפית בקול';
       btn.setAttribute('aria-label', 'הכתבת תצפית בקול');
       status.hidden = true;
     },
-  });
+  }, { continuous: true });
+  voiceDictateAutoStop = setTimeout(() => { if (isDictating()) stopDictation(); }, VOICE_DICTATE_MS);
 }
 
 /** Fills in whatever the dictated sentence could confidently be matched to
