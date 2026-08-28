@@ -352,6 +352,19 @@ const GPS_ERROR_MESSAGES: Record<number, string> = {
   3: 'מחפש אות GPS... אם זה נמשך, נסו לצאת לאזור פתוח יותר',
 };
 
+/** Some devices/browsers grant only "approximate" location (Android's
+ * coarse-location permission tier) — combined with the high-accuracy request
+ * this module makes, `watchPosition` can then just hang forever: no fix ever
+ * arrives, but no error fires either, since as far as the browser's concerned
+ * nothing has technically failed. That leaves the recording looking
+ * completely normal (dot pulsing, timer ticking) while silently capturing
+ * nothing, discovered only once the save-time "GPS-מסלול not saved" toast
+ * appears. Shown once no fix has landed within this long after starting, so
+ * there's at least a chance to fix it (switch to precise location) mid-walk
+ * instead of finding out only at the end. */
+const STALL_WARNING_MS = 20000;
+const STALL_WARNING_TEXT = 'לא מתקבלת נקודת מיקום כבר זמן מה — ודאו שהרשאת המיקום של האפליקציה מוגדרת ל"מדויק"/"Precise" (לא "משוער") ושה-GPS פעיל במכשיר';
+
 function handleTrackGpsError(err: GeolocationPositionError): void {
   const warning = container.querySelector<HTMLElement>('#track-gps-warning');
   const text = container.querySelector<HTMLElement>('#track-gps-warning-text');
@@ -385,11 +398,20 @@ function updateTrackTimer(): void {
   if (timerEl) timerEl.textContent = `${mm}:${ss}`;
   const distEl = container.querySelector<HTMLElement>('#track-distance');
   if (distEl) distEl.textContent = fmtDistance(distanceMetersSoFar());
-  // A real fix has come through — whatever GPS trouble caused an earlier
-  // warning (if any) has resolved, so stop showing it.
+  const warning = container.querySelector<HTMLElement>('#track-gps-warning');
+  const warningText = container.querySelector<HTMLElement>('#track-gps-warning-text');
   if (lastPoint()) {
-    const warning = container.querySelector<HTMLElement>('#track-gps-warning');
+    // A real fix has come through — whatever GPS trouble caused an earlier
+    // warning (if any) has resolved, so stop showing it.
     if (warning) warning.hidden = true;
+  } else if (warning && warning.hidden && elapsedMs() >= STALL_WARNING_MS) {
+    // No fix yet, and watchPosition hasn't reported an outright error either
+    // (that path already shows its own message via handleTrackGpsError) —
+    // most likely a device permission granting only approximate/coarse
+    // location, which silently stalls a high-accuracy watch instead of
+    // failing it outright.
+    if (warningText) warningText.textContent = STALL_WARNING_TEXT;
+    warning.hidden = false;
   }
 }
 
