@@ -33,22 +33,45 @@ jobs:
       - name: Type-check
         run: npm run typecheck
 
-      - name: Compute next version
+      # Reserves the version number by tagging+pushing it immediately, before
+      # the (much slower) build even starts — two runs triggered close
+      # together otherwise both compute the same "next" version from the same
+      # stale tag list and race to push it, and whichever loses gets its tag
+      # push rejected, which fails that whole job and skips deploy-pages
+      # (needs: build-release) even though the build itself was fine. Retries
+      # against a freshly-fetched tag list on conflict instead.
+      - name: Claim next version
         id: ver
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          latest=$(git tag -l 'v*' --sort=-v:refname | head -1)
-          if [ -z "$latest" ]; then
-            next="2.0.0"
-          else
-            IFS=. read -r major minor patch <<< "${latest#v}"
-            if [ "$major" -lt 2 ]; then
-              next="2.0.0"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          for attempt in $(seq 1 8); do
+            git fetch origin --tags --force --quiet
+            latest=$(git tag -l 'v*' --sort=-v:refname | head -1)
+            if [ -z "$latest" ]; then
+              VER="2.0.0"
             else
-              next="$major.$minor.$((patch + 1))"
+              IFS=. read -r major minor patch <<< "${latest#v}"
+              if [ "$major" -lt 2 ]; then
+                VER="2.0.0"
+              else
+                VER="$major.$minor.$((patch + 1))"
+              fi
             fi
-          fi
-          echo "version=$next" >> "$GITHUB_OUTPUT"
-          echo "Next version: v$next (previous: ${latest:-none})"
+            git tag "v$VER"
+            if git push origin "v$VER"; then
+              echo "Claimed v$VER (previous: ${latest:-none})"
+              echo "version=$VER" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "v$VER was claimed by a concurrent run — retrying with a fresh version…"
+            git tag -d "v$VER"
+            sleep $((RANDOM % 4 + 1))
+          done
+          echo "::error::Could not claim a unique version tag after 8 attempts"
+          exit 1
 
       - name: Build (Vite + PWA)
         env:
@@ -69,15 +92,11 @@ jobs:
           name: dist
           path: dist
 
-      - name: Tag and create release
+      - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           VER="${{ steps.ver.outputs.version }}"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag "v$VER"
-          git push origin "v$VER"
           NOTES=$(printf 'בנייה אוטומטית (Vite + TypeScript, PWA offline-first) מ-commit %s.\n\nהאפליקציה מותקנת מ-GitHub Pages; ה-ZIP הוא ה-build הסטטי (dist) לפריסה בכל אחסון סטטי עם HTTPS.' "${GITHUB_SHA::7}")
           gh release create "v$VER" "birds-app-v$VER.zip" \
             --title "יומן צפרות v$VER" \
