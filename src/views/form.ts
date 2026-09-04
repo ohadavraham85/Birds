@@ -365,6 +365,12 @@ let trackEngagedThisSession = false;
  * up until save time, when a session that never captured a real fix quietly
  * produces no track at all. */
 let trackErrorUnsub: (() => void) | null = null;
+/** Timestamp of the last GPS fix the status panel already flashed for — lets
+ * updateTrackTimer() (ticking every second) tell "a fresh point just landed"
+ * apart from "still the same point as a second ago", so the flash is a real
+ * live heartbeat tied to GPS actually working, not a decorative loop that'd
+ * keep animating through a stall the same as when it's healthy. */
+let lastFlashedPointT = 0;
 
 /** Messages shown for each `GeolocationPositionError.code` — see
  * https://developer.mozilla.org/docs/Web/API/GeolocationPositionError. */
@@ -405,6 +411,7 @@ function beginTrack(): void {
   startTracking();
   qs(container, '#track-status').hidden = false;
   qs(container, '#track-gps-warning').hidden = true;
+  lastFlashedPointT = 0;
   trackErrorUnsub?.();
   trackErrorUnsub = onTrackError(handleTrackGpsError);
   updateTrackTimer();
@@ -422,10 +429,24 @@ function updateTrackTimer(): void {
   if (distEl) distEl.textContent = fmtDistance(distanceMetersSoFar());
   const warning = container.querySelector<HTMLElement>('#track-gps-warning');
   const warningText = container.querySelector<HTMLElement>('#track-gps-warning-text');
-  if (lastPoint()) {
+  const p = lastPoint();
+  if (p) {
     // A real fix has come through — whatever GPS trouble caused an earlier
     // warning (if any) has resolved, so stop showing it.
     if (warning) warning.hidden = true;
+    // A genuinely new fix (not just the same one still sitting there from a
+    // second ago) — flash the status panel as a live "GPS is actually
+    // working" heartbeat, restarting the CSS animation via a reflow since
+    // just re-adding an already-present class wouldn't replay it.
+    if (p.t !== lastFlashedPointT) {
+      lastFlashedPointT = p.t;
+      const status = container.querySelector<HTMLElement>('#track-status');
+      if (status) {
+        status.classList.remove('track-status-flash');
+        void status.offsetWidth;
+        status.classList.add('track-status-flash');
+      }
+    }
   } else if (warning && warning.hidden && elapsedMs() >= STALL_WARNING_MS) {
     // No fix yet, and watchPosition hasn't reported an outright error either
     // (that path already shows its own message via handleTrackGpsError) —

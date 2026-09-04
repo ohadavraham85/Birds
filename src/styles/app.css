@@ -347,6 +347,11 @@ body {
   width: 9px; height: 9px; border-radius: 50%; background: var(--danger); flex-shrink: 0;
   animation: track-pulse 1.4s ease-in-out infinite;
 }
+/* A live heartbeat flash on the whole panel each time a fresh GPS fix lands
+ * (not a decorative loop — see updateTrackTimer()) so a real stall reads as
+ * the panel going still, not just as a separate warning banner. */
+.track-status-flash { animation: track-status-flash .6s ease-out; }
+@keyframes track-status-flash { 0% { background: var(--accent-100); } 100% { background: var(--accent-50); } }
 
 .track-gps-warning {
   display: flex; align-items: center; gap: 8px;
