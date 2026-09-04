@@ -21,6 +21,7 @@ import { startTracking, stopTracking, isTracking, elapsedMs, snapshot, seedFromD
 import { isVoiceDictationSupported, startDictation, stopDictation, isDictating } from '../lib/voice-dictation';
 import { parseObservationVoice } from '../lib/voice-parse';
 import { renderTrackPreview } from '../lib/track-preview';
+import { createLiveTrackMap, type LiveTrackMap } from '../lib/track-map';
 import { saveDraft, loadDraft, clearDraft, type ObservationDraft } from '../lib/draft';
 import { qs, input } from '../lib/dom';
 import { icon } from '../lib/icons';
@@ -150,6 +151,7 @@ export function init(el: HTMLElement): void {
           <span>מקליט מסלול GPS · <span id="track-timer">00:00</span> · <span id="track-distance">0 מ'</span></span>
         </div>
         <div class="track-gps-warning" id="track-gps-warning" hidden>${icon('alert')} <span id="track-gps-warning-text"></span></div>
+        <div class="track-live-map" id="track-live-map" hidden></div>
 
         <div class="field-frame">
           <div class="field-row two-up">
@@ -371,6 +373,13 @@ let trackErrorUnsub: (() => void) | null = null;
  * live heartbeat tied to GPS actually working, not a decorative loop that'd
  * keep animating through a stall the same as when it's healthy. */
 let lastFlashedPointT = 0;
+/** The small live-following map shown while recording — created lazily on
+ * the first beginTrack() of the form session and torn down in
+ * stopTrackTimer() (covers pause, discard, and save alike, since all three
+ * route through it), rather than kept alive across a whole edit session, so
+ * a second recording starts with a clean Leaflet instance instead of
+ * stacking tile layers on a stale one. */
+let liveTrackMap: LiveTrackMap | null = null;
 
 /** Messages shown for each `GeolocationPositionError.code` — see
  * https://developer.mozilla.org/docs/Web/API/GeolocationPositionError. */
@@ -412,6 +421,9 @@ function beginTrack(): void {
   qs(container, '#track-status').hidden = false;
   qs(container, '#track-gps-warning').hidden = true;
   lastFlashedPointT = 0;
+  const mapEl = qs<HTMLElement>(container, '#track-live-map');
+  mapEl.hidden = false;
+  if (!liveTrackMap) liveTrackMap = createLiveTrackMap(mapEl);
   trackErrorUnsub?.();
   trackErrorUnsub = onTrackError(handleTrackGpsError);
   updateTrackTimer();
@@ -427,6 +439,7 @@ function updateTrackTimer(): void {
   if (timerEl) timerEl.textContent = `${mm}:${ss}`;
   const distEl = container.querySelector<HTMLElement>('#track-distance');
   if (distEl) distEl.textContent = fmtDistance(distanceMetersSoFar());
+  liveTrackMap?.update(snapshot()?.points ?? []);
   const warning = container.querySelector<HTMLElement>('#track-gps-warning');
   const warningText = container.querySelector<HTMLElement>('#track-gps-warning-text');
   const p = lastPoint();
@@ -466,6 +479,10 @@ function stopTrackTimer(): void {
   if (status) status.hidden = true;
   const warning = container.querySelector<HTMLElement>('#track-gps-warning');
   if (warning) warning.hidden = true;
+  liveTrackMap?.destroy();
+  liveTrackMap = null;
+  const mapEl = container.querySelector<HTMLElement>('#track-live-map');
+  if (mapEl) mapEl.hidden = true;
 }
 
 /** Turning the toggle off: stop watching GPS but keep whatever was captured
