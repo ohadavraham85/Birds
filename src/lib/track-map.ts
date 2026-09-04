@@ -10,7 +10,7 @@ import { createMapLayers } from './map-layers';
 import { TRACK_SEGMENT_COLOR } from './track-preview';
 import { haversineMeters, bearingDegrees } from './gps-track';
 import { escapeHtml } from './markdown';
-import type { ObservationTrack, TrackSegment, TrackReportPin } from '../types';
+import type { ObservationTrack, TrackSegment, TrackReportPin, TrackPoint } from '../types';
 
 /** Minimum ground distance between consecutive direction arrows along a
  * walked segment — close enough to read the route's shape, far enough not
@@ -89,4 +89,62 @@ export function renderTrackMap(container: HTMLElement, track: ObservationTrack):
   if (allPoints.length) map.fitBounds(L.latLngBounds(allPoints), { padding: [20, 20] });
 
   setTimeout(() => map.invalidateSize(), 60);
+}
+
+export interface LiveTrackMap {
+  /** Redraws the route so far and moves the direction marker to the latest
+   * fix — call on every new point (or just every tick; a no-op re-render of
+   * the same points is cheap). No-ops until at least one point exists. */
+  update(points: TrackPoint[]): void;
+  /** Tears down the Leaflet instance — call when recording stops, so a
+   * second recording in the same form session gets a clean map instead of
+   * stacking tile layers on top of a stale one. */
+  destroy(): void;
+}
+
+/** A small live-updating map for "where am I and which way am I facing"
+ * while a GPS track is actively being recorded — distinct from
+ * renderTrackMap() above, which draws a finished track's full route once.
+ * Re-centers on the current position on every update, so it reads as
+ * "following you" rather than a route you have to manually pan to find. */
+export function createLiveTrackMap(container: HTMLElement): LiveTrackMap {
+  const map = L.map(container, { zoomControl: false, attributionControl: false });
+  const layers = createMapLayers();
+  layers.satellite.addTo(map);
+  layers.labels.addTo(map);
+
+  let polyline: L.Polyline | null = null;
+  let marker: L.Marker | null = null;
+  let centered = false;
+
+  function update(points: TrackPoint[]): void {
+    if (!points.length) return;
+    const latlngs = points.map((p): [number, number] => [p.lat, p.lng]);
+    if (polyline) polyline.setLatLngs(latlngs);
+    else polyline = L.polyline(latlngs, { color: TRACK_SEGMENT_COLOR.walk, weight: 4, opacity: 0.9 }).addTo(map);
+
+    const last = points[points.length - 1]!;
+    const prev = points.length > 1 ? points[points.length - 2]! : null;
+    // No second fix yet to derive a heading from — point the arrow north
+    // rather than picking an arbitrary direction.
+    const bearing = prev ? bearingDegrees(prev, last) : 0;
+    const arrowIcon = L.divIcon({
+      className: 'track-live-arrow-icon',
+      html: `<svg viewBox="0 0 24 24" style="transform:rotate(${bearing}deg)"><path d="M12 1 L19 16 L12 12 L5 16 Z" fill="#1565c0" stroke="#fff" stroke-width="1.5"/></svg>`,
+      iconSize: [28, 28],
+      iconAnchor: [14, 14],
+    });
+    if (marker) { marker.setLatLng([last.lat, last.lng]); marker.setIcon(arrowIcon); }
+    else marker = L.marker([last.lat, last.lng], { icon: arrowIcon, keyboard: false, interactive: false }).addTo(map);
+
+    map.setView([last.lat, last.lng], centered ? map.getZoom() : 17, { animate: centered });
+    centered = true;
+  }
+
+  function destroy(): void {
+    map.remove();
+  }
+
+  setTimeout(() => map.invalidateSize(), 60);
+  return { update, destroy };
 }

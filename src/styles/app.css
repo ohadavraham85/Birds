@@ -365,6 +365,13 @@ body {
 .track-gps-warning[hidden] { display: none; }
 .track-gps-warning .icon { width: 16px; height: 16px; flex-shrink: 0; color: #e8a13c; }
 
+.track-live-map {
+  height: 190px; margin: 0 0 14px; border-radius: var(--radius);
+  border: 1px solid var(--line); overflow: hidden; background: var(--accent-50);
+}
+.track-live-map[hidden] { display: none; }
+.track-live-arrow-icon { background: none; border: none; filter: drop-shadow(0 1px 2px rgba(0,0,0,.4)); }
+
 .track-toggle-row { margin-bottom: 14px; }
 .track-toggle-row[hidden] { display: none; }
 /* Ready-to-record (orange) vs actively recording (red, matching .track-dot). */
