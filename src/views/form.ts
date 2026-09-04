@@ -748,8 +748,15 @@ function resetForm(locate = true): void {
   seededFromExistingTrack = false;
   reportPins = [];
   stopTrackTimer();
-  qs<HTMLInputElement>(container, '#track-toggle').checked = false;
   qs(container, '#track-toggle-row').hidden = false;
+  // A brand-new observation opened normally (not from tapping a specific
+  // point on the map, which places a pin for a location being looked at
+  // rather than a walk in progress) starts GPS track recording right away —
+  // birding sessions are usually "walk first, log species as you go", so
+  // requiring a manual tap to turn it on every single time just meant it
+  // was forgotten more often than not.
+  qs<HTMLInputElement>(container, '#track-toggle').checked = locate;
+  if (locate) beginTrack();
   startDraftAutosave();
 }
 
