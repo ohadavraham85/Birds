@@ -350,10 +350,10 @@ body {
 /* A live heartbeat flash on the whole panel each time a fresh GPS fix lands
  * (not a decorative loop — see updateTrackTimer()) so a real stall reads as
  * the panel going still, not just as a separate warning banner. */
-.track-status-flash { animation: track-status-flash .9s steps(1, end) 1; }
+.track-status-flash { animation: track-status-flash 1s steps(1, end) 1; }
 @keyframes track-status-flash {
-  0%, 17%, 34% { background: var(--danger); color: #fff; box-shadow: 0 0 0 4px var(--danger-soft); }
-  8%, 25%, 42%, 100% { background: var(--accent-50); color: var(--accent-900); box-shadow: 0 0 0 0 transparent; }
+  0% { background: var(--danger); color: #fff; box-shadow: 0 0 0 4px var(--danger-soft); }
+  50%, 100% { background: var(--accent-50); color: var(--accent-900); box-shadow: 0 0 0 0 transparent; }
 }
 
 .track-gps-warning {
