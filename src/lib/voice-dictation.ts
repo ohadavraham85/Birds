@@ -67,6 +67,14 @@ export function startDictation(handlers: DictationHandlers, options: { continuou
   rec.continuous = options.continuous ?? false;
   rec.interimResults = true;
 
+  // Some Chrome/Android builds re-fire the exact same finalized segment a
+  // second time (same text, same isFinal) instead of moving on to the next
+  // one — with `continuous: true` this silently double-applies whatever the
+  // caller does per onFinal call (e.g. the observation form adding a species
+  // row twice for what was really one spoken phrase). Guards only against a
+  // literal repeat of the last final text, so two genuinely different
+  // phrases in one recording still each fire their own onFinal as before.
+  let lastFinalText = '';
   rec.onresult = (e) => {
     let finalText = '';
     let interimText = '';
@@ -75,8 +83,10 @@ export function startDictation(handlers: DictationHandlers, options: { continuou
       if (r.isFinal) finalText += r[0].transcript;
       else interimText += r[0].transcript;
     }
-    if (finalText) handlers.onFinal(finalText.trim());
-    else if (interimText) handlers.onInterim(interimText.trim());
+    const trimmedFinal = finalText.trim();
+    if (trimmedFinal) {
+      if (trimmedFinal !== lastFinalText) { lastFinalText = trimmedFinal; handlers.onFinal(trimmedFinal); }
+    } else if (interimText) handlers.onInterim(interimText.trim());
   };
   rec.onerror = (e) => {
     const messages: Record<string, string> = {
