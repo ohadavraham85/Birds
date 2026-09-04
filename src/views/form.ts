@@ -310,12 +310,22 @@ function onVoiceDictateClick(): void {
 function applyVoiceResult(result: ReturnType<typeof parseObservationVoice>): void {
   if (result.species) {
     const rows = Array.from(container.querySelectorAll<HTMLElement>('#species-rows .sp-entry'));
-    const emptyRow = rows.find((r) => !r.querySelector<HTMLInputElement>('.sp-input')!.value.trim());
-    if (emptyRow) {
-      emptyRow.querySelector<HTMLInputElement>('.sp-input')!.value = result.species;
-      emptyRow.querySelector<HTMLInputElement>('.sp-qty')!.value = String(result.quantity);
+    // A species already present in another row is a repeat mention (or a
+    // dictation quirk re-processing the same phrase) rather than a second
+    // bird — fold the count into the existing row instead of adding a
+    // duplicate one.
+    const existingRow = rows.find((r) => r.querySelector<HTMLInputElement>('.sp-input')!.value.trim() === result.species);
+    if (existingRow) {
+      const qtyInput = existingRow.querySelector<HTMLInputElement>('.sp-qty')!;
+      qtyInput.value = String(Math.max(1, parseInt(qtyInput.value, 10) || 1) + result.quantity);
     } else {
-      addSpeciesRow({ species: result.species, quantity: result.quantity }, false);
+      const emptyRow = rows.find((r) => !r.querySelector<HTMLInputElement>('.sp-input')!.value.trim());
+      if (emptyRow) {
+        emptyRow.querySelector<HTMLInputElement>('.sp-input')!.value = result.species;
+        emptyRow.querySelector<HTMLInputElement>('.sp-qty')!.value = String(result.quantity);
+      } else {
+        addSpeciesRow({ species: result.species, quantity: result.quantity }, false);
+      }
     }
   }
   if (result.locationName) {
@@ -1211,6 +1221,37 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
     pinnedSpeciesRows.add(row);
     dropReportPin(spInput.value, 'new');
   };
+  // A species can only live in one row — if typing/picking one here now
+  // matches another row's species, fold this row's count (and note/images,
+  // if any) into that row and remove this one instead of leaving a duplicate
+  // sitting next to it.
+  const maybeMergeDuplicateSpecies = (): boolean => {
+    const species = spInput.value.trim();
+    if (!species) return false;
+    const other = Array.from(container.querySelectorAll<HTMLElement>('#species-rows .sp-entry'))
+      .find((r) => r !== row && r.querySelector<HTMLInputElement>('.sp-input')!.value.trim() === species);
+    if (!other) return false;
+    const otherQtyInput = other.querySelector<HTMLInputElement>('.sp-qty')!;
+    const addQty = Math.max(1, parseInt(qtyInput.value, 10) || 1);
+    otherQtyInput.value = String(Math.max(1, parseInt(otherQtyInput.value, 10) || 1) + addQty);
+    const noteText = noteInput.value.trim();
+    if (noteText) {
+      const otherNoteInput = other.querySelector<HTMLInputElement>('.sp-note')!;
+      otherNoteInput.value = otherNoteInput.value.trim() ? `${otherNoteInput.value.trim()}; ${noteText}` : noteText;
+      other.querySelector<HTMLElement>('.sp-entry-second')!.hidden = false;
+      other.querySelector<HTMLButtonElement>('.sp-edit-btn')!.classList.add('has-content');
+    }
+    const thisImages = rowImages.get(row);
+    const otherImages = rowImages.get(other);
+    if (thisImages && otherImages && (thisImages.kept.length || thisImages.pending.length)) {
+      otherImages.kept.push(...thisImages.kept);
+      otherImages.pending.push(...thisImages.pending);
+      void renderRowThumbs(other);
+    }
+    toast(`המין "${species}" כבר קיים בשורה אחרת — הכמויות אוחדו`, false, 4000);
+    doRemove();
+    return true;
+  };
   const step = (delta: number): void => {
     qtyInput.value = String(Math.max(1, (parseInt(qtyInput.value, 10) || 1) + delta));
   };
@@ -1219,7 +1260,7 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
     step(1);
     dropReportPin(spInput.value, 'add');
   });
-  spInput.addEventListener('change', maybeDropNewSpeciesPin);
+  spInput.addEventListener('change', () => { if (!maybeMergeDuplicateSpecies()) maybeDropNewSpeciesPin(); });
 
   const editBtn = row.querySelector<HTMLButtonElement>('.sp-edit-btn')!;
   const editMenu = row.querySelector<HTMLElement>('.sp-edit-menu')!;
@@ -1256,7 +1297,7 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
     spInput,
     row.querySelector<HTMLElement>('.sp-combo .combo-list')!,
     () => speciesCache,
-    { getDefault: () => seenSpeciesCache, onSelect: () => maybeDropNewSpeciesPin() },
+    { getDefault: () => seenSpeciesCache, onSelect: () => { if (!maybeMergeDuplicateSpecies()) maybeDropNewSpeciesPin(); } },
   );
 
   const fileInput = row.querySelector<HTMLInputElement>('.sp-file')!;
