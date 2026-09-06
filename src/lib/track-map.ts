@@ -92,10 +92,11 @@ export function renderTrackMap(container: HTMLElement, track: ObservationTrack):
 }
 
 export interface LiveTrackMap {
-  /** Redraws the route so far and moves the direction marker to the latest
-   * fix — call on every new point (or just every tick; a no-op re-render of
-   * the same points is cheap). No-ops until at least one point exists. */
-  update(points: TrackPoint[]): void;
+  /** Redraws the route so far, moves the direction marker to the latest fix,
+   * and adds a marker for any report pin not already drawn — call on every
+   * new point (or just every tick; a no-op re-render of the same points/pins
+   * is cheap). No-ops on the route/marker until at least one point exists. */
+  update(points: TrackPoint[], pins?: TrackReportPin[]): void;
   /** Tears down the Leaflet instance — call when recording stops, so a
    * second recording in the same form session gets a clean map instead of
    * stacking tile layers on top of a stale one. */
@@ -116,8 +117,13 @@ export function createLiveTrackMap(container: HTMLElement): LiveTrackMap {
   let polyline: L.Polyline | null = null;
   let marker: L.Marker | null = null;
   let centered = false;
+  let renderedPinCount = 0;
 
-  function update(points: TrackPoint[]): void {
+  function update(points: TrackPoint[], pins: TrackReportPin[] = []): void {
+    if (pins.length > renderedPinCount) {
+      addReportPins(map, pins.slice(renderedPinCount));
+      renderedPinCount = pins.length;
+    }
     if (!points.length) return;
     const latlngs = points.map((p): [number, number] => [p.lat, p.lng]);
     if (polyline) polyline.setLatLngs(latlngs);

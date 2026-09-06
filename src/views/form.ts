@@ -439,7 +439,7 @@ function updateTrackTimer(): void {
   if (timerEl) timerEl.textContent = `${mm}:${ss}`;
   const distEl = container.querySelector<HTMLElement>('#track-distance');
   if (distEl) distEl.textContent = fmtDistance(distanceMetersSoFar());
-  liveTrackMap?.update(snapshot()?.points ?? []);
+  liveTrackMap?.update(snapshot()?.points ?? [], reportPins);
   const warning = container.querySelector<HTMLElement>('#track-gps-warning');
   const warningText = container.querySelector<HTMLElement>('#track-gps-warning-text');
   const p = lastPoint();
@@ -1297,13 +1297,23 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
     doRemove();
     return true;
   };
+  let lastQty = Math.max(1, parseInt(qtyInput.value, 10) || 1);
   const step = (delta: number): void => {
     qtyInput.value = String(Math.max(1, (parseInt(qtyInput.value, 10) || 1) + delta));
+    lastQty = Math.max(1, parseInt(qtyInput.value, 10) || 1);
   };
   row.querySelector('.qty-minus')!.addEventListener('click', () => step(-1));
   row.querySelector('.qty-plus')!.addEventListener('click', () => {
     step(1);
     dropReportPin(spInput.value, 'add');
+  });
+  // The +/- stepper buttons already drop a pin per click — typing a higher
+  // number directly into the box is the same "another bird here" event, just
+  // via a different input method, so it should report a live pin too.
+  qtyInput.addEventListener('change', () => {
+    const newQty = Math.max(1, parseInt(qtyInput.value, 10) || 1);
+    if (newQty > lastQty) dropReportPin(spInput.value, 'add');
+    lastQty = newQty;
   });
   spInput.addEventListener('change', () => { if (!maybeMergeDuplicateSpecies()) maybeDropNewSpeciesPin(); });
 
