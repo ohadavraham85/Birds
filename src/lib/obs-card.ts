@@ -7,12 +7,12 @@
 
 import { fmtDateTimeWithWeekday, fmtCoords, showImageModal, confirmDialog, toast, safeHttpUrl } from './ui';
 import { renderMarkdown, escapeHtml } from './markdown';
-import { getImageObjectUrl } from './media';
+import { getImageObjectUrl, getMediaObjectUrl } from './media';
 import { entriesOf, entryImages, allImages, primarySpecies } from './observation';
 import { icon } from './icons';
-import { renderTrackMap } from './track-map';
+import { renderTrackMap, type TimedPhoto } from './track-map';
 import { fmtDistance } from './gps-track';
-import { getTrack, deleteTrack, toggleStarred, getSeries } from '../db/repository';
+import { getTrack, deleteTrack, toggleStarred, getSeries, mediaForObservation } from '../db/repository';
 import { tagBadgesHtml, wireTagBadges } from './tag-badge';
 import { familyColor } from './family-color';
 import { getSpeciesDetail } from './species-details-cache';
@@ -168,7 +168,7 @@ export function renderObservationCard(o: Observation): HTMLElement {
   wireCardMetaToggle(card);
   wireSeriesBadge(card, o);
 
-  void getTrack(o.id).then((track) => {
+  void getTrack(o.id).then(async (track) => {
     if (!track || track.points.length < 2) return;
     const wrap = card.querySelector<HTMLElement>('[data-track-preview]');
     if (!wrap) return;
@@ -182,7 +182,18 @@ export function renderObservationCard(o: Observation): HTMLElement {
       <div class="track-map" data-track-map></div>
     `;
     wrap.hidden = false;
-    renderTrackMap(wrap.querySelector<HTMLElement>('[data-track-map]')!, track);
+    const mapEl = wrap.querySelector<HTMLElement>('[data-track-map]')!;
+    const media = await mediaForObservation(o.id);
+    const resolvedPhotos = await Promise.all(
+      media
+        .filter((m) => m.takenAt)
+        .map(async (m): Promise<TimedPhoto | null> => {
+          const url = await getMediaObjectUrl(m);
+          return url ? { url, takenAtMs: new Date(m.takenAt!).getTime(), caption: m.name } : null;
+        }),
+    );
+    const photos: TimedPhoto[] = resolvedPhotos.filter((p): p is TimedPhoto => p !== null);
+    renderTrackMap(mapEl, track, photos);
     wrap.querySelector('.track-preview-del')!.addEventListener('click', (e) => {
       e.stopPropagation();
       void (async () => {

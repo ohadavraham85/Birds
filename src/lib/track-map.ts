@@ -10,6 +10,7 @@ import { createMapLayers } from './map-layers';
 import { TRACK_SEGMENT_COLOR } from './track-preview';
 import { haversineMeters, bearingDegrees } from './gps-track';
 import { escapeHtml } from './markdown';
+import { showImageModal } from './ui';
 import type { ObservationTrack, TrackSegment, TrackReportPin, TrackPoint } from '../types';
 
 /** Minimum ground distance between consecutive direction arrows along a
@@ -62,7 +63,51 @@ export function addReportPins(target: L.Map | L.LayerGroup, pins: TrackReportPin
   }
 }
 
-export function renderTrackMap(container: HTMLElement, track: ObservationTrack): void {
+/** A photo already resolved to a displayable URL, tagged with when it was
+ * actually taken (epoch ms, matching TrackPoint.t) so it can be placed at
+ * the point along the route closest in time to that moment. */
+export interface TimedPhoto {
+  url: string;
+  takenAtMs: number;
+  caption?: string;
+}
+
+function nearestPointByTime(points: TrackPoint[], targetMs: number): TrackPoint | null {
+  let best: TrackPoint | null = null;
+  let bestDiff = Infinity;
+  for (const p of points) {
+    const diff = Math.abs(p.t - targetMs);
+    if (diff < bestDiff) { best = p; bestDiff = diff; }
+  }
+  return best;
+}
+
+/** One thumbnail marker per photo, placed at the point along the route
+ * closest in time to when it was taken — photos from well outside the
+ * recording's own time span (added before/after the walk, or with an
+ * unreliable file-modified-date fallback) are skipped rather than pinned to
+ * whichever endpoint happens to be nearest, which would misrepresent where
+ * they were actually taken. */
+export function addPhotoMarkers(target: L.Map | L.LayerGroup, track: ObservationTrack, photos: TimedPhoto[]): void {
+  const startedAtMs = new Date(track.startedAt).getTime();
+  const endedAtMs = new Date(track.endedAt).getTime();
+  for (const photo of photos) {
+    if (photo.takenAtMs < startedAtMs || photo.takenAtMs > endedAtMs) continue;
+    const point = nearestPointByTime(track.points, photo.takenAtMs);
+    if (!point) continue;
+    const icon = L.divIcon({
+      className: 'track-photo-marker-icon',
+      html: `<span style="background-image:url('${photo.url}')"></span>`,
+      iconSize: [34, 34],
+      iconAnchor: [17, 34],
+    });
+    L.marker([point.lat, point.lng], { icon, keyboard: false })
+      .on('click', () => showImageModal(photo.url, photo.caption || ''))
+      .addTo(target);
+  }
+}
+
+export function renderTrackMap(container: HTMLElement, track: ObservationTrack, photos: TimedPhoto[] = []): void {
   const map = L.map(container, {
     zoomControl: false,
     attributionControl: false,
@@ -84,6 +129,7 @@ export function renderTrackMap(container: HTMLElement, track: ObservationTrack):
   }
 
   if (track.reportPins?.length) addReportPins(map, track.reportPins);
+  if (photos.length) addPhotoMarkers(map, track, photos);
 
   const allPoints = track.points.map((p): [number, number] => [p.lat, p.lng]);
   if (allPoints.length) map.fitBounds(L.latLngBounds(allPoints), { padding: [20, 20] });
