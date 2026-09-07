@@ -202,6 +202,11 @@ export interface TrackReportPin {
   species: string;
   kind: 'new' | 'add';
   t: number; // ms epoch
+  /** How many were added in this one report — defaults to 1 (the "+" stepper
+   * button's own step size) when absent, so a direct quantity-box edit that
+   * jumps by more than one in a single change shows the real delta instead
+   * of always reading "+1". */
+  count?: number;
 }
 
 /** A GPS track recorded automatically while a NEW observation's form was
