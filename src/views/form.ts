@@ -771,9 +771,15 @@ function resetForm(locate = true): void {
   // rather than a walk in progress) starts GPS track recording right away —
   // birding sessions are usually "walk first, log species as you go", so
   // requiring a manual tap to turn it on every single time just meant it
-  // was forgotten more often than not.
-  qs<HTMLInputElement>(container, '#track-toggle').checked = locate;
-  if (locate) beginTrack();
+  // was forgotten more often than not. Skipped when a draft is about to be
+  // resumed (resumeFromDraft() below starts it instead, seeded from the
+  // draft's own already-recorded points) — otherwise this starts a brand
+  // new empty session first, and seedFromDraft() then silently no-ops
+  // because a recording is already active, discarding the whole in-progress
+  // route the draft was trying to restore.
+  const autoStartTrack = locate && !resumeDraftRequested;
+  qs<HTMLInputElement>(container, '#track-toggle').checked = autoStartTrack;
+  if (autoStartTrack) beginTrack();
   startDraftAutosave();
 }
 
