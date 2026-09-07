@@ -1331,7 +1331,19 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
     if (newQty > lastQty) dropReportPin(spInput.value, 'add', newQty - lastQty);
     lastQty = newQty;
   });
-  spInput.addEventListener('change', () => { if (!maybeMergeDuplicateSpecies()) maybeDropNewSpeciesPin(); });
+  spInput.addEventListener('change', () => {
+    // A typo, or a partial name the user never actually finished picking
+    // from the suggestion list (e.g. "אייט" instead of the real species
+    // "עיט זרעים") — reject it immediately here rather than only at save
+    // time, so it's never left sitting in the row looking accepted.
+    const typed = spInput.value.trim();
+    if (typed && !speciesCache.includes(typed)) {
+      spInput.value = '';
+      toast(`"${typed}" אינו ברשימת המינים — בחרו מין מהרשימה (ניתן להוסיף בטאב "מינים")`, true, 5000);
+      return;
+    }
+    if (!maybeMergeDuplicateSpecies()) maybeDropNewSpeciesPin();
+  });
 
   const editBtn = row.querySelector<HTMLButtonElement>('.sp-edit-btn')!;
   const editMenu = row.querySelector<HTMLElement>('.sp-edit-menu')!;
