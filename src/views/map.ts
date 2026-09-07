@@ -8,17 +8,17 @@
  * אמת, עם כפתור להתמרכזות עליו. */
 
 import L from '../lib/leaflet-setup';
-import { listObservations, listTracks, getSetting, setSetting } from '../db/repository';
+import { listObservations, listTracks, getSetting, setSetting, mediaForObservation } from '../db/repository';
 import { toast } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
 import { speciesLabel, allImages } from '../lib/observation';
-import { getImageObjectUrl } from '../lib/media';
+import { getImageObjectUrl, getMediaObjectUrl } from '../lib/media';
 import { icon } from '../lib/icons';
 import { qs } from '../lib/dom';
 import { navigate } from '../main';
 import { createMapLayers, loadMapLayerState, setMapLayerPref, applyMapLayerState, type MapLayerState, type MapLayers } from '../lib/map-layers';
 import { TRACK_SEGMENT_COLOR } from '../lib/track-preview';
-import { addDirectionArrows, addReportPins } from '../lib/track-map';
+import { addDirectionArrows, addReportPins, addPhotoMarkers, type TimedPhoto } from '../lib/track-map';
 import type { Observation, ObservationTrack, ObservationImage } from '../types';
 
 let container: HTMLElement;
@@ -163,7 +163,7 @@ async function onLayerCheckboxChange(e: Event): Promise<void> {
  * drawn route can jump straight to that observation — opened in View Mode
  * (views/detail.ts), which now also carries a delete action, so a track the
  * user wants gone doesn't require hunting for it in the journal first. */
-function drawTrack(t: ObservationTrack): void {
+async function drawTrack(t: ObservationTrack): Promise<void> {
   for (const seg of t.segments) {
     if (seg.points.length < 2) continue;
     L.polyline(seg.points.map((p) => [p.lat, p.lng]), {
@@ -172,6 +172,18 @@ function drawTrack(t: ObservationTrack): void {
     if (seg.kind === 'walk') addDirectionArrows(tracksLayer!, seg);
   }
   if (t.reportPins?.length) addReportPins(tracksLayer!, t.reportPins);
+
+  const media = await mediaForObservation(t.id);
+  const resolved = await Promise.all(
+    media
+      .filter((m) => m.takenAt)
+      .map(async (m): Promise<TimedPhoto | null> => {
+        const url = await getMediaObjectUrl(m);
+        return url ? { url, takenAtMs: new Date(m.takenAt!).getTime(), caption: m.name } : null;
+      }),
+  );
+  const photos = resolved.filter((p): p is TimedPhoto => p !== null);
+  if (photos.length) addPhotoMarkers(tracksLayer!, t, photos);
 }
 
 /** Fixed default extent covering all of Israel's territory — the map always
@@ -323,7 +335,7 @@ export async function activate(): Promise<void> {
   }
 
   tracksLayer!.clearLayers();
-  for (const t of await listTracks()) drawTrack(t);
+  for (const t of await listTracks()) void drawTrack(t);
 }
 
 /** Stops the continuous "my location" GPS watch the moment the user leaves
