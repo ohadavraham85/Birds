@@ -41,6 +41,11 @@ const DEFAULT_TAG_NAME = 'כללי';
 let container: HTMLElement;
 let speciesCache: string[] = [];
 let seenSpeciesCache: string[] = [];
+/** speciesCache reordered so species this household has logged before come
+ * first (still alphabetical within each group) — used for the species
+ * combo's typed-letter matches, so a species you've actually seen surfaces
+ * ahead of one you haven't, instead of a flat alphabetical merge of both. */
+let speciesSuggestOrder: string[] = [];
 let availableTags: TagRow[] = [];
 let selectedTags = new Set<string>();
 let availableObservers: ObserverRow[] = [];
@@ -656,6 +661,7 @@ export async function activate(): Promise<void> {
   const seen = new Set<string>();
   for (const o of all) for (const name of speciesNames(o)) seen.add(name);
   seenSpeciesCache = speciesCache.filter((s) => seen.has(s));
+  speciesSuggestOrder = [...seenSpeciesCache, ...speciesCache.filter((s) => !seen.has(s))];
   availableTags = await listTagRows();
   availableObservers = await listObserverRows();
   const savedLocationRows = await listLocationRows();
@@ -1361,7 +1367,7 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
   wireCombo(
     spInput,
     row.querySelector<HTMLElement>('.sp-combo .combo-list')!,
-    () => speciesCache,
+    () => speciesSuggestOrder,
     { getDefault: () => seenSpeciesCache, onSelect: () => { if (!maybeMergeDuplicateSpecies()) maybeDropNewSpeciesPin(); } },
   );
 
