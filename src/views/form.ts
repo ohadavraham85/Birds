@@ -100,12 +100,12 @@ function closeSpeciesSwipe(wrap: HTMLElement): void {
 /** Drops a report pin at the current live GPS position — a no-op unless a
  * recording is actively in progress (per the feature's own scope: pins are
  * only meaningful while GPS is actually tracking "here, right now"). */
-function dropReportPin(species: string, kind: TrackReportPin['kind']): void {
+function dropReportPin(species: string, kind: TrackReportPin['kind'], count?: number): void {
   const name = species.trim();
   if (!name || !isTracking()) return;
   const p = lastPoint();
   if (!p) return;
-  reportPins.push({ lat: p.lat, lng: p.lng, species: name, kind, t: p.t });
+  reportPins.push({ lat: p.lat, lng: p.lng, species: name, kind, t: p.t, ...(count && count > 1 ? { count } : {}) });
 }
 
 export function init(el: HTMLElement): void {
@@ -1312,7 +1312,7 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
   // via a different input method, so it should report a live pin too.
   qtyInput.addEventListener('change', () => {
     const newQty = Math.max(1, parseInt(qtyInput.value, 10) || 1);
-    if (newQty > lastQty) dropReportPin(spInput.value, 'add');
+    if (newQty > lastQty) dropReportPin(spInput.value, 'add', newQty - lastQty);
     lastQty = newQty;
   });
   spInput.addEventListener('change', () => { if (!maybeMergeDuplicateSpecies()) maybeDropNewSpeciesPin(); });

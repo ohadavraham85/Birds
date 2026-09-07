@@ -46,11 +46,13 @@ const REPORT_PIN_COLOR: Record<TrackReportPin['kind'], string> = { new: '#8e44ad
 
 /** One marker per species reported live during recording (see form.ts),
  * placed at the exact position it happened — a distinct color/label for a
- * species' first report vs. a later "+1" on the same species. */
+ * species' first report vs. a later "+N" on the same species (N is 1 for
+ * the usual "+" stepper tap, or the real jump size when the count was typed
+ * directly into the quantity box instead). */
 export function addReportPins(target: L.Map | L.LayerGroup, pins: TrackReportPin[]): void {
   for (const pin of pins) {
     const color = REPORT_PIN_COLOR[pin.kind];
-    const label = pin.kind === 'add' ? `+1 ${pin.species}` : pin.species;
+    const label = pin.kind === 'add' ? `+${pin.count ?? 1} ${pin.species}` : pin.species;
     const icon = L.divIcon({
       className: 'track-report-pin-icon',
       html: `<span style="background:${color}"></span>`,
