@@ -237,7 +237,7 @@ export function init(el: HTMLElement): void {
   qs(container, '#series-link-btn').addEventListener('click', () => void openSeriesPicker());
   input(container, '#f-datetime').addEventListener('change', () => void renderSeriesButton());
   qs(container, '#add-species-row').addEventListener('click', () => addSpeciesRow({ species: '', quantity: 1 }, true));
-  qs(container, '#back-btn').addEventListener('click', () => { stopAndDiscardTrack(); stopDictation(); goBack(); });
+  qs(container, '#back-btn').addEventListener('click', () => { pauseTrackForNavigation(); stopDictation(); goBack(); });
   qs(container, '#voice-dictate-btn').addEventListener('click', () => onVoiceDictateClick());
   qs<HTMLInputElement>(container, '#track-toggle').addEventListener('change', (e) => {
     if ((e.target as HTMLInputElement).checked) beginTrack();
@@ -258,7 +258,7 @@ export function init(el: HTMLElement): void {
  * back, overflow menu) — otherwise a recording started for an abandoned new
  * observation would keep the GPS watch running forever in the background. */
 export function deactivate(): void {
-  stopAndDiscardTrack();
+  pauseTrackForNavigation();
   stopDictation();
 }
 
@@ -494,16 +494,20 @@ function stashTrack(): void {
   pendingTrack = built;
 }
 
-/** Abandons whatever's been recorded or stashed — used when leaving without saving. */
-function stopAndDiscardTrack(): void {
-  stopTrackTimer();
-  if (isTracking()) stopTracking();
-  pendingTrack = null;
-  reportPins = [];
-  const toggle = container.querySelector<HTMLInputElement>('#track-toggle');
-  if (toggle) toggle.checked = false;
+/** Leaving without saving — back button, tab switch, browser back. Stops
+ * the GPS watch (so it doesn't keep running forever in the background for
+ * an observation nobody's looking at) but, unlike an earlier version of
+ * this that wiped the draft outright, keeps everything: the track is
+ * stashed rather than discarded, and the draft itself is left in place
+ * (flushed one last time first, in case a field edit was still sitting in
+ * scheduleDraftSave()'s debounce window) so the Home screen's resume
+ * banner picks it back up exactly where it was left, instead of a mid-walk
+ * tab switch silently costing the whole in-progress observation. */
+function pauseTrackForNavigation(): void {
+  if (draftSaveDebounce) { clearTimeout(draftSaveDebounce); draftSaveDebounce = null; }
+  stashTrack();
+  persistDraft();
   stopDraftAutosave();
-  clearDraft();
 }
 
 /* ---------- draft auto-save (survives the OS reloading/killing the app mid-session) ---------- */
