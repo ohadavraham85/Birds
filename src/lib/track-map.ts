@@ -83,16 +83,16 @@ function nearestPointByTime(points: TrackPoint[], targetMs: number): TrackPoint 
 }
 
 /** One thumbnail marker per photo, placed at the point along the route
- * closest in time to when it was taken — photos from well outside the
- * recording's own time span (added before/after the walk, or with an
- * unreliable file-modified-date fallback) are skipped rather than pinned to
- * whichever endpoint happens to be nearest, which would misrepresent where
- * they were actually taken. */
+ * closest in time to when it was taken. A very common real workflow is
+ * photographing the bird with the phone's own camera app first and only
+ * opening this app afterward to log the sighting — GPS recording only
+ * starts once the observation form is open, so that photo's timestamp
+ * predates the whole track. Placing it at the nearest endpoint in that case
+ * (rather than requiring it to fall strictly within the recorded span, as
+ * an earlier version of this did) is still meaningfully "where roughly this
+ * happened" and beats not showing it at all. */
 export function addPhotoMarkers(target: L.Map | L.LayerGroup, track: ObservationTrack, photos: TimedPhoto[]): void {
-  const startedAtMs = new Date(track.startedAt).getTime();
-  const endedAtMs = new Date(track.endedAt).getTime();
   for (const photo of photos) {
-    if (photo.takenAtMs < startedAtMs || photo.takenAtMs > endedAtMs) continue;
     const point = nearestPointByTime(track.points, photo.takenAtMs);
     if (!point) continue;
     const icon = L.divIcon({
