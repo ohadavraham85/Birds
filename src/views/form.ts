@@ -66,8 +66,14 @@ let prefillNotes: string | null = null;
 let prefillMediaId: string | null = null;
 let prefillSeriesId: string | null = null;
 let resumeDraftRequested = false;
+let resumeDraftId: string | null = null;
 let draftInterval: ReturnType<typeof setInterval> | null = null;
 let draftSaveDebounce: ReturnType<typeof setTimeout> | null = null;
+/** Set right before onSave()'s own navigate('cards') on a successful save —
+ * that navigate() triggers the router's deactivate() just like leaving any
+ * other way (tab switch, back), which would otherwise re-persist the draft
+ * this same save() just cleared a moment earlier. */
+let justSaved = false;
 let obsId = '';
 let savedLocations = new Map<string, LocationRow>();
 let currentLat: number | null = null;
@@ -509,6 +515,12 @@ function stashTrack(): void {
  * banner picks it back up exactly where it was left, instead of a mid-walk
  * tab switch silently costing the whole in-progress observation. */
 function pauseTrackForNavigation(): void {
+  // A successful save already finalized everything (observation, track, and
+  // clearing the draft) moments ago — this only fires because that save's
+  // own navigate('cards') triggers the exact same router hook leaving the
+  // form any other way does, and persisting here would just resurrect the
+  // draft right after it was correctly cleared.
+  if (justSaved) return;
   if (draftSaveDebounce) { clearTimeout(draftSaveDebounce); draftSaveDebounce = null; }
   stashTrack();
   persistDraft();
@@ -537,6 +549,7 @@ function persistDraft(): void {
       ? { points: pendingTrack.points, startedAt: new Date(pendingTrack.startedAt).getTime() }
       : null;
   const draft: ObservationDraft = {
+    id: editId || obsId,
     savedAt: new Date().toISOString(),
     ...(editId ? { editId } : {}),
     fields: {
@@ -582,9 +595,16 @@ function scheduleDraftSave(): void {
  * whatever GPS track had been captured — and, if there was any track data,
  * resumes recording onto it right away (rather than leaving the user to
  * remember to flip the toggle back on themselves). */
-function resumeFromDraft(): void {
-  const draft = loadDraft();
+function resumeFromDraft(id: string): void {
+  const draft = loadDraft(id);
   if (!draft) return;
+  // Keep working within this same draft's storage slot rather than the
+  // fresh random id resetForm() just generated — otherwise every autosave
+  // from here on would start a brand new (empty-looking) draft alongside
+  // this one instead of updating it. Edits already use the real
+  // observation's own id (set by loadForEdit()), so this only matters for
+  // a brand-new observation's draft.
+  if (!draft.editId) obsId = draft.id;
   input(container, '#f-datetime').value = draft.fields.dateTime;
   selectedTags = new Set(draft.fields.tags ?? []);
   renderTagPicker();
@@ -653,6 +673,7 @@ export function setParams(params: ViewParams): void {
   prefillMediaId = params?.prefillMediaId || null;
   prefillSeriesId = params?.prefillSeriesId || null;
   resumeDraftRequested = params?.resumeDraft || false;
+  resumeDraftId = params?.resumeDraftId || null;
 }
 
 export async function activate(): Promise<void> {
@@ -680,7 +701,7 @@ export async function activate(): Promise<void> {
 
   if (editId) {
     await loadForEdit(editId);
-    if (resumeDraftRequested) resumeFromDraft();
+    if (resumeDraftRequested) resumeFromDraft(editId);
     resumeDraftRequested = false;
     return;
   }
@@ -722,7 +743,7 @@ export async function activate(): Promise<void> {
   prefillMediaId = null;
   prefillSeriesId = null;
 
-  if (resumeDraftRequested) resumeFromDraft();
+  if (resumeDraftRequested && resumeDraftId) resumeFromDraft(resumeDraftId);
   resumeDraftRequested = false;
 }
 
@@ -753,6 +774,7 @@ async function ensureDefaultTag(): Promise<void> {
 function resetForm(locate = true): void {
   editId = null;
   obsId = crypto.randomUUID();
+  justSaved = false;
   qs<HTMLFormElement>(container, '#obs-form').reset();
   input(container, '#f-datetime').value = toLocalInputValue();
   setEntries([{ species: '', quantity: 1 }]);
@@ -797,6 +819,7 @@ async function loadForEdit(id: string): Promise<void> {
   const obs = await getObservation(id);
   if (!obs) { resetForm(); return; }
   obsId = id;
+  justSaved = false;
   pendingTrack = null;
   trackEngagedThisSession = false;
   seededFromExistingTrack = false;
@@ -1576,16 +1599,22 @@ async function onSave(e: Event): Promise<void> {
       deleted: false,
       updatedAt: '',
     };
+    // Stopped here, before either await below, rather than after both — the
+    // periodic autosave (or a still-pending debounced one) firing anywhere
+    // during this save would resave the draft, and since that can land
+    // *after* clearDraft() runs below, the draft would silently resurrect
+    // itself right after being saved.
+    stopDraftAutosave();
     await withTimeout(saveObservation(obs), 20000, 'שמירת התצפית ארכה זמן רב מדי');
     const trackResult = await withTimeout(stopAndSaveTrack(obsId), 20000, 'שמירת מסלול ה-GPS ארכה זמן רב מדי');
-    stopDraftAutosave();
-    clearDraft();
+    clearDraft(editId || obsId);
     const savedMsg = editId ? 'התצפית עודכנה ✓' : 'התצפית נשמרה ✓';
     if (trackResult === 'insufficient-points') {
       toast(`${savedMsg} — אך מסלול ה-GPS לא נשמר: נאספו פחות מ-2 נקודות מיקום (ההקלטה הייתה קצרה מדי, או שהמכשיר לא הספיק לקבל מיקום)`, true, 8000);
     } else {
       toast(savedMsg);
     }
+    justSaved = true;
     navigate('cards');
   } catch (err) {
     console.error('Observation save failed:', err);
