@@ -13,7 +13,7 @@ import { getImageObjectUrl } from '../lib/media';
 import { escapeHtml } from '../lib/markdown';
 import { fmtDateTime, confirmDialog, showModal, toast } from '../lib/ui';
 import { icon } from '../lib/icons';
-import { loadDraft, clearDraft } from '../lib/draft';
+import { listDrafts, clearDraft } from '../lib/draft';
 import { openSmartVoiceModal } from '../lib/voice-observation-modal';
 import { seriesDayLabel, isSeriesOverdue, openCreateSeriesModal, seriesPhotoCandidates, seriesChain, seriesYear } from '../lib/series';
 import { qs, input } from '../lib/dom';
@@ -940,29 +940,33 @@ function donut(kind: BreakdownKind, rows: [string, number][], unit: string): str
 
 /* ---------- render + events ---------- */
 
-/** A recovery banner for a new observation that was being composed when the
- * app got interrupted (incoming call, switching away to write a message,
- * etc.) — mobile browsers can fully discard a backgrounded tab, wiping all
- * in-memory state; the draft was auto-saved to localStorage so it survives
- * that. See lib/draft.ts and views/form.ts's draft auto-save. */
+/** A recovery banner for observations that were being composed when the app
+ * got interrupted (incoming call, switching away to write a message, a tab
+ * switch, etc.) — mobile browsers can fully discard a backgrounded tab,
+ * wiping all in-memory state; each draft was auto-saved to localStorage so
+ * it survives that. Several can be open at once (e.g. two birds logged one
+ * after another without saving the first), each listed and resumable on its
+ * own. See lib/draft.ts and views/form.ts's draft auto-save. */
 function draftBannerHtml(): string {
-  const draft = loadDraft();
-  if (!draft) return '';
-  const time = new Date(draft.savedAt).toLocaleString('he-IL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-  const speciesCount = draft.fields.entries.filter((e) => e.species).length;
-  const trackNote = draft.track && draft.track.points.length >= 2 ? ` · מסלול GPS (${draft.track.points.length} נקודות)` : '';
-  const title = draft.editId ? 'עריכת תצפית פתוחה שלא נשמרה' : 'תצפית פתוחה שלא נשמרה';
-  return `
-    <div class="draft-banner">
-      <div class="draft-banner-text">
-        <b>${icon('alert')} ${title}</b>
-        <span>מ-${escapeHtml(time)}${speciesCount ? ` · ${speciesCount} מינים` : ''}${trackNote}</span>
-      </div>
-      <div class="draft-banner-actions">
-        <button type="button" class="btn btn-sm btn-primary" data-draft-action="resume" data-draft-edit-id="${draft.editId ? escapeHtml(draft.editId) : ''}">המשך</button>
-        <button type="button" class="btn btn-sm" data-draft-action="discard">מחק</button>
-      </div>
-    </div>`;
+  const drafts = listDrafts();
+  if (!drafts.length) return '';
+  return drafts.map((draft) => {
+    const time = new Date(draft.savedAt).toLocaleString('he-IL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const speciesCount = draft.fields.entries.filter((e) => e.species).length;
+    const trackNote = draft.track && draft.track.points.length >= 2 ? ` · מסלול GPS (${draft.track.points.length} נקודות)` : '';
+    const title = draft.editId ? 'עריכת תצפית פתוחה שלא נשמרה' : 'תצפית פתוחה שלא נשמרה';
+    return `
+      <div class="draft-banner">
+        <div class="draft-banner-text">
+          <b>${icon('alert')} ${title}</b>
+          <span>מ-${escapeHtml(time)}${speciesCount ? ` · ${speciesCount} מינים` : ''}${trackNote}</span>
+        </div>
+        <div class="draft-banner-actions">
+          <button type="button" class="btn btn-sm btn-primary" data-draft-action="resume" data-draft-id="${escapeHtml(draft.id)}" data-draft-edit-id="${draft.editId ? escapeHtml(draft.editId) : ''}">המשך</button>
+          <button type="button" class="btn btn-sm" data-draft-action="discard" data-draft-id="${escapeHtml(draft.id)}">מחק</button>
+        </div>
+      </div>`;
+  }).join('');
 }
 
 function smartVoiceButtonHtml(): string {
@@ -1011,10 +1015,11 @@ function onClick(e: Event): void {
 
   const draftAction = target.closest<HTMLElement>('[data-draft-action]');
   if (draftAction) {
+    const draftId = draftAction.dataset.draftId!;
     if (draftAction.dataset.draftAction === 'resume') {
       const editId = draftAction.dataset.draftEditId;
-      navigate('form', editId ? { editId, resumeDraft: true } : { resumeDraft: true });
-    } else { clearDraft(); render(); }
+      navigate('form', editId ? { editId, resumeDraft: true, resumeDraftId: draftId } : { resumeDraft: true, resumeDraftId: draftId });
+    } else { clearDraft(draftId); render(); }
     return;
   }
 

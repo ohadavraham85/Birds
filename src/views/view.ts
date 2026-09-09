@@ -27,6 +27,10 @@ export interface ViewParams {
   /** From the home screen's draft-recovery banner: restore an auto-saved
    * in-progress new observation (fields + GPS track captured so far). */
   resumeDraft?: boolean;
+  /** Which of possibly several open (unsaved) drafts to resume — several
+   * new observations can be left in progress at once, each autosaved under
+   * its own id, so resuming needs to say which one. */
+  resumeDraftId?: string;
   /** From the home screen's AI smart-voice observation flow: pre-fills
    * multiple species entries (each with its own quantity/note), replacing
    * the single-species `species` field above when present. */
