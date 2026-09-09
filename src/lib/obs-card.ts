@@ -12,13 +12,14 @@ import { entriesOf, entryImages, allImages, primarySpecies } from './observation
 import { icon } from './icons';
 import { renderTrackMap, type TimedPhoto } from './track-map';
 import { fmtDistance } from './gps-track';
+import { openTrimTrackModal } from './track-trim-modal';
 import { getTrack, deleteTrack, toggleStarred, getSeries, mediaForObservation } from '../db/repository';
 import { tagBadgesHtml, wireTagBadges } from './tag-badge';
 import { familyColor } from './family-color';
 import { getSpeciesDetail } from './species-details-cache';
 import { seriesDayLabel } from './series';
 import { navigate } from '../main';
-import type { Observation } from '../types';
+import type { Observation, ObservationTrack } from '../types';
 
 /** Sets the --family-color custom property (read by .obs-card's left
  * accent border in CSS) from the primary species' family, so the journal
@@ -168,8 +169,8 @@ export function renderObservationCard(o: Observation): HTMLElement {
   wireCardMetaToggle(card);
   wireSeriesBadge(card, o);
 
-  void getTrack(o.id).then(async (track) => {
-    if (!track || track.points.length < 2) return;
+  async function renderTrackSection(track: ObservationTrack): Promise<void> {
+    if (track.points.length < 2) return;
     const wrap = card.querySelector<HTMLElement>('[data-track-preview]');
     if (!wrap) return;
     const mins = Math.round(track.durationMs / 60000);
@@ -177,6 +178,7 @@ export function renderObservationCard(o: Observation): HTMLElement {
     wrap.innerHTML = `
       <div class="track-preview-label">
         <span>${icon('map')} מסלול תצפית${mins ? ` · ${mins} דק׳` : ''}${dist ? ` · ${fmtDistance(dist)}` : ''}</span>
+        <button type="button" class="btn btn-icon track-preview-trim" title="קיצור מסלול" aria-label="קיצור מסלול">${icon('edit')}</button>
         <button type="button" class="btn btn-icon track-preview-del" title="מחיקת ההקלטה" aria-label="מחיקת ההקלטה">${icon('trash')}</button>
       </div>
       <div class="track-map" data-track-map></div>
@@ -194,6 +196,10 @@ export function renderObservationCard(o: Observation): HTMLElement {
     );
     const photos: TimedPhoto[] = resolvedPhotos.filter((p): p is TimedPhoto => p !== null);
     renderTrackMap(mapEl, track, photos);
+    wrap.querySelector('.track-preview-trim')!.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openTrimTrackModal(track, (trimmed) => void renderTrackSection(trimmed));
+    });
     wrap.querySelector('.track-preview-del')!.addEventListener('click', (e) => {
       e.stopPropagation();
       void (async () => {
@@ -203,7 +209,9 @@ export function renderObservationCard(o: Observation): HTMLElement {
         toast('הקלטת המסלול נמחקה');
       })();
     });
-  });
+  }
+
+  void getTrack(o.id).then((track) => { if (track) void renderTrackSection(track); });
 
   const ol = card.querySelector<HTMLElement>('.species-ol')!;
   for (const entry of entriesOf(o)) {

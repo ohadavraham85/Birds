@@ -9,7 +9,7 @@
  * wrapper — this is disclosed to the user rather than silently promising
  * true background tracking. */
 
-import type { TrackPoint, TrackSegment } from '../types';
+import type { TrackPoint, TrackSegment, ObservationTrack } from '../types';
 
 /** Below this speed (m/s, ~1.1 km/h) a leg counts as a stop rather than walking. */
 const STOP_SPEED_MS = 0.3;
@@ -195,4 +195,28 @@ function classify(pts: TrackPoint[]): TrackSegment[] {
   }
   if (!segments.length && pts.length) segments.push({ kind: 'stop', points: [...pts] });
   return segments;
+}
+
+/** Cuts a saved track down to its first `keepCount` points and recomputes
+ * everything derived from them — for fixing a track that kept recording for
+ * hours after the walk actually ended (forgetting to close the observation
+ * leaves `watchPosition` running until the tab is finally left). `startedAt`
+ * is untouched; `endedAt`/`durationMs`/`distanceMeters` are recalculated
+ * from the kept points, and any report pin timestamped after the new
+ * cutoff — it happened during the discarded tail — is dropped too, so nothing
+ * left over still points at a spot along the trimmed-away route. */
+export function trimTrack(track: ObservationTrack, keepCount: number): ObservationTrack {
+  const points = track.points.slice(0, Math.max(2, Math.min(keepCount, track.points.length)));
+  const segments = classify(points);
+  const first = points[0]!;
+  const last = points[points.length - 1]!;
+  return {
+    ...track,
+    points,
+    segments,
+    endedAt: new Date(last.t).toISOString(),
+    durationMs: last.t - first.t,
+    distanceMeters: totalDistanceMeters(points),
+    reportPins: track.reportPins?.filter((p) => p.t <= last.t),
+  };
 }

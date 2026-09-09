@@ -2005,6 +2005,18 @@ a.media-link-icon:hover { color: var(--accent-700); }
 .goal-monthly-field label { font-size: .78rem; margin-bottom: 3px; }
 .goal-month-input { width: 100%; }
 
+.trim-track-modal { max-width: 420px; }
+.trim-track-modal h3 { margin-top: 0; color: var(--accent-900); }
+.trim-track-hint { font-size: .85rem; color: var(--ink-soft); margin: 0 0 12px; }
+.trim-track-map { height: 220px; border-radius: var(--radius); border: 1px solid var(--line); overflow: hidden; margin-bottom: 10px; }
+.trim-track-stats { font-size: .85rem; color: var(--accent-900); margin-bottom: 8px; min-height: 1.2em; }
+.trim-track-slider { width: 100%; accent-color: var(--accent-600); }
+.trim-track-cutoff-icon { background: none; border: none; }
+.trim-track-cutoff-icon span {
+  display: block; width: 14px; height: 14px; border-radius: 50%;
+  background: var(--danger); border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .4);
+}
+
 /* ---------- PDF report template (rendered off-screen) ---------- */
 
 .pdf-report { direction: rtl; font-family: Arial, "Noto Sans Hebrew", sans-serif; color: #1d2721; padding: 24px; background: #fff; width: 720px; }
