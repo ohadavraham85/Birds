@@ -1747,8 +1747,9 @@ a.media-link-icon:hover { color: var(--accent-700); }
 .update-banner {
   position: fixed;
   bottom: calc(var(--tabbar-h) + 16px + env(safe-area-inset-bottom));
-  right: 50%;
-  transform: translateX(50%);
+  left: 16px; right: 16px;
+  margin: 0 auto;
+  max-width: 480px;
   display: flex; align-items: center; gap: 10px;
   background: var(--accent-700); color: #fff;
   padding: 10px 14px 10px 10px;
@@ -1756,9 +1757,9 @@ a.media-link-icon:hover { color: var(--accent-700); }
   box-shadow: 0 4px 14px rgba(0,0,0,.25);
   z-index: 2000;
   font-size: .9rem;
-  max-width: 90vw;
 }
 .update-banner[hidden] { display: none; }
+.update-banner #update-banner-text { flex: 1; }
 .update-banner .icon { width: 18px; height: 18px; flex-shrink: 0; }
 .update-banner button {
   background: #fff; color: var(--accent-700); border: none; border-radius: 8px;
