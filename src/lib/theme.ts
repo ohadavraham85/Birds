@@ -71,7 +71,11 @@ const KEYS = {
   fontSize: 'birds-font-size',
   fontWeight: 'birds-font-weight',
   displayMode: 'birds-display-mode',
+  bgPhoto: 'birds-bg-photo',
 } as const;
+
+/** How much of the background photo shows through the light wash over it, 0–100 %. */
+export const DEFAULT_BG_PHOTO = 25;
 
 function readId<T extends string>(key: string, valid: readonly { id: T }[], fallback: T): T {
   const saved = localStorage.getItem(key);
@@ -96,6 +100,10 @@ export function currentFontWeight(): FontWeightId {
 export function currentDisplayMode(): DisplayModeId {
   return readId(KEYS.displayMode, DISPLAY_MODES, 'auto');
 }
+export function currentBgPhoto(): number {
+  const n = parseInt(localStorage.getItem(KEYS.bgPhoto) ?? '', 10);
+  return Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : DEFAULT_BG_PHOTO;
+}
 
 function applyAll(): void {
   const root = document.documentElement;
@@ -105,6 +113,7 @@ function applyAll(): void {
   root.setAttribute('data-font-size', currentFontSize());
   root.setAttribute('data-font-weight', currentFontWeight());
   root.setAttribute('data-display-mode', currentDisplayMode());
+  root.style.setProperty('--bg-wash', String(1 - currentBgPhoto() / 100));
 }
 
 export function setTheme(v: ThemeId): void { localStorage.setItem(KEYS.theme, v); applyAll(); }
@@ -113,6 +122,7 @@ export function setFontColor(v: FontColorId): void { localStorage.setItem(KEYS.f
 export function setFontSize(v: FontSizeId): void { localStorage.setItem(KEYS.fontSize, v); applyAll(); }
 export function setFontWeight(v: FontWeightId): void { localStorage.setItem(KEYS.fontWeight, v); applyAll(); }
 export function setDisplayMode(v: DisplayModeId): void { localStorage.setItem(KEYS.displayMode, v); applyAll(); }
+export function setBgPhoto(v: number): void { localStorage.setItem(KEYS.bgPhoto, String(v)); applyAll(); }
 
 /** Call once at startup — idempotent with the inline head snippet in index.html. */
 export function initTheme(): void {

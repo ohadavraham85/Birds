@@ -34,6 +34,7 @@ import {
   THEMES, ACCENTS, FONT_COLORS, FONT_SIZES, FONT_WEIGHTS, DISPLAY_MODES,
   currentTheme, currentAccent, currentFontColor, currentFontSize, currentFontWeight, currentDisplayMode,
   setTheme, setAccent, setFontColor, setFontSize, setFontWeight, setDisplayMode,
+  currentBgPhoto, setBgPhoto,
   type ThemeId, type AccentId, type FontColorId, type FontSizeId, type FontWeightId, type DisplayModeId,
 } from '../lib/theme';
 import type { Observation, LocationRow, TagRow, TagIconName, ObserverRow, SpeciesTag } from '../types';
@@ -232,6 +233,13 @@ function appearanceHtml(activeTheme: ThemeId, activeAccent: AccentId, activeFont
         ${DISPLAY_MODES.map((d) => `<button type="button" class="seg-btn${d.id === activeDisplayMode ? ' active' : ''}" data-display-mode="${d.id}">${escapeHtml(d.label)}</button>`).join('')}
       </div>
 
+      <h4>שקיפות השכבה הקדמית מעל תמונות הרקע</h4>
+      <div class="range-row">
+        <input type="range" id="s-bg-photo" min="0" max="100" step="5" value="${currentBgPhoto()}" aria-label="שקיפות השכבה הקדמית">
+        <span id="s-bg-photo-val" class="range-val">${currentBgPhoto()}%</span>
+      </div>
+      <p class="range-hint">0% — רקע חלק, בלי תמונה · 100% — התמונה במלואה</p>
+
       <h4>תצוגה מקדימה</h4>
       <div class="appearance-preview">
         <div class="appearance-preview-card">
@@ -252,6 +260,11 @@ function wireAppearance(): void {
   qs(container, '#s-font-size-picker').addEventListener('click', onFontSizePick);
   qs(container, '#s-font-weight-picker').addEventListener('click', onFontWeightPick);
   qs(container, '#s-display-mode-picker').addEventListener('click', onDisplayModePick);
+  const bgRange = qs<HTMLInputElement>(container, '#s-bg-photo');
+  bgRange.addEventListener('input', () => {
+    setBgPhoto(Number(bgRange.value));
+    qs(container, '#s-bg-photo-val').textContent = `${bgRange.value}%`;
+  });
 }
 
 /* ---------- סנכרון וגיבוי ---------- */
