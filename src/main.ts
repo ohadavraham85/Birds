@@ -279,8 +279,18 @@ async function init(): Promise<void> {
   void setupVersionBadge();
   setupHaptics();
 
-  // register the Workbox service worker (auto-updates on new deploys)
-  registerSW({ immediate: true });
+  // register the Workbox service worker — with onNeedRefresh set, a new
+  // deploy no longer reloads the page out from under the user the moment
+  // it's detected; it just shows the bottom banner, and the actual reload
+  // only happens once they tap "עדכון" themselves.
+  const updateSW = registerSW({
+    immediate: true,
+    onNeedRefresh() {
+      const banner = document.getElementById('update-banner');
+      if (banner) banner.hidden = false;
+    },
+  });
+  document.getElementById('update-banner-btn')?.addEventListener('click', () => { void updateSW(true); });
 
   await initFirebaseSyncFromSettings();
   void checkAndNotify(await listObservations());

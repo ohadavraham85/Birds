@@ -22,7 +22,11 @@ export default defineConfig({
       strategies: 'injectManifest',
       srcDir: 'src',
       filename: 'sw.ts',
-      registerType: 'autoUpdate',
+      // 'prompt' is what actually wires up registerSW()'s onNeedRefresh in
+      // the generated client code (vite-plugin-pwa/dist/client/build/register.js)
+      // — with 'autoUpdate' it's silently never called at all, and the page
+      // just reloads itself on its own the moment a new SW activates.
+      registerType: 'prompt',
       injectRegister: null, // we register manually in main.ts for lifecycle control
       manifest: {
         name: 'יומן צפרות — ניהול ותיעוד תצפיות',
