@@ -72,7 +72,10 @@ const KEYS = {
   fontWeight: 'birds-font-weight',
   displayMode: 'birds-display-mode',
   bgPhoto: 'birds-bg-photo',
+  cardTransparency: 'birds-card-transparency',
 } as const;
+
+export const MAX_CARD_TRANSPARENCY = 90;
 
 /** How much of the background photo shows through the light wash over it, 0–100 %. */
 export const DEFAULT_BG_PHOTO = 25;
@@ -104,6 +107,10 @@ export function currentBgPhoto(): number {
   const n = parseInt(localStorage.getItem(KEYS.bgPhoto) ?? '', 10);
   return Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : DEFAULT_BG_PHOTO;
 }
+export function currentCardTransparency(): number {
+  const n = parseInt(localStorage.getItem(KEYS.cardTransparency) ?? '', 10);
+  return Number.isFinite(n) ? Math.min(MAX_CARD_TRANSPARENCY, Math.max(0, n)) : 0;
+}
 
 function applyAll(): void {
   const root = document.documentElement;
@@ -114,6 +121,7 @@ function applyAll(): void {
   root.setAttribute('data-font-weight', currentFontWeight());
   root.setAttribute('data-display-mode', currentDisplayMode());
   root.style.setProperty('--bg-wash', String(1 - currentBgPhoto() / 100));
+  root.style.setProperty('--card-opacity', String(1 - currentCardTransparency() / 100));
 }
 
 export function setTheme(v: ThemeId): void { localStorage.setItem(KEYS.theme, v); applyAll(); }
@@ -123,6 +131,7 @@ export function setFontSize(v: FontSizeId): void { localStorage.setItem(KEYS.fon
 export function setFontWeight(v: FontWeightId): void { localStorage.setItem(KEYS.fontWeight, v); applyAll(); }
 export function setDisplayMode(v: DisplayModeId): void { localStorage.setItem(KEYS.displayMode, v); applyAll(); }
 export function setBgPhoto(v: number): void { localStorage.setItem(KEYS.bgPhoto, String(v)); applyAll(); }
+export function setCardTransparency(v: number): void { localStorage.setItem(KEYS.cardTransparency, String(v)); applyAll(); }
 
 /** Call once at startup — idempotent with the inline head snippet in index.html. */
 export function initTheme(): void {

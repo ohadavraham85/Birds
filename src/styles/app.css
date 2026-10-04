@@ -2335,3 +2335,14 @@ a.media-link-icon:hover { color: var(--accent-700); }
 @media print {
   .topbar, .tabbar, .toast { display: none !important; }
 }
+
+/* ---------- card transparency (Settings → עיצוב slider) ---------- */
+/* Only card surfaces follow the slider — menus, inputs and modals keep the
+ * solid --card so they stay readable over the background photo. Kept last
+ * in the file so it wins over each card's own background rule above. */
+:root { --card-surface: color-mix(in srgb, var(--card) calc(var(--card-opacity, 1) * 100%), transparent); }
+.field-frame, .table-wrap, .obs-tile, .obs-card, .cal-day, .cal-mini,
+.settings-card, .settings-menu-row, .gallery-storage-card, .sp-card, .sp-tile,
+.bod-card, .otd-card, .stat-tile, .stat-card, .series-lib-row {
+  background: var(--card-surface);
+}
