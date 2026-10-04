@@ -34,7 +34,7 @@ import {
   THEMES, ACCENTS, FONT_COLORS, FONT_SIZES, FONT_WEIGHTS, DISPLAY_MODES,
   currentTheme, currentAccent, currentFontColor, currentFontSize, currentFontWeight, currentDisplayMode,
   setTheme, setAccent, setFontColor, setFontSize, setFontWeight, setDisplayMode,
-  currentBgPhoto, setBgPhoto,
+  currentBgPhoto, setBgPhoto, currentCardTransparency, setCardTransparency, MAX_CARD_TRANSPARENCY,
   type ThemeId, type AccentId, type FontColorId, type FontSizeId, type FontWeightId, type DisplayModeId,
 } from '../lib/theme';
 import type { Observation, LocationRow, TagRow, TagIconName, ObserverRow, SpeciesTag } from '../types';
@@ -240,6 +240,13 @@ function appearanceHtml(activeTheme: ThemeId, activeAccent: AccentId, activeFont
       </div>
       <p class="range-hint">0% — רקע חלק, בלי תמונה · 100% — התמונה במלואה</p>
 
+      <h4>שקיפות הכרטיסים</h4>
+      <div class="range-row">
+        <input type="range" id="s-card-transparency" min="0" max="${MAX_CARD_TRANSPARENCY}" step="5" value="${currentCardTransparency()}" aria-label="שקיפות הכרטיסים">
+        <span id="s-card-transparency-val" class="range-val">${currentCardTransparency()}%</span>
+      </div>
+      <p class="range-hint">0% — כרטיסים אטומים · ${MAX_CARD_TRANSPARENCY}% — כמעט שקופים, התמונה נראית דרכם</p>
+
       <h4>תצוגה מקדימה</h4>
       <div class="appearance-preview">
         <div class="appearance-preview-card">
@@ -264,6 +271,11 @@ function wireAppearance(): void {
   bgRange.addEventListener('input', () => {
     setBgPhoto(Number(bgRange.value));
     qs(container, '#s-bg-photo-val').textContent = `${bgRange.value}%`;
+  });
+  const cardRange = qs<HTMLInputElement>(container, '#s-card-transparency');
+  cardRange.addEventListener('input', () => {
+    setCardTransparency(Number(cardRange.value));
+    qs(container, '#s-card-transparency-val').textContent = `${cardRange.value}%`;
   });
 }
 

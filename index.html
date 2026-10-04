@@ -18,6 +18,7 @@
       var fw = localStorage.getItem('birds-font-weight'); if (fw) root.setAttribute('data-font-weight', fw);
       var dm = localStorage.getItem('birds-display-mode'); if (dm) root.setAttribute('data-display-mode', dm);
       var bp = parseInt(localStorage.getItem('birds-bg-photo'), 10); if (bp >= 0 && bp <= 100) root.style.setProperty('--bg-wash', String(1 - bp / 100));
+      var ct = parseInt(localStorage.getItem('birds-card-transparency'), 10); if (ct >= 0 && ct <= 90) root.style.setProperty('--card-opacity', String(1 - ct / 100));
     } catch (e) {}
   </script>
 </head>
