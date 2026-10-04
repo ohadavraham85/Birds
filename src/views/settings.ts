@@ -127,8 +127,8 @@ function fbStatusText(s: FirebaseSyncStatus): string {
 export async function activate(): Promise<void> {
   const obsCount = (await listObservations()).length;
   const fbCode = await getFirebaseSyncCode();
-  let version = '';
-  try { version = (await (await fetch('version.json')).json()).version; } catch { /* dev */ }
+  let version = __APP_VERSION__;
+  if (!version) { try { version = (await (await fetch('version.json')).json()).version; } catch { /* dev */ } }
 
   const notifSupported = notificationsSupported();
   const notifPermission = permissionState();

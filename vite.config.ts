@@ -6,6 +6,9 @@ const base = process.env.GITHUB_PAGES ? '/Birds/' : '/';
 
 export default defineConfig({
   base,
+  define: {
+    __APP_VERSION__: JSON.stringify(process.env.APP_VERSION || ''),
+  },
   build: {
     target: 'es2021',
     sourcemap: true,

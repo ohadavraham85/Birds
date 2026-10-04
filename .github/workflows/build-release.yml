@@ -76,6 +76,7 @@ jobs:
       - name: Build (Vite + PWA)
         env:
           GITHUB_PAGES: '1'
+          APP_VERSION: ${{ steps.ver.outputs.version }}
         run: npx vite build
 
       - name: Stamp version + package

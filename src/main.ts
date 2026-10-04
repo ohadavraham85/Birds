@@ -205,10 +205,33 @@ function setupClock(): void {
 async function setupVersionBadge(): Promise<void> {
   const el = document.getElementById('topbar-version');
   if (!el) return;
+  // Prefer the version baked into this bundle: version.json comes from the
+  // network, so right after a deploy it already names the *new* version
+  // while this tab is still running the old cached code.
+  if (__APP_VERSION__) { el.textContent = `גרסה ${__APP_VERSION__}`; return; }
   try {
     const { version } = await (await fetch('version.json')).json();
     if (version) el.textContent = `גרסה ${version}`;
   } catch { /* dev — no version.json */ }
+}
+
+async function fetchDeployedVersion(): Promise<string> {
+  try {
+    const res = await fetch(`version.json?t=${Date.now()}`, { cache: 'no-store' });
+    return String((await res.json()).version || '');
+  } catch {
+    return '';
+  }
+}
+
+/** "עדכון מגרסה X לגרסה Y" — the running bundle's own version vs. what's now deployed. */
+async function fillUpdateBannerVersions(): Promise<void> {
+  const label = document.getElementById('update-banner-text');
+  if (!label) return;
+  const next = await fetchDeployedVersion();
+  const current = __APP_VERSION__;
+  if (current && next && current !== next) label.textContent = `עדכון זמין: מגרסה ${current} לגרסה ${next}`;
+  else if (next) label.textContent = `עדכון זמין לגרסה ${next}`;
 }
 
 /** Short haptic pulse on interactive taps app-wide — delegated at the
@@ -288,9 +311,19 @@ async function init(): Promise<void> {
     onNeedRefresh() {
       const banner = document.getElementById('update-banner');
       if (banner) banner.hidden = false;
+      void fillUpdateBannerVersions();
     },
   });
-  document.getElementById('update-banner-btn')?.addEventListener('click', () => { void updateSW(true); });
+  const updateBtn = document.getElementById('update-banner-btn') as HTMLButtonElement | null;
+  updateBtn?.addEventListener('click', () => {
+    updateBtn.disabled = true;
+    updateBtn.textContent = 'מעדכן...';
+    void updateSW(true);
+    // The normal path reloads on the new SW's "controlling" event; if that
+    // never arrives (no SW actually waiting, or the event is missed), reload
+    // anyway rather than leaving the button stuck on "מעדכן..." forever.
+    setTimeout(() => window.location.reload(), 4000);
+  });
 
   await initFirebaseSyncFromSettings();
   void checkAndNotify(await listObservations());
