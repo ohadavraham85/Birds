@@ -206,14 +206,31 @@ html, body {
   height: 100%;
 }
 
+/* The page color lives on <html> rather than <body> so the photo slideshow
+ * (.bg-slides, z-index -1) can paint between it and everything else. */
+html { background: var(--paper); }
+
 body {
   font-family: -apple-system, "Segoe UI", Roboto, "Heebo", "Noto Sans Hebrew", Arial, sans-serif;
-  background: var(--paper);
+  background: transparent;
   color: var(--ink);
   font-weight: var(--body-weight);
   display: flex;
   flex-direction: column;
 }
+
+/* ---------- background photo slideshow (lib/bg-slideshow.ts) ---------- */
+
+.bg-slides { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
+.bg-slide {
+  position: absolute; inset: 0;
+  background-size: cover; background-position: center;
+  opacity: 0; transition: opacity 1.6s ease;
+}
+.bg-slide.show { opacity: 1; }
+/* The wash that keeps the pages light and the text readable over a photo. */
+.bg-slides::after { content: ''; position: absolute; inset: 0; background: var(--paper); opacity: .75; }
+@media (prefers-reduced-motion: reduce) { .bg-slide { transition: none; } }
 
 /* ---------- top bar ---------- */
 
