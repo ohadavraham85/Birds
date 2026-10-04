@@ -1280,23 +1280,39 @@ a.media-link-icon:hover { color: var(--accent-700); }
 
 /* ---------- calendar view ---------- */
 
+.cal-toolbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px;
+}
+.cal-mode {
+  display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--card);
+}
+.cal-mode button {
+  border: 0; background: transparent; font: inherit; font-weight: 600; color: var(--ink-soft);
+  padding: 7px 18px; cursor: pointer;
+}
+.cal-mode button.active { background: var(--accent-700); color: #fff; }
+
 .cal-header {
   display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
 }
 .cal-header h3 { flex: 1; text-align: center; margin: 0; color: var(--accent-900); }
 .cal-header .btn-icon { padding: 6px 14px; font-size: 1.1rem; }
 
+/* minmax(0, 1fr), not 1fr: a plain 1fr column can't shrink below its content,
+ * so one long location name widened its whole column and pushed the grid off-screen. */
 .cal-weekdays {
-  display: grid; grid-template-columns: repeat(7, 1fr);
+  display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
   text-align: center; color: var(--ink-soft); font-size: .8rem; font-weight: 600;
   margin-bottom: 4px;
 }
+.cal-weekdays[hidden] { display: none; }
 
 .cal-grid {
-  display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px;
+  display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-auto-rows: 1fr; gap: 4px;
   margin-bottom: 16px;
 }
 .cal-day {
+  min-width: 0; overflow: hidden;
   min-height: 66px; border: 1px solid var(--line); border-radius: 10px;
   background: var(--card); cursor: pointer; font: inherit; color: var(--ink);
   display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
@@ -1322,20 +1338,33 @@ a.media-link-icon:hover { color: var(--accent-700); }
 .cal-day.selected .cal-loc { color: rgba(255, 255, 255, .88); }
 .cal-day.muted .cal-loc { color: var(--ink-soft); }
 
-.cal-year-grid { grid-template-columns: repeat(3, 1fr); gap: 10px; }
-@media (min-width: 480px) { .cal-year-grid { grid-template-columns: repeat(4, 1fr); } }
-.cal-year-tile {
-  min-height: 76px; border: 1px solid var(--line); border-radius: 10px;
-  cursor: pointer; font: inherit; color: var(--ink);
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
-  background: var(--card);
+.cal-grid.cal-year-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: auto; gap: 10px; }
+@media (min-width: 600px) { .cal-grid.cal-year-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 900px) { .cal-grid.cal-year-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.cal-mini {
+  border: 1px solid var(--line); border-radius: 10px; background: var(--card); padding: 6px 6px 8px;
 }
-.cal-year-tile.heat-1 { background: var(--accent-50); }
-.cal-year-tile.heat-2 { background: var(--accent-100); }
-.cal-year-tile.heat-3 { background: var(--accent-600); color: #fff; }
-.cal-year-tile.today { border-color: var(--accent-700); border-width: 2px; }
-.cal-year-tile-name { font-weight: 600; }
-.cal-year-tile-count { font-size: .78rem; opacity: .85; }
+.cal-mini-head {
+  width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  border: 0; background: transparent; font: inherit; font-weight: 700; color: var(--accent-900);
+  padding: 2px 4px 6px; cursor: pointer;
+}
+.cal-mini-count {
+  font-size: .7rem; font-weight: 700; background: var(--accent-700); color: #fff;
+  border-radius: 999px; padding: 1px 7px;
+}
+.cal-mini-weekdays, .cal-mini-grid {
+  display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; text-align: center;
+}
+.cal-mini-weekdays { font-size: .58rem; color: var(--ink-soft); font-weight: 600; margin-bottom: 2px; }
+.cal-mini-day {
+  aspect-ratio: 1; min-width: 0; padding: 0; border: 0; border-radius: 4px;
+  background: transparent; font: inherit; font-size: .62rem; color: var(--ink); cursor: pointer;
+}
+.cal-mini-day.heat-1 { background: var(--accent-100); color: var(--accent-900); font-weight: 700; }
+.cal-mini-day.heat-2 { background: var(--accent-600); color: #fff; font-weight: 700; }
+.cal-mini-day.heat-3 { background: var(--accent-900); color: #fff; font-weight: 700; }
+.cal-mini-day.today { outline: 2px solid var(--accent-600); outline-offset: -2px; }
 
 .cal-agenda-head {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
