@@ -229,8 +229,13 @@ body {
 }
 .bg-slide.show { opacity: 1; }
 /* The wash that keeps the pages light and the text readable over a photo. */
-.bg-slides::after { content: ''; position: absolute; inset: 0; background: var(--paper); opacity: .75; }
+.bg-slides::after { content: ''; position: absolute; inset: 0; background: var(--paper); opacity: var(--bg-wash, .75); }
 @media (prefers-reduced-motion: reduce) { .bg-slide { transition: none; } }
+
+.range-row { display: flex; align-items: center; gap: 12px; }
+.range-row input[type="range"] { flex: 1; accent-color: var(--accent-700); }
+.range-val { min-width: 3.2em; text-align: center; font-weight: 700; color: var(--accent-900); }
+.range-hint { font-size: .8rem; color: var(--ink-soft); margin: 4px 0 0; }
 
 /* ---------- top bar ---------- */
 
