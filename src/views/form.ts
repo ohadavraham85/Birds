@@ -345,30 +345,72 @@ function onVoiceDictateClick(): void {
   voiceDictateAutoStop = setTimeout(() => { if (isDictating()) stopDictation(); }, VOICE_DICTATE_MS);
 }
 
+/** Drops a dictated species+quantity into the form the same way whether it
+ * came from an exact match or from a pick off the fuzzy-match picker below. */
+function fillVoiceSpecies(species: string, quantity: number): void {
+  const rows = Array.from(container.querySelectorAll<HTMLElement>('#species-rows .sp-entry'));
+  // A species already present in another row is a repeat mention (or a
+  // dictation quirk re-processing the same phrase) rather than a second
+  // bird — fold the count into the existing row instead of adding a
+  // duplicate one.
+  const existingRow = rows.find((r) => r.querySelector<HTMLInputElement>('.sp-input')!.value.trim() === species);
+  if (existingRow) {
+    const qtyInput = existingRow.querySelector<HTMLInputElement>('.sp-qty')!;
+    qtyInput.value = String(Math.max(1, parseInt(qtyInput.value, 10) || 1) + quantity);
+    syncQtyDisplay(existingRow);
+  } else {
+    const emptyRow = rows.find((r) => !r.querySelector<HTMLInputElement>('.sp-input')!.value.trim());
+    if (emptyRow) {
+      emptyRow.querySelector<HTMLInputElement>('.sp-input')!.value = species;
+      emptyRow.querySelector<HTMLInputElement>('.sp-qty')!.value = String(quantity);
+      syncQtyDisplay(emptyRow);
+    } else {
+      addSpeciesRow({ species, quantity }, false);
+    }
+  }
+  updateSpeciesCountBadge();
+}
+
+/** The dictated phrase landed close to a known species but not exactly on
+ * one (a speech-recognition slip, e.g. "חיווי נחשים" said for the listed
+ * "חיוויאי הנחשים") — let the user pick the real one from what's close,
+ * instead of just leaving it unmatched in the notes. */
+function openVoiceSpeciesPicker(candidates: string[], quantity: number): void {
+  const wrap = document.createElement('div');
+  wrap.className = 'voice-species-picker';
+  wrap.innerHTML = `
+    <h3>${icon('mic')} איזה מין התכוונתם?</h3>
+    <p class="hint">ההכתבה לא תאמה מין ידוע בדיוק — בחרו את הקרוב ביותר, או התעלמו (התמלול המלא נשמר בהערות).</p>
+    <div class="voice-species-picker-list">
+      ${candidates.map((c) => `<button type="button" class="voice-species-picker-item" data-name="${escapeHtml(c)}">${escapeHtml(c)}</button>`).join('')}
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn" id="voice-species-picker-skip">אף אחד מהם</button>
+    </div>
+  `;
+  const close = showModal(wrap);
+  wrap.querySelectorAll<HTMLButtonElement>('.voice-species-picker-item').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const name = btn.dataset.name!;
+      close();
+      fillVoiceSpecies(name, quantity);
+      toast(`נבחר: ${quantity} × ${name}`, false, 4000);
+    });
+  });
+  wrap.querySelector('#voice-species-picker-skip')!.addEventListener('click', close);
+}
+
 /** Fills in whatever the dictated sentence could confidently be matched to
  * (a known species name, a number, a known location) and always keeps the
  * full transcript in the notes — so an unrecognized species/location name
  * is never silently dropped, just left as free text for manual cleanup. */
 function applyVoiceResult(result: ReturnType<typeof parseObservationVoice>): void {
+  let pickerOpened = false;
   if (result.species) {
-    const rows = Array.from(container.querySelectorAll<HTMLElement>('#species-rows .sp-entry'));
-    // A species already present in another row is a repeat mention (or a
-    // dictation quirk re-processing the same phrase) rather than a second
-    // bird — fold the count into the existing row instead of adding a
-    // duplicate one.
-    const existingRow = rows.find((r) => r.querySelector<HTMLInputElement>('.sp-input')!.value.trim() === result.species);
-    if (existingRow) {
-      const qtyInput = existingRow.querySelector<HTMLInputElement>('.sp-qty')!;
-      qtyInput.value = String(Math.max(1, parseInt(qtyInput.value, 10) || 1) + result.quantity);
-    } else {
-      const emptyRow = rows.find((r) => !r.querySelector<HTMLInputElement>('.sp-input')!.value.trim());
-      if (emptyRow) {
-        emptyRow.querySelector<HTMLInputElement>('.sp-input')!.value = result.species;
-        emptyRow.querySelector<HTMLInputElement>('.sp-qty')!.value = String(result.quantity);
-      } else {
-        addSpeciesRow({ species: result.species, quantity: result.quantity }, false);
-      }
-    }
+    fillVoiceSpecies(result.species, result.quantity);
+  } else if (result.speciesSuggestions?.length) {
+    openVoiceSpeciesPicker(result.speciesSuggestions, result.quantity);
+    pickerOpened = true;
   }
   if (result.locationName) {
     input(container, '#f-location').value = result.locationName;
@@ -377,6 +419,10 @@ function applyVoiceResult(result: ReturnType<typeof parseObservationVoice>): voi
   const notesEl = qs<HTMLTextAreaElement>(container, '#f-notes');
   notesEl.value = notesEl.value.trim() ? `${notesEl.value}\n${result.notes}` : result.notes;
 
+  // The picker modal itself already tells the user their species wasn't
+  // recognized exactly — a toast underneath it saying the same thing would
+  // just be noise competing with the modal for attention.
+  if (pickerOpened) return;
   const parts: string[] = [];
   if (result.species) parts.push(`${result.quantity} × ${result.species}`);
   if (result.locationName) parts.push(`מיקום: ${result.locationName}`);

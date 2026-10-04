@@ -1799,6 +1799,15 @@ a.media-link-icon:hover { color: var(--accent-700); }
 .voice-ai-transcript:empty::before { content: 'התמלול יופיע כאן...'; color: var(--ink-soft); }
 .voice-ai-interim { color: var(--ink-soft); }
 
+.voice-species-picker h3 { display: flex; align-items: center; gap: 8px; }
+.voice-species-picker .hint { margin-top: 0; }
+.voice-species-picker-list { display: flex; flex-direction: column; gap: 8px; }
+.voice-species-picker-item {
+  text-align: right; padding: 10px 14px; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--accent-50); font-size: .95rem; font-weight: 600; color: var(--accent-900); cursor: pointer;
+}
+.voice-species-picker-item:hover, .voice-species-picker-item:focus-visible { background: var(--accent-100); }
+
 /* leaflet popup RTL */
 .leaflet-popup-content { direction: rtl; text-align: right; font-family: inherit; }
 
