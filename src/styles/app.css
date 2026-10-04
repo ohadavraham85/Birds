@@ -808,6 +808,14 @@ textarea { min-height: 130px; resize: vertical; white-space: pre-wrap; line-heig
 .qty-stepper { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
 .qty-stepper .sp-qty { width: 36px; text-align: center; padding: 6px 2px; }
 .qty-stepper .btn-icon { padding: 6px 7px; font-weight: 700; font-size: .95rem; line-height: 1; }
+.qty-present-label {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 44px; padding: 6px 4px; font-size: .74rem; font-weight: 600;
+  color: var(--accent-700); background: var(--accent-50); border-radius: 6px;
+}
+.qty-present-label[hidden] { display: none; }
+
+.species-count-badge { font-weight: 400; font-size: .8rem; color: var(--ink-soft); }
 
 .sp-thumbs { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
 .sp-thumbs:empty { display: none; margin-top: 0; }
@@ -1750,6 +1758,7 @@ a.media-link-icon:hover { color: var(--accent-700); }
   font-size: .9rem;
   max-width: 90vw;
 }
+.update-banner[hidden] { display: none; }
 .update-banner .icon { width: 18px; height: 18px; flex-shrink: 0; }
 .update-banner button {
   background: #fff; color: var(--accent-700); border: none; border-radius: 8px;

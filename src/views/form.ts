@@ -119,6 +119,35 @@ function dropReportPin(species: string, kind: TrackReportPin['kind'], count?: nu
   reportPins.push({ lat: p.lat, lng: p.lng, species: name, kind, t: p.t, ...(count && count > 1 ? { count } : {}) });
 }
 
+/** A freshly-added species row defaults to "נוכח" (present — seen, but not
+ * yet counted) rather than opening straight at a count of 1; tapping "+"
+ * the first time is what actually starts counting, from 1. Represented as
+ * quantity 0 in the DOM/draft so the stepper's existing +/- math (and the
+ * `Math.max(1, … || 1)` already used everywhere a row's quantity is read
+ * for saving/merging) treats it as "at least 1 was seen" without any
+ * schema change — this only toggles which of the number input vs. the
+ * label is shown. */
+function syncQtyDisplay(row: HTMLElement): void {
+  const qtyInput = row.querySelector<HTMLInputElement>('.sp-qty');
+  const label = row.querySelector<HTMLElement>('.qty-present-label');
+  if (!qtyInput || !label) return;
+  const isPresent = (parseInt(qtyInput.value, 10) || 0) === 0;
+  qtyInput.hidden = isPresent;
+  label.hidden = !isPresent;
+}
+
+/** How many distinct species have an actual name filled in so far — shown
+ * as a running count next to the "מיני הציפור" label, since on a long
+ * outing with several species logged it's otherwise easy to lose track of
+ * how many you've already entered without scrolling the whole list. */
+function updateSpeciesCountBadge(): void {
+  const badge = container.querySelector<HTMLElement>('#species-count-badge');
+  if (!badge) return;
+  const count = Array.from(container.querySelectorAll<HTMLInputElement>('#species-rows .sp-entry .sp-input'))
+    .filter((i) => i.value.trim()).length;
+  badge.textContent = count ? `· ${count} מינים` : '';
+}
+
 export function init(el: HTMLElement): void {
   container = el;
   container.innerHTML = `
@@ -201,7 +230,7 @@ export function init(el: HTMLElement): void {
 
       <div class="field-frame species-frame">
         <div class="field">
-          <label>מיני הציפור</label>
+          <label>מיני הציפור <span id="species-count-badge" class="species-count-badge"></span></label>
           <div id="species-rows"></div>
           <div class="species-row-actions">
             <button type="button" class="btn btn-sm" id="add-species-row">${icon('plus')} הוספת מין</button>
@@ -247,7 +276,7 @@ export function init(el: HTMLElement): void {
   qs(container, '#pick-map-btn').addEventListener('click', () => void openPicker());
   qs(container, '#series-link-btn').addEventListener('click', () => void openSeriesPicker());
   input(container, '#f-datetime').addEventListener('change', () => void renderSeriesButton());
-  qs(container, '#add-species-row').addEventListener('click', () => addSpeciesRow({ species: '', quantity: 1 }, true));
+  qs(container, '#add-species-row').addEventListener('click', () => addSpeciesRow({ species: '', quantity: 0 }, true));
   qs(container, '#back-btn').addEventListener('click', () => { pauseTrackForNavigation(); stopDictation(); goBack(); });
   qs(container, '#voice-dictate-btn').addEventListener('click', () => onVoiceDictateClick());
   qs<HTMLInputElement>(container, '#track-toggle').addEventListener('change', (e) => {
@@ -617,7 +646,7 @@ function resumeFromDraft(id: string): void {
   updateLocationPinUI();
   qs<HTMLTextAreaElement>(container, '#f-notes').value = draft.fields.notes;
   input(container, '#f-media-link').value = draft.fields.mediaLink ?? '';
-  setEntries(draft.fields.entries.length ? draft.fields.entries : [{ species: '', quantity: 1 }]);
+  setEntries(draft.fields.entries.length ? draft.fields.entries : [{ species: '', quantity: 0 }]);
   linkedSeriesId = draft.fields.seriesId || null;
   void renderSeriesButton();
   if (draft.track && draft.track.points.length) {
@@ -709,7 +738,7 @@ export async function activate(): Promise<void> {
   await ensureDefaultTag();
   resetForm(!prefillCoords);
   if (prefillEntries) setEntries(prefillEntries);
-  else if (prefillSpecies) setEntries([{ species: prefillSpecies, quantity: 1 }]);
+  else if (prefillSpecies) setEntries([{ species: prefillSpecies, quantity: 0 }]);
   if (prefillCoords) {
     currentLat = prefillCoords.lat;
     currentLng = prefillCoords.lng;
@@ -777,7 +806,7 @@ function resetForm(locate = true): void {
   justSaved = false;
   qs<HTMLFormElement>(container, '#obs-form').reset();
   input(container, '#f-datetime').value = toLocalInputValue();
-  setEntries([{ species: '', quantity: 1 }]);
+  setEntries([{ species: '', quantity: 0 }]);
   qs(container, '#form-title').textContent = 'תצפית חדשה';
   qs(container, '#save-btn').innerHTML = `${icon('save')} שמירת התצפית`;
   selectedTags = new Set(availableTags.some((t) => t.name === DEFAULT_TAG_NAME) ? [DEFAULT_TAG_NAME] : []);
@@ -844,7 +873,7 @@ async function loadForEdit(id: string): Promise<void> {
   // legacy top-level images fold into the first entry for editing
   const withLegacy = entries.map((e, i) =>
     i === 0 && obs.images?.length ? { ...e, images: [...entryImages(e), ...obs.images] } : e);
-  setEntries(withLegacy.length ? withLegacy : [{ species: '', quantity: 1 }]);
+  setEntries(withLegacy.length ? withLegacy : [{ species: '', quantity: 0 }]);
   qs<HTMLTextAreaElement>(container, '#f-notes').value = obs.notes || '';
   input(container, '#f-media-link').value = obs.mediaLink || '';
   selectedObservers = new Set(obs.observers ?? []);
@@ -1270,7 +1299,8 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
       </div>
       <div class="qty-stepper">
         <button type="button" class="btn btn-icon qty-minus" title="פחות">−</button>
-        <input type="number" class="sp-qty" min="1" step="1" inputmode="numeric" value="${entry.quantity}" title="מספר פרטים">
+        <input type="number" class="sp-qty" min="0" step="1" inputmode="numeric" value="${entry.quantity}" title="מספר פרטים">
+        <span class="qty-present-label" hidden>נוכח</span>
         <button type="button" class="btn btn-icon qty-plus" title="עוד">+</button>
       </div>
       <div class="bulk-select sp-edit-select">
@@ -1299,6 +1329,7 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
 
   const qtyInput = row.querySelector<HTMLInputElement>('.sp-qty')!;
   const spInput = row.querySelector<HTMLInputElement>('.sp-input')!;
+  syncQtyDisplay(row);
   const maybeDropNewSpeciesPin = (): void => {
     if (pinnedSpeciesRows.has(row)) return;
     if (!spInput.value.trim()) return;
@@ -1318,6 +1349,7 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
     const otherQtyInput = other.querySelector<HTMLInputElement>('.sp-qty')!;
     const addQty = Math.max(1, parseInt(qtyInput.value, 10) || 1);
     otherQtyInput.value = String(Math.max(1, parseInt(otherQtyInput.value, 10) || 1) + addQty);
+    syncQtyDisplay(other);
     const noteText = noteInput.value.trim();
     if (noteText) {
       const otherNoteInput = other.querySelector<HTMLInputElement>('.sp-note')!;
@@ -1336,10 +1368,11 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
     doRemove();
     return true;
   };
-  let lastQty = Math.max(1, parseInt(qtyInput.value, 10) || 1);
+  let lastQty = Math.max(0, parseInt(qtyInput.value, 10) || 0);
   const step = (delta: number): void => {
-    qtyInput.value = String(Math.max(1, (parseInt(qtyInput.value, 10) || 1) + delta));
-    lastQty = Math.max(1, parseInt(qtyInput.value, 10) || 1);
+    qtyInput.value = String(Math.max(0, (parseInt(qtyInput.value, 10) || 0) + delta));
+    lastQty = Math.max(0, parseInt(qtyInput.value, 10) || 0);
+    syncQtyDisplay(row);
   };
   row.querySelector('.qty-minus')!.addEventListener('click', () => step(-1));
   row.querySelector('.qty-plus')!.addEventListener('click', () => {
@@ -1350,9 +1383,10 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
   // number directly into the box is the same "another bird here" event, just
   // via a different input method, so it should report a live pin too.
   qtyInput.addEventListener('change', () => {
-    const newQty = Math.max(1, parseInt(qtyInput.value, 10) || 1);
+    const newQty = Math.max(0, parseInt(qtyInput.value, 10) || 0);
     if (newQty > lastQty) dropReportPin(spInput.value, 'add', newQty - lastQty);
     lastQty = newQty;
+    syncQtyDisplay(row);
   });
   spInput.addEventListener('change', () => {
     // A typo, or a partial name the user never actually finished picking
@@ -1363,9 +1397,11 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
     if (typed && !speciesCache.includes(typed)) {
       spInput.value = '';
       toast(`"${typed}" אינו ברשימת המינים — בחרו מין מהרשימה (ניתן להוסיף בטאב "מינים")`, true, 5000);
+      updateSpeciesCountBadge();
       return;
     }
     if (!maybeMergeDuplicateSpecies()) maybeDropNewSpeciesPin();
+    updateSpeciesCountBadge();
   });
 
   const editBtn = row.querySelector<HTMLButtonElement>('.sp-edit-btn')!;
@@ -1403,7 +1439,7 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
     spInput,
     row.querySelector<HTMLElement>('.sp-combo .combo-list')!,
     () => speciesSuggestOrder,
-    { getDefault: () => seenSpeciesCache, onSelect: () => { if (!maybeMergeDuplicateSpecies()) maybeDropNewSpeciesPin(); } },
+    { getDefault: () => seenSpeciesCache, onSelect: () => { if (!maybeMergeDuplicateSpecies()) maybeDropNewSpeciesPin(); updateSpeciesCountBadge(); } },
   );
 
   const fileInput = row.querySelector<HTMLInputElement>('.sp-file')!;
@@ -1441,12 +1477,14 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
       noteInput.value = '';
       secondRow.hidden = true;
       editBtn.classList.remove('has-content');
-      qtyInput.value = '1';
+      qtyInput.value = '0';
+      syncQtyDisplay(row);
       rowImages.set(row, { pending: [], kept: [] });
       pinnedSpeciesRows.delete(row);
       closeSpeciesSwipe(wrap);
       void renderRowThumbs(row);
     }
+    updateSpeciesCountBadge();
     scheduleDraftSave();
   };
   row.querySelector('.sp-remove')!.addEventListener('click', doRemove);
@@ -1460,6 +1498,7 @@ function addSpeciesRow(entry: SpeciesEntry, focus: boolean): void {
 
   void renderRowThumbs(row);
   if (focus) row.querySelector<HTMLInputElement>('.sp-input')!.focus();
+  updateSpeciesCountBadge();
 }
 
 async function renderRowThumbs(row: HTMLElement): Promise<void> {
