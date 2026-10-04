@@ -276,7 +276,17 @@ export function init(el: HTMLElement): void {
   qs(container, '#pick-map-btn').addEventListener('click', () => void openPicker());
   qs(container, '#series-link-btn').addEventListener('click', () => void openSeriesPicker());
   input(container, '#f-datetime').addEventListener('change', () => void renderSeriesButton());
-  qs(container, '#add-species-row').addEventListener('click', () => addSpeciesRow({ species: '', quantity: 0 }, true));
+  qs(container, '#add-species-row').addEventListener('click', () => {
+    const emptyInput = Array.from(container.querySelectorAll<HTMLInputElement>('#species-rows .sp-input'))
+      .find((i) => !i.value.trim());
+    if (emptyInput) {
+      emptyInput.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      emptyInput.focus();
+      toast('יש כבר שורת מין ריקה — מלאו אותה קודם');
+      return;
+    }
+    addSpeciesRow({ species: '', quantity: 0 }, true);
+  });
   qs(container, '#back-btn').addEventListener('click', () => { pauseTrackForNavigation(); stopDictation(); goBack(); });
   qs(container, '#voice-dictate-btn').addEventListener('click', () => onVoiceDictateClick());
   qs<HTMLInputElement>(container, '#track-toggle').addEventListener('change', (e) => {
@@ -609,7 +619,8 @@ function collectDraftEntries(): { species: string; quantity: number; note?: stri
   return rowEls
     .map((row) => {
       const species = row.querySelector<HTMLInputElement>('.sp-input')!.value.trim();
-      const quantity = Math.max(1, parseInt(row.querySelector<HTMLInputElement>('.sp-qty')!.value, 10) || 1);
+      // 0 = still "נוכח" — kept as-is so a restored draft doesn't come back as "1".
+      const quantity = Math.max(0, parseInt(row.querySelector<HTMLInputElement>('.sp-qty')!.value, 10) || 0);
       const note = row.querySelector<HTMLInputElement>('.sp-note')!.value.trim();
       return note ? { species, quantity, note } : { species, quantity };
     })
