@@ -20,7 +20,7 @@ function closeOpen(except?: HTMLElement): void {
   if (openWrapper && openWrapper !== except) {
     const front = openWrapper.querySelector<HTMLElement>('.swipe-front');
     if (front) front.style.transform = 'translateX(0)';
-    openWrapper.classList.remove('swipe-open-edit', 'swipe-open-delete');
+    openWrapper.classList.remove('swipe-open-edit', 'swipe-open-delete', 'reveal-edit', 'reveal-delete');
     openWrapper = null;
   }
 }
@@ -89,6 +89,11 @@ export function wrapSwipeActions(card: HTMLElement, handlers: SwipeActionHandler
     e.preventDefault();
     dx = Math.max(-OPEN_PX, Math.min(OPEN_PX, moveX));
     front.style.transform = `translateX(${dx}px)`;
+    // The actions are only revealed (on the side being uncovered) while the
+    // card is actually moved — otherwise a semi-transparent card would show
+    // both colored buttons through it at all times.
+    wrap.classList.toggle('reveal-edit', dx > 0);
+    wrap.classList.toggle('reveal-delete', dx < 0);
   });
 
   const endDrag = (): void => {
@@ -98,6 +103,7 @@ export function wrapSwipeActions(card: HTMLElement, handlers: SwipeActionHandler
     if (decided !== 'h') { front.style.transform = 'translateX(0)'; return; }
     if (Math.abs(dx) < OPEN_PX / 2) {
       front.style.transform = 'translateX(0)';
+      wrap.classList.remove('reveal-edit', 'reveal-delete');
       if (openWrapper === wrap) openWrapper = null;
       return;
     }

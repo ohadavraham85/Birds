@@ -1128,9 +1128,12 @@ table.obs-table-compact { font-size: .8rem; min-width: 640px; }
   position: absolute; top: 0; bottom: 0; width: 84px;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
   border: 0; color: #fff; font-size: .74rem; font-weight: 600; cursor: pointer;
+  visibility: hidden;
 }
 .swipe-action-edit { left: 0; background: #2f7dff; }
 .swipe-action-delete { right: 0; background: var(--danger); }
+.swipe-item.reveal-edit .swipe-action-edit,
+.swipe-item.reveal-delete .swipe-action-delete { visibility: visible; }
 
 /* ---------- long-press multi-select (journal list mode) ---------- */
 
@@ -2346,3 +2349,4 @@ a.media-link-icon:hover { color: var(--accent-700); }
 .bod-card, .otd-card, .stat-tile, .stat-card, .series-lib-row {
   background: var(--card-surface);
 }
+.row-alt .obs-card { background: color-mix(in srgb, var(--accent-50) calc(var(--card-opacity, 1) * 100%), transparent); }
