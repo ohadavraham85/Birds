@@ -13,7 +13,16 @@ import { SHARE_TARGET_CACHE, SHARE_TARGET_FIELD, SHARE_TARGET_HASH } from './lib
 
 declare let self: ServiceWorkerGlobalScope & { __WB_MANIFEST: Array<{ url: string; revision: string | null }> };
 
-self.skipWaiting();
+// A newly-installed SW waits behind the one still controlling open tabs
+// until told to take over — skipping that wait unconditionally (as this
+// used to) meant every deploy silently reloaded the app out from under
+// anyone with it open, with no chance to show them an "update available"
+// prompt first (main.ts's registerSW onNeedRefresh) before it happened.
+// vite-plugin-pwa's own updateSW(true) sends this exact message once the
+// user actually confirms via that prompt.
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
+});
 clientsClaim();
 
 cleanupOutdatedCaches();
