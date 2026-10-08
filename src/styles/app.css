@@ -2350,3 +2350,29 @@ a.media-link-icon:hover { color: var(--accent-700); }
   background: var(--card-surface);
 }
 .row-alt .obs-card { background: color-mix(in srgb, var(--accent-50) calc(var(--card-opacity, 1) * 100%), transparent); }
+
+/* ---------- settings ← מלאי ציוד ---------- */
+
+.eq-table-wrap { max-height: calc(100vh - var(--topbar-h) - var(--tabbar-h) - 260px); min-height: 200px; }
+table.eq-table { min-width: 860px; }
+.eq-table td:first-child { min-width: 150px; }
+.eq-table tbody tr.eq-row { cursor: pointer; }
+.eq-table tr.eq-inactive td { color: var(--ink-soft); }
+.eq-table .row-actions a.btn-icon { padding: 4px 6px; display: inline-flex; }
+.eq-status {
+  display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .78rem; white-space: nowrap;
+  background: var(--accent-100); color: var(--accent-900);
+}
+.eq-status-repair { background: #fff3cd; color: #7a5b00; }
+.eq-status-sold, .eq-status-lost { background: var(--danger-soft); color: var(--danger); }
+.eq-modal { width: min(94vw, 520px); }
+.eq-modal input[type="date"], .eq-modal input[type="url"] {
+  width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--card); font: inherit; color: var(--ink);
+}
+.eq-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-bottom: 10px; }
+.eq-filters .filter-search { grid-column: 1 / -1; min-width: 0; }
+.eq-filters .filter-sel { max-width: none; width: 100%; }
+.eq-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+.eq-grid .field { margin: 6px 0 10px; }
+@media (max-width: 480px) { .eq-grid { grid-template-columns: 1fr; } }

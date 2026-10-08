@@ -22,10 +22,11 @@ import {
   listFilesRaw, putFileRaw, getFile,
   listTracksRaw, putTrackRaw, getTrack,
   listSeriesRows, putSeriesRaw, getSeriesRaw,
+  listEquipmentRaw, putEquipmentRaw, getEquipmentRaw,
   getMedia, listAllMedia, saveMedia, deleteMediaAndUnlink,
   type MutationEntity, type MutationOp,
 } from '../db/repository';
-import type { Observation, SpeciesRow, LocationRow, ProjectRow, TagRow, ObserverRow, StoredFile, ObservationTrack, MediaRecord, SeriesRow } from '../types';
+import type { Observation, SpeciesRow, LocationRow, ProjectRow, TagRow, ObserverRow, StoredFile, ObservationTrack, MediaRecord, SeriesRow, EquipmentItem } from '../types';
 
 const COLLECTION_BY_ENTITY: Record<MutationEntity, string> = {
   observation: 'observations',
@@ -38,6 +39,7 @@ const COLLECTION_BY_ENTITY: Record<MutationEntity, string> = {
   track: 'tracks',
   media: 'media',
   series: 'series',
+  equipment: 'equipment',
 };
 
 /** The `files` Firestore collection only ever holds this shape — the blob
@@ -133,12 +135,13 @@ let pendingObservers = false;
 let pendingTracks = false;
 let pendingMedia = false;
 let pendingSeries = false;
+let pendingEquipment = false;
 
 /** Recomputes the derived state from the last-known pending-writes flags and
  * live connectivity — called whenever either changes. */
 function recomputeStatus(): void {
   if (!activeCode) { setStatus({ state: 'disabled', pending: false }); return; }
-  const pending = pendingObs || pendingSpecies || pendingLocations || pendingProjects || pendingFiles || pendingTags || pendingObservers || pendingTracks || pendingMedia || pendingSeries;
+  const pending = pendingObs || pendingSpecies || pendingLocations || pendingProjects || pendingFiles || pendingTags || pendingObservers || pendingTracks || pendingMedia || pendingSeries || pendingEquipment;
   if (!navigator.onLine) { setStatus({ state: 'offline', pending }); return; }
   setStatus({ state: pending ? 'syncing' : 'idle', pending, lastSync: pending ? status.lastSync : new Date().toISOString() });
 }
@@ -334,7 +337,7 @@ export function stopFirebaseSync(): void {
   stopMutationListener?.();
   stopMutationListener = null;
   activeCode = null;
-  pendingObs = pendingSpecies = pendingLocations = pendingProjects = pendingFiles = pendingTags = pendingObservers = pendingTracks = pendingMedia = pendingSeries = false;
+  pendingObs = pendingSpecies = pendingLocations = pendingProjects = pendingFiles = pendingTags = pendingObservers = pendingTracks = pendingMedia = pendingSeries = pendingEquipment = false;
   setStatus({ state: 'disabled', pending: false, message: undefined });
 }
 
@@ -374,6 +377,7 @@ async function startFirebaseSync(code: string): Promise<void> {
         for (const t of await listTagRows()) await pushDoc('tags', t.name, t);
         for (const ob of await listObserverRows()) await pushDoc('observers', ob.name, ob);
         for (const s of await listSeriesRows()) await pushDoc('series', s.id, s);
+        for (const e of await listEquipmentRaw()) await pushDoc('equipment', e.id, e);
         // Photo upload (Storage) is best-effort and optional — a project that
         // hasn't enabled Storage yet (e.g. still on the free Spark plan) must
         // not lose text-data sync (Firestore) just because photos can't upload.
@@ -477,6 +481,14 @@ async function startFirebaseSync(code: string): Promise<void> {
     snap.docChanges().forEach((change) => {
       if (change.type === 'removed') return;
       void mergeRemoteSeries(change.doc.data() as SeriesRow);
+    });
+    recomputeStatus();
+  }, onSnapError));
+  unsubs.push(onSnapshot(collection(db, 'households', code, 'equipment'), { includeMetadataChanges: true }, (snap: QuerySnapshot<DocumentData>) => {
+    pendingEquipment = snap.metadata.hasPendingWrites;
+    snap.docChanges().forEach((change) => {
+      if (change.type === 'removed') return;
+      void mergeRemoteEquipment(change.doc.data() as EquipmentItem);
     });
     recomputeStatus();
   }, onSnapError));
@@ -604,6 +616,12 @@ async function mergeRemoteSeries(remote: SeriesRow): Promise<void> {
   const local = await getSeriesRaw(remote.id);
   if (local && new Date(local.updatedAt) >= new Date(remote.updatedAt)) return;
   await withSuppressedPush(() => putSeriesRaw(remote));
+}
+
+async function mergeRemoteEquipment(remote: EquipmentItem): Promise<void> {
+  const local = await getEquipmentRaw(remote.id);
+  if (local && new Date(local.updatedAt) >= new Date(remote.updatedAt)) return;
+  await withSuppressedPush(() => putEquipmentRaw(remote));
 }
 
 /** Uploads an "orphan" Gallery photo's blob to Storage and pushes its

@@ -21,6 +21,7 @@ import type {
   ObservationTrack,
   StoredFile,
   SeriesRow,
+  EquipmentItem,
 } from '../types';
 
 /* ---------- change notifications ---------- */
@@ -40,7 +41,7 @@ function emitChange(): void {
  * "something changed, re-render"). Sync backends that need to know exactly
  * which record changed (e.g. the Firebase sync engine) subscribe here
  * instead of re-scanning the whole database on every change. */
-export type MutationEntity = 'observation' | 'species' | 'location' | 'project' | 'file' | 'tag' | 'observer' | 'track' | 'media' | 'series';
+export type MutationEntity = 'observation' | 'species' | 'location' | 'project' | 'file' | 'tag' | 'observer' | 'track' | 'media' | 'series' | 'equipment';
 export type MutationOp = 'upsert' | 'delete';
 type MutationListener = (entity: MutationEntity, id: string, op: MutationOp, payload: unknown) => void;
 const mutationListeners = new Set<MutationListener>();
@@ -632,6 +633,48 @@ export async function putSeriesRaw(row: SeriesRow): Promise<void> {
   await db.series.put(row);
   emitChange();
   emitMutation('series', row.id, row.deleted ? 'delete' : 'upsert', row);
+}
+
+/* ---------- equipment inventory (Settings ← ציוד) ---------- */
+
+/** All non-deleted equipment items, in name order. */
+export async function listEquipment(): Promise<EquipmentItem[]> {
+  const all = await db.equipment.toArray();
+  return all.filter((e) => !e.deleted).sort((a, b) => a.name.localeCompare(b.name, 'he'));
+}
+
+/** Raw list including tombstones — for the initial sync push. */
+export function listEquipmentRaw(): Promise<EquipmentItem[]> {
+  return db.equipment.toArray();
+}
+
+/** Raw fetch including tombstones — for last-write-wins comparisons. */
+export function getEquipmentRaw(id: string): Promise<EquipmentItem | undefined> {
+  return db.equipment.get(id);
+}
+
+export async function saveEquipment(item: EquipmentItem): Promise<EquipmentItem> {
+  item.updatedAt = now();
+  await db.equipment.put(item);
+  emitChange();
+  emitMutation('equipment', item.id, 'upsert', item);
+  return item;
+}
+
+export async function deleteEquipment(id: string): Promise<void> {
+  const row = await db.equipment.get(id);
+  if (!row) return;
+  row.deleted = true;
+  row.updatedAt = now();
+  await db.equipment.put(row);
+  emitChange();
+  emitMutation('equipment', id, 'delete', row);
+}
+
+export async function putEquipmentRaw(item: EquipmentItem): Promise<void> {
+  await db.equipment.put(item);
+  emitChange();
+  emitMutation('equipment', item.id, item.deleted ? 'delete' : 'upsert', item);
 }
 
 /** Every observation currently linked to a given series, chronological. */

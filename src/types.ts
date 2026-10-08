@@ -128,6 +128,47 @@ export interface SeriesRow {
   updatedAt: string;
 }
 
+/** Equipment-inventory categories (Settings ← ציוד) — a fixed list so the
+ * table can be filtered by category from a dropdown. */
+export const EQUIPMENT_CATEGORIES = [
+  'מצלמה', 'עדשה', 'אביזר עדשה', 'אופטיקה', 'חצובה וראש', 'תיק ורצועה',
+  'סוללה וטעינה', 'כרטיס זיכרון', 'תאורה', 'רחפן', 'אחר',
+] as const;
+export type EquipmentCategory = typeof EQUIPMENT_CATEGORIES[number];
+
+export const EQUIPMENT_STATUSES = ['active', 'repair', 'sold', 'lost'] as const;
+export type EquipmentStatus = typeof EQUIPMENT_STATUSES[number];
+export const EQUIPMENT_STATUS_LABELS: Record<EquipmentStatus, string> = {
+  active: 'בשימוש', repair: 'בתיקון', sold: 'נמכר', lost: 'אבד',
+};
+
+/** One item in the optical/photo equipment inventory (Settings ← ציוד) —
+ * cameras, lenses, binoculars, tripods, bags and the like, with purchase
+ * details. Synced across devices like the other master lists. */
+export interface EquipmentItem {
+  id: string;
+  name: string;
+  category: EquipmentCategory;
+  manufacturer: string;
+  model: string;
+  serial: string;
+  price: number | null;
+  /** YYYY-MM-DD, or '' when unknown. */
+  purchaseDate: string;
+  purchasePlace: string;
+  quantity: number | null;
+  status: EquipmentStatus;
+  /** Link to the purchase invoice (e.g. a Drive file). */
+  invoiceLink: string;
+  /** Link to a photo of the item. */
+  photoLink: string;
+  notes: string;
+  /** Soft-delete tombstone so the deletion propagates on sync. */
+  deleted?: boolean;
+  /** Last local modification, ISO. Used for last-write-wins merging. */
+  updatedAt: string;
+}
+
 /** Master locations-list entry: a saved place name with canonical
  * coordinates, editable in Settings. Local-only (not yet synced to server). */
 export interface LocationRow {

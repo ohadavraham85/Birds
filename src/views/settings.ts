@@ -12,6 +12,7 @@ import {
   putObservationRaw, saveMedia, mediaForObservation, repairMissingImageLinks,
   listFiles, saveFile, getFile, deleteFile,
 } from '../db/repository';
+import { equipmentHtml, wireEquipment } from './equipment';
 import { getSpeciesDetail, listKnownFamilies } from '../lib/species-details-cache';
 import type { DuplicateGroup } from '../db/repository';
 import { getFirebaseSyncCode, configureFirebaseSync, onFirebaseSyncStatus, isFirebaseSyncActive, forceResyncListsFromCloud, retryMediaUploads, pullAllObservationMedia, retryMissingGalleryDownloads, type FirebaseSyncStatus } from '../firebase/firestore-sync';
@@ -73,13 +74,14 @@ let photoImportObsCache: Observation[] = [];
 
 /* ---------- category menu ---------- */
 
-type SettingsCategory = 'appearance' | 'sync' | 'lists' | 'photos' | 'notifications' | 'files' | 'security' | 'data';
+type SettingsCategory = 'appearance' | 'sync' | 'lists' | 'equipment' | 'photos' | 'notifications' | 'files' | 'security' | 'data';
 let activeCategory: SettingsCategory | null = null;
 
 const CATEGORY_META: Record<SettingsCategory, { icon: IconName; title: string; subtitle: string }> = {
   appearance: { icon: 'palette', title: 'עיצוב', subtitle: 'ערכת נושא, צבעים, גודל ומשקל טקסט' },
   sync: { icon: 'cloud', title: 'סנכרון וגיבוי', subtitle: 'סנכרון לענן (Firebase), גיבוי ושחזור' },
   lists: { icon: 'list', title: 'ניהול רשימות', subtitle: 'מינים, מיקומים, תגיות וצופים' },
+  equipment: { icon: 'binoculars', title: 'מלאי ציוד', subtitle: 'מצלמות, עדשות, משקפות וציוד נלווה — סינון וייצוא' },
   photos: { icon: 'camera', title: 'ייבוא תמונות', subtitle: 'שיוך תמונות לתצפיות לפי תאריך' },
   notifications: { icon: 'bell', title: 'התראות', subtitle: 'תזכורות נדידה, "בתאריך הזה" וחוסר פעילות' },
   files: { icon: 'folder', title: 'קבצים', subtitle: 'דוחות תצפית וקבצים חיצוניים' },
@@ -159,6 +161,7 @@ export async function activate(): Promise<void> {
     ${activeCategory === 'sync' ? syncHtml(fbCode) : ''}
     ${activeCategory === 'notifications' ? notificationsHtml(notifSupported, notifPermission, notifEnabled, notifMigration, notifOnThisDay, notifInactivity) : ''}
     ${activeCategory === 'lists' ? listsHtml() : ''}
+    ${activeCategory === 'equipment' ? equipmentHtml() : ''}
     ${activeCategory === 'photos' ? photosHtml() : ''}
     ${activeCategory === 'files' ? filesHtml() : ''}
     ${activeCategory === 'security' ? securityHtml(isPatternLockEnabled()) : ''}
@@ -171,6 +174,7 @@ export async function activate(): Promise<void> {
   if (activeCategory === 'sync') wireSync();
   if (activeCategory === 'notifications' && notifSupported) wireNotifications();
   if (activeCategory === 'lists') wireLists();
+  if (activeCategory === 'equipment') wireEquipment(container);
   if (activeCategory === 'photos') wirePhotos();
   if (activeCategory === 'files') wireFiles();
   if (activeCategory === 'security') wireSecurity();
