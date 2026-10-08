@@ -31,8 +31,24 @@ const COLUMNS: Array<{ key: SortKey; label: string; num?: boolean }> = [
 let root: HTMLElement;
 let items: EquipmentItem[] = [];
 const filters = { q: '', category: '', manufacturer: '', place: '', status: '' };
-let sortKey: SortKey = 'category';
-let sortDir: 1 | -1 = 1;
+let sortKey: SortKey = 'price';
+let sortDir: 1 | -1 = -1;
+
+/** Numeric/date columns start high-to-low (most expensive / newest first) on
+ * their first click; text columns start A→Z. */
+const DESC_FIRST: SortKey[] = ['price', 'purchaseDate', 'quantity'];
+
+/** Sort choices for the phone layout, where there are no column headers to click. */
+const SORT_OPTIONS: Array<[SortKey, 1 | -1, string]> = [
+  ['price', -1, 'מחיר: מהגבוה לנמוך'],
+  ['price', 1, 'מחיר: מהנמוך לגבוה'],
+  ['purchaseDate', -1, 'תאריך רכישה: מהחדש לישן'],
+  ['purchaseDate', 1, 'תאריך רכישה: מהישן לחדש'],
+  ['name', 1, 'שם פריט'],
+  ['category', 1, 'קטגוריה'],
+  ['manufacturer', 1, 'יצרן'],
+  ['status', 1, 'סטטוס'],
+];
 
 export function equipmentHtml(): string {
   return `
@@ -43,6 +59,7 @@ export function equipmentHtml(): string {
         <select id="eq-f-manufacturer" class="filter-sel"></select>
         <select id="eq-f-place" class="filter-sel"></select>
         <select id="eq-f-status" class="filter-sel"></select>
+        <select id="eq-sort" class="filter-sel eq-sort" aria-label="מיון"></select>
         <button type="button" class="btn btn-sm" id="eq-clear">ניקוי סינון</button>
       </div>
       <div class="table-toolbar">
@@ -61,7 +78,9 @@ export function equipmentHtml(): string {
           <tbody id="eq-body"></tbody>
         </table>
       </div>
-      <p class="hint">לחיצה על שורה פותחת אותה לעריכה. לחיצה על כותרת עמודה ממיינת לפיה.</p>
+      <div class="eq-cards" id="eq-cards"></div>
+      <p class="hint eq-hint-table">לחיצה על שורה פותחת אותה לעריכה. לחיצה על כותרת עמודה ממיינת לפיה.</p>
+      <p class="hint eq-hint-cards">לחיצה על פריט פותחת אותו לעריכה.</p>
     </div>
   `;
 }
@@ -93,15 +112,23 @@ export function wireEquipment(container: HTMLElement): void {
     if (!th) return;
     const key = th.dataset.key as SortKey;
     if (sortKey === key) sortDir = sortDir === 1 ? -1 : 1;
-    else { sortKey = key; sortDir = 1; }
+    else { sortKey = key; sortDir = DESC_FIRST.includes(key) ? -1 : 1; }
     renderTable();
   });
-  qs(root, '#eq-body').addEventListener('click', (e) => {
-    if ((e.target as HTMLElement).closest('a')) return; // invoice/photo links open on their own
-    const tr = (e.target as HTMLElement).closest<HTMLElement>('tr[data-id]');
-    const item = tr && items.find((i) => i.id === tr.dataset.id);
-    if (item) openEditor(item);
+  qs<HTMLSelectElement>(root, '#eq-sort').addEventListener('change', (e) => {
+    const [key, dir] = (e.target as HTMLSelectElement).value.split(':');
+    sortKey = key as SortKey;
+    sortDir = Number(dir) as 1 | -1;
+    renderTable();
   });
+  const onItemClick = (e: Event): void => {
+    if ((e.target as HTMLElement).closest('a')) return; // invoice/photo links open on their own
+    const el = (e.target as HTMLElement).closest<HTMLElement>('[data-id]');
+    const item = el && items.find((i) => i.id === el.dataset.id);
+    if (item) openEditor(item);
+  };
+  qs(root, '#eq-body').addEventListener('click', onItemClick);
+  qs(root, '#eq-cards').addEventListener('click', onItemClick);
   void reload();
 }
 
@@ -174,6 +201,15 @@ function renderTable(): void {
   fillSelect('#eq-f-place', uniqueSorted(items.map((i) => i.purchasePlace)).map((p) => [p, p]), filters.place, 'כל מקומות הרכישה');
   fillSelect('#eq-f-status', EQUIPMENT_STATUSES.map((s) => [s, EQUIPMENT_STATUS_LABELS[s]]), filters.status, 'כל הסטטוסים');
 
+  const sortSel = qs<HTMLSelectElement>(root, '#eq-sort');
+  const current = `${sortKey}:${sortDir}`;
+  const opts = SORT_OPTIONS.map(([k, d, label]) => [`${k}:${d}`, `מיון: ${label}`]);
+  if (!opts.some(([v]) => v === current)) {
+    const col = COLUMNS.find((c) => c.key === sortKey)!;
+    opts.unshift([current, `מיון: ${col.label} ${sortDir === 1 ? '▲' : '▼'}`]);
+  }
+  sortSel.innerHTML = opts.map(([v, l]) => `<option value="${v}"${v === current ? ' selected' : ''}>${escapeHtml(l!)}</option>`).join('');
+
   const rows = filteredItems().sort(compare);
   root.querySelectorAll<HTMLElement>('.eq-table th[data-key]').forEach((th) => {
     const on = th.dataset.key === sortKey;
@@ -200,6 +236,33 @@ function renderTable(): void {
         </td>
       </tr>`).join('')
     : `<tr><td colspan="${COLUMNS.length + 1}" class="hint" style="text-align:center;padding:18px">${items.length ? 'אין פריטים שתואמים לסינון.' : 'הרשימה ריקה — הוסיפו פריט או ייבאו את הרשימה מהגיליון.'}</td></tr>`;
+
+  const links = (i: EquipmentItem): string =>
+    (i.invoiceLink ? `<a class="btn btn-icon" href="${escapeHtml(i.invoiceLink)}" target="_blank" rel="noopener" title="חשבונית">${icon('document')}</a>` : '') +
+    (i.photoLink ? `<a class="btn btn-icon" href="${escapeHtml(i.photoLink)}" target="_blank" rel="noopener" title="תמונה">${icon('camera')}</a>` : '');
+  const meta = (label: string, value: string, ltr = false): string =>
+    value ? `<span><small>${label}</small> <span${ltr ? ' dir="ltr"' : ''}>${escapeHtml(value)}</span></span>` : '';
+  qs(root, '#eq-cards').innerHTML = rows.length
+    ? rows.map((i) => `
+      <div class="eq-card${i.status !== 'active' ? ' eq-inactive' : ''}" data-id="${escapeHtml(i.id)}" role="button" tabindex="0">
+        <div class="eq-card-head">
+          <div class="eq-card-title">
+            <strong>${escapeHtml(i.name)}</strong>
+            <span class="eq-card-sub" dir="auto">${escapeHtml([i.manufacturer, i.model].filter(Boolean).join(' · '))}</span>
+          </div>
+          <div class="eq-card-price">${i.price != null ? `₪${fmtPrice(i.price)}` : '<span class="hint">ללא מחיר</span>'}</div>
+        </div>
+        <div class="eq-card-meta">
+          <span class="eq-card-cat">${escapeHtml(i.category)}</span>
+          ${i.status !== 'active' ? `<span class="eq-status eq-status-${i.status}">${EQUIPMENT_STATUS_LABELS[i.status]}</span>` : ''}
+          ${meta('נרכש', fmtDate(i.purchaseDate))}
+          ${meta('ב-', i.purchasePlace)}
+          ${i.quantity != null && i.quantity !== 1 ? meta('כמות', String(i.quantity)) : ''}
+          ${meta('מס׳ סידורי', i.serial, true)}
+        </div>
+        ${links(i) ? `<div class="eq-card-links">${links(i)}</div>` : ''}
+      </div>`).join('')
+    : `<p class="hint" style="text-align:center;padding:18px">${items.length ? 'אין פריטים שתואמים לסינון.' : 'הרשימה ריקה — הוסיפו פריט או ייבאו את הרשימה מהגיליון.'}</p>`;
 
   const total = rows.reduce((sum, i) => sum + (i.price ?? 0), 0);
   qs(root, '#eq-summary').textContent = `${rows.length} פריטים${rows.length !== items.length ? ` מתוך ${items.length}` : ''} · סה"כ ₪${total.toLocaleString('he-IL')}`;
