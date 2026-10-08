@@ -67,6 +67,7 @@ const PATHS = {
   info: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="7.7" r=".9" fill="currentColor" stroke="none"/><path d="M12 11v6"/>',
   openOut: '<rect x="4" y="4" width="9" height="9" rx="1.5"/><path d="M13 3h8v8"/><path d="M21 3 12 12"/>',
   chevronLeft: '<path d="m14.5 5 -7 7 7 7"/>',
+  binoculars: '<circle cx="6.5" cy="15.5" r="3.5"/><circle cx="17.5" cy="15.5" r="3.5"/><path d="M3 15.5 5 6h3l1 6M21 15.5 19 6h-3l-1 6"/><path d="M10 13h4"/>',
   chevronRight: '<path d="m9.5 5 7 7 -7 7"/>',
 } as const;
 

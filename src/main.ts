@@ -6,7 +6,7 @@ import { registerSW } from 'virtual:pwa-register';
 
 import { seedSpeciesIfEmpty, onDataChanged, listObservations } from './db/repository';
 import { SPECIES_SEED, SPECIES_SEED_VERSION } from './data/species-seed';
-import { toast } from './lib/ui';
+import { toast, showModal } from './lib/ui';
 import { qs } from './lib/dom';
 import { initTheme } from './lib/theme';
 import { hydrateIcons, icon, type IconName } from './lib/icons';
@@ -225,14 +225,72 @@ async function fetchDeployedVersion(): Promise<string> {
   }
 }
 
-/** "עדכון מגרסה X לגרסה Y" — the running bundle's own version vs. what's now deployed. */
-async function fillUpdateBannerVersions(): Promise<void> {
-  const label = document.getElementById('update-banner-text');
-  if (!label) return;
-  const next = await fetchDeployedVersion();
+const LAST_SEEN_VERSION_KEY = 'lastSeenAppVersion';
+const UPDATE_CHECK_INTERVAL_MS = 5 * 60 * 1000;
+let updateApply: (() => void) | null = null;
+let updatePromptShownFor = '';
+
+/** "עדכון זמין: מגרסה X לגרסה Y" — pops a dialog once per new version (and
+ * keeps the bottom banner up afterwards if dismissed with "אחר כך"). */
+async function showUpdateAvailable(knownNext?: string): Promise<void> {
+  const next = knownNext ?? await fetchDeployedVersion();
   const current = __APP_VERSION__;
-  if (current && next && current !== next) label.textContent = `עדכון זמין: מגרסה ${current} לגרסה ${next}`;
-  else if (next) label.textContent = `עדכון זמין לגרסה ${next}`;
+  const text = current && next && current !== next
+    ? `עדכון זמין: מגרסה ${current} לגרסה ${next}`
+    : next ? `עדכון זמין לגרסה ${next}` : 'גרסה חדשה זמינה';
+  const banner = document.getElementById('update-banner');
+  const label = document.getElementById('update-banner-text');
+  if (label) label.textContent = text;
+  if (banner) banner.hidden = false;
+
+  const key = next || 'unknown';
+  if (updatePromptShownFor === key) return;
+  updatePromptShownFor = key;
+  const box = document.createElement('div');
+  box.className = 'version-dialog';
+  box.innerHTML = `
+    <h3>${icon('refresh')} גרסה חדשה זמינה</h3>
+    <div class="version-dialog-versions">
+      <span><small>גרסה נוכחית</small><strong dir="ltr">${current || '—'}</strong></span>
+      <span class="version-dialog-arrow">←</span>
+      <span><small>גרסה חדשה</small><strong dir="ltr">${next || '?'}</strong></span>
+    </div>
+    <p class="hint">העדכון יטען מחדש את האפליקציה. הנתונים שלך שמורים ולא יימחקו.</p>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-primary" id="vd-update">עדכון עכשיו</button>
+      <button type="button" class="btn" id="vd-later">אחר כך</button>
+    </div>`;
+  const close = showModal(box);
+  qs<HTMLButtonElement>(box, '#vd-later').addEventListener('click', close);
+  qs<HTMLButtonElement>(box, '#vd-update').addEventListener('click', (e) => {
+    const btn = e.currentTarget as HTMLButtonElement;
+    btn.disabled = true;
+    btn.textContent = 'מעדכן...';
+    updateApply?.();
+  });
+}
+
+/** After an update lands: "האפליקציה עודכנה מגרסה X לגרסה Y", once. */
+function showUpdatedNotice(): void {
+  const current = __APP_VERSION__;
+  if (!current) return; // dev build — no version
+  let previous: string | null = null;
+  try {
+    previous = localStorage.getItem(LAST_SEEN_VERSION_KEY);
+    localStorage.setItem(LAST_SEEN_VERSION_KEY, current);
+  } catch { return; }
+  if (previous === current) return;
+  const box = document.createElement('div');
+  box.className = 'version-dialog';
+  box.innerHTML = `
+    <h3>${icon('check')} האפליקציה עודכנה</h3>
+    <div class="version-dialog-versions">
+      ${previous ? `<span><small>מגרסה</small><strong dir="ltr">${previous}</strong></span><span class="version-dialog-arrow">←</span>` : ''}
+      <span><small>${previous ? 'לגרסה' : 'גרסה נוכחית'}</small><strong dir="ltr">${current}</strong></span>
+    </div>
+    <div class="modal-actions"><button type="button" class="btn btn-primary" id="vd-ok">אישור</button></div>`;
+  const close = showModal(box);
+  qs<HTMLButtonElement>(box, '#vd-ok').addEventListener('click', close);
 }
 
 /** Short haptic pulse on interactive taps app-wide — delegated at the
@@ -308,24 +366,44 @@ async function init(): Promise<void> {
   // deploy no longer reloads the page out from under the user the moment
   // it's detected; it just shows the bottom banner, and the actual reload
   // only happens once they tap "עדכון" themselves.
+  let swRegistration: ServiceWorkerRegistration | undefined;
   const updateSW = registerSW({
     immediate: true,
-    onNeedRefresh() {
-      const banner = document.getElementById('update-banner');
-      if (banner) banner.hidden = false;
-      void fillUpdateBannerVersions();
-    },
+    onNeedRefresh() { void showUpdateAvailable(); },
+    onRegisteredSW(_url, reg) { swRegistration = reg; },
   });
-  const updateBtn = document.getElementById('update-banner-btn') as HTMLButtonElement | null;
-  updateBtn?.addEventListener('click', () => {
-    updateBtn.disabled = true;
-    updateBtn.textContent = 'מעדכן...';
+  const applyUpdate = (): void => {
+    // Remembered so the post-reload "עודכן מגרסה X לגרסה Y" popup can name it.
+    try { localStorage.setItem(LAST_SEEN_VERSION_KEY, __APP_VERSION__); } catch { /* storage blocked */ }
     void updateSW(true);
     // The normal path reloads on the new SW's "controlling" event; if that
     // never arrives (no SW actually waiting, or the event is missed), reload
     // anyway rather than leaving the button stuck on "מעדכן..." forever.
     setTimeout(() => window.location.reload(), 4000);
+  };
+  updateApply = applyUpdate;
+  const updateBtn = document.getElementById('update-banner-btn') as HTMLButtonElement | null;
+  updateBtn?.addEventListener('click', () => {
+    updateBtn.disabled = true;
+    updateBtn.textContent = 'מעדכן...';
+    applyUpdate();
   });
+
+  // An installed PWA left open can go days without the browser re-checking
+  // for a new service worker on its own — check on every return to the app
+  // and every few minutes, plus compare version.json directly as a fallback
+  // in case the SW route never fires onNeedRefresh.
+  const checkForUpdate = (): void => {
+    void swRegistration?.update().catch(() => { /* offline */ });
+    void (async () => {
+      const next = await fetchDeployedVersion();
+      if (__APP_VERSION__ && next && next !== __APP_VERSION__) void showUpdateAvailable(next);
+    })();
+  };
+  setInterval(checkForUpdate, UPDATE_CHECK_INTERVAL_MS);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkForUpdate(); });
+  setTimeout(checkForUpdate, 5000);
+  showUpdatedNotice();
 
   await initFirebaseSyncFromSettings();
   void checkAndNotify(await listObservations());

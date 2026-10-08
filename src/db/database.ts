@@ -14,6 +14,7 @@ import type {
   ObservationTrack,
   StoredFile,
   SeriesRow,
+  EquipmentItem,
 } from '../types';
 
 /** Cycled through when migrating old projects (which had no color) into tags. */
@@ -32,6 +33,7 @@ export class BirdsDatabase extends Dexie {
   tracks!: EntityTable<ObservationTrack, 'id'>;
   files!: EntityTable<StoredFile, 'id'>;
   series!: EntityTable<SeriesRow, 'id'>;
+  equipment!: EntityTable<EquipmentItem, 'id'>;
 
   constructor() {
     super('birds-db');
@@ -144,6 +146,16 @@ export class BirdsDatabase extends Dexie {
       observers: 'name, updatedAt',
       media: 'id, obsId, contentHash',
       series: 'id, updatedAt, status, species',
+    });
+    // v13: optical/photo equipment inventory, managed in Settings ← ציוד.
+    this.version(13).stores({
+      ...stores, locations: 'name, updatedAt', projects: 'name, updatedAt', tracks: 'id, updatedAt',
+      files: 'id, kind, createdAt', tags: 'name, updatedAt',
+      observations: 'id, dateTime, updatedAt, synced, deleted, seqNo',
+      observers: 'name, updatedAt',
+      media: 'id, obsId, contentHash',
+      series: 'id, updatedAt, status, species',
+      equipment: 'id, updatedAt',
     });
   }
 }
