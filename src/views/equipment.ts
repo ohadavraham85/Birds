@@ -13,13 +13,14 @@ import { icon } from '../lib/icons';
 import type { EquipmentItem, EquipmentCategory, EquipmentStatus } from '../types';
 import { EQUIPMENT_CATEGORIES, EQUIPMENT_STATUSES, EQUIPMENT_STATUS_LABELS } from '../types';
 
-type SortKey = 'name' | 'category' | 'manufacturer' | 'model' | 'price' | 'purchaseDate' | 'purchasePlace' | 'quantity' | 'status';
+type SortKey = 'name' | 'category' | 'manufacturer' | 'model' | 'serial' | 'price' | 'purchaseDate' | 'purchasePlace' | 'quantity' | 'status';
 
 const COLUMNS: Array<{ key: SortKey; label: string; num?: boolean }> = [
   { key: 'name', label: 'שם פריט' },
   { key: 'category', label: 'קטגוריה' },
   { key: 'manufacturer', label: 'יצרן' },
   { key: 'model', label: 'דגם' },
+  { key: 'serial', label: 'מספר סידורי' },
   { key: 'price', label: 'מחיר (₪)', num: true },
   { key: 'purchaseDate', label: 'תאריך רכישה', num: true },
   { key: 'purchasePlace', label: 'מקום רכישה' },
@@ -183,10 +184,11 @@ function renderTable(): void {
   qs(root, '#eq-body').innerHTML = rows.length
     ? rows.map((i) => `
       <tr data-id="${escapeHtml(i.id)}" class="eq-row${i.status !== 'active' ? ' eq-inactive' : ''}">
-        <td><strong>${escapeHtml(i.name)}</strong>${i.serial ? `<div class="hint" dir="ltr">S/N ${escapeHtml(i.serial)}</div>` : ''}</td>
+        <td><strong>${escapeHtml(i.name)}</strong></td>
         <td>${escapeHtml(i.category)}</td>
         <td>${escapeHtml(i.manufacturer)}</td>
         <td dir="auto">${escapeHtml(i.model)}</td>
+        <td dir="ltr" class="eq-serial">${escapeHtml(i.serial)}</td>
         <td class="num">${fmtPrice(i.price)}</td>
         <td class="num">${fmtDate(i.purchaseDate)}</td>
         <td>${escapeHtml(i.purchasePlace)}</td>

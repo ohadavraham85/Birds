@@ -2354,7 +2354,8 @@ a.media-link-icon:hover { color: var(--accent-700); }
 /* ---------- settings ← מלאי ציוד ---------- */
 
 .eq-table-wrap { max-height: calc(100vh - var(--topbar-h) - var(--tabbar-h) - 260px); min-height: 200px; }
-table.eq-table { min-width: 860px; }
+table.eq-table { min-width: 980px; }
+.eq-table td.eq-serial { text-align: right; white-space: nowrap; font-family: ui-monospace, monospace; font-size: .85rem; }
 .eq-table td:first-child { min-width: 150px; }
 .eq-table tbody tr.eq-row { cursor: pointer; }
 .eq-table tr.eq-inactive td { color: var(--ink-soft); }
