@@ -2376,3 +2376,14 @@ table.eq-table { min-width: 860px; }
 .eq-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
 .eq-grid .field { margin: 6px 0 10px; }
 @media (max-width: 480px) { .eq-grid { grid-template-columns: 1fr; } }
+
+/* ---------- version update dialog ---------- */
+
+.version-dialog { width: min(90vw, 380px); text-align: center; }
+.version-dialog h3 { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 0; }
+.version-dialog-versions { display: flex; align-items: center; justify-content: center; gap: 16px; margin: 16px 0; }
+.version-dialog-versions span { display: flex; flex-direction: column; gap: 2px; }
+.version-dialog-versions small { color: var(--ink-soft); font-size: .78rem; }
+.version-dialog-versions strong { font-size: 1.25rem; color: var(--accent-900); }
+.version-dialog-arrow { font-size: 1.4rem; color: var(--accent-700); }
+.version-dialog .modal-actions { justify-content: center; }
