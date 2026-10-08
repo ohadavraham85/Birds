@@ -39,16 +39,16 @@ let sortDir: 1 | -1 = -1;
 const DESC_FIRST: SortKey[] = ['price', 'purchaseDate', 'quantity'];
 
 /** Sort choices for the phone layout, where there are no column headers to click. */
-const SORT_OPTIONS: Array<[SortKey, 1 | -1, string]> = [
-  ['price', -1, 'מחיר: מהגבוה לנמוך'],
-  ['price', 1, 'מחיר: מהנמוך לגבוה'],
-  ['purchaseDate', -1, 'תאריך רכישה: מהחדש לישן'],
-  ['purchaseDate', 1, 'תאריך רכישה: מהישן לחדש'],
-  ['name', 1, 'שם פריט'],
-  ['category', 1, 'קטגוריה'],
-  ['manufacturer', 1, 'יצרן'],
-  ['status', 1, 'סטטוס'],
-];
+const SORT_OPTIONS: Array<[SortKey, 1 | -1, string]> = COLUMNS.flatMap(({ key, label }): Array<[SortKey, 1 | -1, string]> => {
+  const [desc, asc] =
+    key === 'price' || key === 'quantity' ? ['מהגבוה לנמוך', 'מהנמוך לגבוה']
+    : key === 'purchaseDate' ? ['מהחדש לישן', 'מהישן לחדש']
+    : key === 'category' ? ['בסדר הפוך', 'לפי סדר הקטגוריות']
+    : ['ת ← א', 'א ← ת'];
+  return DESC_FIRST.includes(key)
+    ? [[key, -1, `${label}: ${desc}`], [key, 1, `${label}: ${asc}`]]
+    : [[key, 1, `${label}: ${asc}`], [key, -1, `${label}: ${desc}`]];
+});
 
 export function equipmentHtml(): string {
   return `
