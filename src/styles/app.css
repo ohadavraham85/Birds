@@ -2388,3 +2388,31 @@ table.eq-table { min-width: 980px; }
 .version-dialog-versions strong { font-size: 1.25rem; color: var(--accent-900); }
 .version-dialog-arrow { font-size: 1.4rem; color: var(--accent-700); }
 .version-dialog .modal-actions { justify-content: center; }
+
+/* Equipment on phones: cards instead of the wide table, plus a sort dropdown
+   (no column headers to click). */
+.eq-cards, .eq-hint-cards, .eq-sort { display: none; }
+@media (max-width: 700px) {
+  .eq-table-wrap, .eq-hint-table { display: none; }
+  .eq-cards { display: flex; flex-direction: column; gap: 8px; }
+  .eq-hint-cards { display: block; }
+  .eq-sort { display: block; }
+  .eq-filters { grid-template-columns: 1fr 1fr; }
+  .eq-filters .eq-sort, .eq-filters #eq-clear { grid-column: 1 / -1; }
+}
+.eq-card {
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--card);
+  padding: 10px 12px; cursor: pointer;
+}
+.eq-card:active { background: var(--accent-50); }
+.eq-card.eq-inactive { opacity: .7; }
+.eq-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.eq-card-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.eq-card-title strong { font-size: .98rem; }
+.eq-card-sub { font-size: .84rem; color: var(--ink-soft); overflow-wrap: anywhere; }
+.eq-card-price { font-weight: 700; color: var(--accent-900); white-space: nowrap; direction: ltr; }
+.eq-card-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 6px; font-size: .8rem; color: var(--ink-soft); align-items: center; }
+.eq-card-meta small { opacity: .8; }
+.eq-card-cat { background: var(--accent-100); color: var(--accent-900); border-radius: 999px; padding: 1px 8px; }
+.eq-card-links { display: flex; gap: 4px; margin-top: 6px; }
+.eq-card-links a.btn-icon { padding: 4px 6px; display: inline-flex; }
