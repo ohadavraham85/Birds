@@ -117,6 +117,7 @@ function dropReportPin(species: string, kind: TrackReportPin['kind'], count?: nu
   const p = lastPoint();
   if (!p) return;
   reportPins.push({ lat: p.lat, lng: p.lng, species: name, kind, t: p.t, ...(count && count > 1 ? { count } : {}) });
+  scheduleDraftSave();
 }
 
 /** A freshly-added species row defaults to "נוכח" (present — seen, but not
@@ -202,7 +203,7 @@ export function init(el: HTMLElement): void {
               <div class="bulk-select-menu" id="tags-select-menu" hidden>
                 <div id="tag-checks"></div>
                 <div class="tag-quick-add">
-                  <input type="text" id="f-tag-new" aria-label="הוספת תגית חדשה">
+                  <input type="text" id="f-tag-new" placeholder="תגית חדשה..." aria-label="הוספת תגית חדשה">
                   <button type="button" class="btn btn-sm" id="f-tag-add">${icon('plus')} הוספה</button>
                 </div>
               </div>
@@ -214,7 +215,7 @@ export function init(el: HTMLElement): void {
               <div class="bulk-select-menu" id="observers-select-menu" hidden>
                 <div id="observer-checks"></div>
                 <div class="tag-quick-add">
-                  <input type="text" id="f-observer-new" aria-label="הוספת צופה חדש">
+                  <input type="text" id="f-observer-new" placeholder="שם צופה חדש..." aria-label="הוספת צופה חדש">
                   <button type="button" class="btn btn-sm" id="f-observer-add">${icon('plus')} הוספה</button>
                 </div>
               </div>
@@ -630,9 +631,9 @@ function collectDraftEntries(): { species: string; quantity: number; note?: stri
 function persistDraft(): void {
   const snap = snapshot();
   const track = snap
-    ? { points: snap.points, startedAt: snap.startedAt }
+    ? { points: snap.points, startedAt: snap.startedAt, reportPins }
     : pendingTrack
-      ? { points: pendingTrack.points, startedAt: new Date(pendingTrack.startedAt).getTime() }
+      ? { points: pendingTrack.points, startedAt: new Date(pendingTrack.startedAt).getTime(), reportPins }
       : null;
   const draft: ObservationDraft = {
     id: editId || obsId,
@@ -708,6 +709,7 @@ function resumeFromDraft(id: string): void {
   void renderSeriesButton();
   if (draft.track && draft.track.points.length) {
     seedFromDraft(draft.track.points, draft.track.startedAt);
+    reportPins = [...(draft.track.reportPins ?? [])];
     seededFromExistingTrack = true; // the draft already carries any pre-existing track's history — don't let beginTrack() re-seed and clobber it
     qs<HTMLInputElement>(container, '#track-toggle').checked = true;
     beginTrack();

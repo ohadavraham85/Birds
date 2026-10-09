@@ -13,7 +13,7 @@
  * observation's own id, or the existing observation's id when it's an edit
  * being extended), with a small index listing which ids exist. */
 
-import type { TrackPoint } from '../types';
+import type { TrackPoint, TrackReportPin } from '../types';
 
 const INDEX_KEY = 'birds-draft-index';
 const LEGACY_KEY = 'birds-observation-draft';
@@ -38,7 +38,9 @@ export interface ObservationDraft {
     entries: { species: string; quantity: number; note?: string }[];
     seriesId?: string;
   };
-  track: { points: TrackPoint[]; startedAt: number } | null;
+  /** `reportPins` — the species pins dropped so far, so a reload mid-outing
+   * (e.g. the OS killing the backgrounded app) doesn't wipe them off the map. */
+  track: { points: TrackPoint[]; startedAt: number; reportPins?: TrackReportPin[] } | null;
 }
 
 function readIndex(): string[] {
