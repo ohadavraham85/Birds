@@ -18,6 +18,7 @@ import { openSmartVoiceModal } from '../lib/voice-observation-modal';
 import { seriesDayLabel, isSeriesOverdue, openCreateSeriesModal, seriesPhotoCandidates, seriesChain, seriesYear } from '../lib/series';
 import { qs, input } from '../lib/dom';
 import { navigate } from '../main';
+import { loadDashLayout, resetDashLayout, dashGridHtml, wireDashGrid, type DashWidget } from '../lib/dashboard-layout';
 import type { Observation, ObservationImage, SeriesRow } from '../types';
 
 type BreakdownKind = 'species' | 'location' | 'tag';
@@ -74,6 +75,7 @@ export async function activate(): Promise<void> {
   allSeriesRows = await listSeriesRows();
   activeSeries = allSeriesRows.filter((s) => s.status === 'active');
   goalsSettings = await getSetting<GoalsSettings>('birdingGoals', DEFAULT_GOALS_SETTINGS);
+  await loadDashLayout();
   orphanPhotoBySpecies = {};
   for (const m of await listAllMedia()) {
     if (m.obsId || !m.species || orphanPhotoBySpecies[m.species]) continue;
@@ -370,9 +372,10 @@ function rangeBarHtml(): string {
 
 /* ---------- stats dashboard (moved from the old stats tab) ---------- */
 
-function statsHtml(observations: Observation[]): string {
+/** The stats section as separate dashboard widgets (see lib/dashboard-layout.ts). */
+function statsWidgets(observations: Observation[]): DashWidget[] {
   if (!observations.length) {
-    return '<p style="color:var(--ink-soft)">אין תצפיות בטווח שנבחר.</p>';
+    return [{ id: 'tiles', title: 'סיכום', defaultSpan: 12, html: '<p style="color:var(--ink-soft)">אין תצפיות בטווח שנבחר.</p>' }];
   }
 
   const speciesCounts = new Map<string, number>();
@@ -429,7 +432,15 @@ function statsHtml(observations: Observation[]): string {
   const tags = [...tagCounts.entries()].sort((a, b) => b[1] - a[1]);
   const tagsChart = breakdownChart('tag', 'פילוח לפי תגית', tags, 'תצפיות');
 
-  return tilesHtml + yearChart + goalsHtml() + speciesChart + familyChartHtml(observations) + locationsChart + tagsChart;
+  return [
+    { id: 'tiles', title: 'סיכום', defaultSpan: 12, html: tilesHtml },
+    { id: 'year', title: 'תצפיות לפי שנה', defaultSpan: 12, html: yearChart },
+    { id: 'goals', title: 'יעדי צפרות', defaultSpan: 12, html: goalsHtml() },
+    { id: 'species', title: 'המינים הנפוצים ביותר', defaultSpan: 6, html: speciesChart },
+    { id: 'family', title: 'פילוח לפי משפחה', defaultSpan: 6, html: familyChartHtml(observations) },
+    { id: 'locations', title: 'מיקומים מובילים', defaultSpan: 6, html: locationsChart },
+    { id: 'tags', title: 'פילוח לפי תגית', defaultSpan: 6, html: tagsChart },
+  ];
 }
 
 function yearCardHead(title: string): string {
@@ -974,7 +985,17 @@ function smartVoiceButtonHtml(): string {
 }
 
 function render(): void {
-  qs(container, '#home-body').innerHTML = draftBannerHtml() + smartVoiceButtonHtml() + seriesWidgetHtml() + birdOfDayHtml() + onThisDayHtml() + rangeBarHtml() + statsHtml(filteredObservations());
+  const widgets: DashWidget[] = [
+    { id: 'series', title: 'מעקבים פעילים', defaultSpan: 12, html: seriesWidgetHtml() },
+    { id: 'birdOfDay', title: 'ציפור היום', defaultSpan: 6, html: birdOfDayHtml() },
+    { id: 'onThisDay', title: 'בתאריך הזה', defaultSpan: 6, html: onThisDayHtml() },
+    ...statsWidgets(filteredObservations()),
+  ];
+  qs(container, '#home-body').innerHTML = draftBannerHtml() + smartVoiceButtonHtml() + rangeBarHtml() +
+    `<div class="dash-toolbar"><span class="hint">גררו את ⠿ כדי להזיז כרטיס, ואת הפינה התחתונה כדי לשנות את גודלו.</span>
+      <button type="button" class="btn btn-sm" id="dash-reset">איפוס סידור</button></div>` +
+    dashGridHtml(widgets);
+  wireDashGrid(container);
   renderBirdOfDayPhoto();
   renderOnThisDayPhoto();
   renderSeriesWidgetThumbnails();
@@ -984,6 +1005,7 @@ function onClick(e: Event): void {
   const target = e.target as HTMLElement;
 
   if (target.closest('#smart-voice-btn')) { openSmartVoiceModal(); return; }
+  if (target.closest('#dash-reset')) { void resetDashLayout().then(render); return; }
 
   if (target.closest('#goals-edit-btn')) {
     const g = computeGoals();
