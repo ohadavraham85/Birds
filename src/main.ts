@@ -10,6 +10,7 @@ import { toast, showModal } from './lib/ui';
 import { qs } from './lib/dom';
 import { initTheme } from './lib/theme';
 import { hydrateIcons, icon, type IconName } from './lib/icons';
+import { setupWhatsNewButton, unseenChangelog, changelogEntriesHtml, markChangelogSeen, openWhatsNew } from './lib/whats-new';
 import { initFirebaseSyncFromSettings, onFirebaseSyncStatus, type FirebaseSyncStatus } from './firebase/firestore-sync';
 import { checkAndNotify } from './lib/notifications';
 import { refreshTagsCache } from './lib/tags-cache';
@@ -280,6 +281,7 @@ function showUpdatedNotice(): void {
     localStorage.setItem(LAST_SEEN_VERSION_KEY, current);
   } catch { return; }
   if (previous === current) return;
+  const news = unseenChangelog();
   const box = document.createElement('div');
   box.className = 'version-dialog';
   box.innerHTML = `
@@ -288,9 +290,15 @@ function showUpdatedNotice(): void {
       ${previous ? `<span><small>מגרסה</small><strong dir="ltr">${previous}</strong></span><span class="version-dialog-arrow">←</span>` : ''}
       <span><small>${previous ? 'לגרסה' : 'גרסה נוכחית'}</small><strong dir="ltr">${current}</strong></span>
     </div>
-    <div class="modal-actions"><button type="button" class="btn btn-primary" id="vd-ok">אישור</button></div>`;
+    ${news.length ? `<div class="whats-new-list whats-new-inline"><h4>מה חדש</h4>${changelogEntriesHtml(news)}</div>` : ''}
+    <div class="modal-actions">
+      <button type="button" class="btn btn-primary" id="vd-ok">אישור</button>
+      <button type="button" class="btn" id="vd-all">כל העדכונים</button>
+    </div>`;
   const close = showModal(box);
+  markChangelogSeen();
   qs<HTMLButtonElement>(box, '#vd-ok').addEventListener('click', close);
+  qs<HTMLButtonElement>(box, '#vd-all').addEventListener('click', () => { close(); openWhatsNew(); });
 }
 
 /** Short haptic pulse on interactive taps app-wide — delegated at the
@@ -359,6 +367,7 @@ async function init(): Promise<void> {
   setupStatusIndicator();
   setupClock();
   void setupVersionBadge();
+  setupWhatsNewButton();
   setupHaptics();
   void startBackgroundSlideshow();
 

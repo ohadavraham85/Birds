@@ -2394,7 +2394,7 @@ table.eq-table { min-width: 980px; }
 
 /* ---------- version update dialog ---------- */
 
-.version-dialog { width: min(90vw, 380px); text-align: center; }
+.version-dialog { width: min(80vw, 420px); max-width: 100%; text-align: center; }
 .version-dialog h3 { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 0; }
 .version-dialog-versions { display: flex; align-items: center; justify-content: center; gap: 16px; margin: 16px 0; }
 .version-dialog-versions span { display: flex; flex-direction: column; gap: 2px; }
@@ -2466,3 +2466,21 @@ table.eq-table { min-width: 980px; }
     background: var(--accent-700); color: #fff; border-radius: 6px; padding: 2px 8px; font-size: .8rem; direction: ltr;
   }
 }
+
+/* ---------- "מה חדש" (top bar ⓘ) ---------- */
+
+.whats-new-btn { position: relative; display: inline-flex; align-items: center; justify-content: center; }
+.whats-new-btn .icon { width: 20px; height: 20px; }
+.whats-new-dot { display: none; position: absolute; top: 4px; right: 5px; width: 8px; height: 8px; border-radius: 50%; background: #ffb74d; box-shadow: 0 0 0 2px rgba(0,0,0,.15); }
+.whats-new-btn.has-unseen .whats-new-dot { display: block; }
+.whats-new-dialog { width: min(80vw, 520px); max-width: 100%; }
+.whats-new-dialog h3 { display: flex; align-items: center; gap: 8px; margin-top: 0; }
+.whats-new-list { box-sizing: border-box; width: 100%; max-height: 60vh; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; text-align: start; }
+.whats-new-inline { max-height: 40vh; margin: 4px 0 8px; }
+.whats-new-inline h4 { margin: 0; color: var(--accent-700); }
+.whats-new-entry { min-width: 0; overflow-wrap: anywhere; border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; background: var(--card); }
+.whats-new-entry.whats-new-unseen { border-color: var(--accent-600); background: var(--accent-50); }
+.whats-new-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.whats-new-meta { font-size: .78rem; color: var(--ink-soft); white-space: nowrap; }
+.whats-new-entry ul { margin: 6px 0 0; padding-inline-start: 18px; font-size: .9rem; }
+.whats-new-entry li { margin: 2px 0; }
