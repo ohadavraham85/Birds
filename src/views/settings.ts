@@ -2,7 +2,7 @@
  * ייבוא תמונות / התראות / נתונים מקומיים), כל קטגוריה נפתחת כמסך משלה. */
 
 import {
-  listSpecies, addSpecies, deleteSpecies, listSpeciesRows, updateSpeciesDetails,
+  listSpecies, addSpecies, deleteSpecies, listSpeciesRows,
   listLocationRows, addLocation, updateLocationCoords, deleteLocation, seedLocationsFromObservations,
   listTagRows, addTag, updateTag, deleteTag,
   listObserverRows, addObserver, deleteObserver,
@@ -13,7 +13,7 @@ import {
   listFiles, saveFile, getFile, deleteFile,
 } from '../db/repository';
 import { equipmentHtml, wireEquipment } from './equipment';
-import { getSpeciesDetail, listKnownFamilies } from '../lib/species-details-cache';
+import { openSpeciesDetailsEditor } from '../lib/species-details-editor';
 import type { DuplicateGroup } from '../db/repository';
 import { getFirebaseSyncCode, configureFirebaseSync, onFirebaseSyncStatus, isFirebaseSyncActive, forceResyncListsFromCloud, retryMediaUploads, pullAllObservationMedia, retryMissingGalleryDownloads, type FirebaseSyncStatus } from '../firebase/firestore-sync';
 import {
@@ -38,8 +38,8 @@ import {
   currentBgPhoto, setBgPhoto, currentCardTransparency, setCardTransparency, MAX_CARD_TRANSPARENCY,
   type ThemeId, type AccentId, type FontColorId, type FontSizeId, type FontWeightId, type DisplayModeId,
 } from '../lib/theme';
-import type { Observation, LocationRow, TagRow, TagIconName, ObserverRow, SpeciesTag } from '../types';
-import { TAG_ICON_NAMES, SPECIES_TAGS, SPECIES_TAG_LABELS } from '../types';
+import type { Observation, LocationRow, TagRow, TagIconName, ObserverRow } from '../types';
+import { TAG_ICON_NAMES } from '../types';
 
 const TAG_ICON_LABELS: Record<TagIconName, string> = {
   tagRaptor: 'דורסים', tagOwl: 'ינשופים', tagHeron: 'אנפתאים/שיטנים', tagDuck: 'עופות מים',
@@ -918,70 +918,6 @@ async function onSpeciesListClick(e: Event): Promise<void> {
   await deleteSpecies(name);
   await renderSpeciesManageList();
   toast(`"${name}" הוסר מהרשימה`);
-}
-
-/** Full-details editor for a species: English/scientific name and family
- * (all otherwise read from the bundled reference data — an override here
- * takes precedence, see lib/species-details-cache.ts), plus the manual
- * status-badge override. The card badge in the "מינים" tab is auto-derived
- * from the species' own logged observation count (0 → לא נצפה, 1 → לייפר,
- * 2+ → נצפה) unless overridden here to a specific state, which takes
- * priority — same override the badge itself can be clicked to set directly
- * from the "מינים" tab. */
-async function openSpeciesDetailsEditor(name: string): Promise<void> {
-  const d = getSpeciesDetail(name);
-  const rows = await listSpeciesRows();
-  const currentTag = rows.find((r) => r.name === name)?.manualTag || '';
-  const families = listKnownFamilies();
-
-  const backdrop = document.createElement('div');
-  backdrop.className = 'modal-backdrop';
-  backdrop.innerHTML = `
-    <div class="modal bulk-edit-modal">
-      <h3>עריכת פרטי מין — ${escapeHtml(name)}</h3>
-      <div class="field">
-        <label for="spd-en">שם אנגלי</label>
-        <input type="text" id="spd-en" dir="ltr" value="${escapeHtml(d.en)}">
-      </div>
-      <div class="field">
-        <label for="spd-sci">שם מדעי</label>
-        <input type="text" id="spd-sci" dir="ltr" value="${escapeHtml(d.sci)}">
-      </div>
-      <div class="field">
-        <label for="spd-family">משפחה</label>
-        <select id="spd-family">
-          <option value="">ללא משפחה</option>
-          ${families.map((f) => `<option value="${escapeHtml(f)}"${f === d.family ? ' selected' : ''}>${escapeHtml(f)}</option>`).join('')}
-        </select>
-      </div>
-      <div class="field">
-        <label for="spd-tag">סיווג</label>
-        <select id="spd-tag">
-          <option value=""${!currentTag ? ' selected' : ''}>אוטומטי (לפי מספר תצפיות)</option>
-          ${SPECIES_TAGS.map((tag) => `<option value="${tag}"${currentTag === tag ? ' selected' : ''}>${SPECIES_TAG_LABELS[tag]}</option>`).join('')}
-        </select>
-      </div>
-      <p class="hint" style="margin-top:0">אוטומטי: 0 תצפיות → ${SPECIES_TAG_LABELS.unseen}, תצפית אחת → ${SPECIES_TAG_LABELS.lifer}, יותר → ${SPECIES_TAG_LABELS.seen}. סיווג ידני גובר על החישוב האוטומטי — ניתן גם לשנות אותו בלחיצה על התגית ברשימת המינים.</p>
-      <div class="modal-actions">
-        <button class="btn btn-primary" id="spd-save">שמירה</button>
-        <button class="btn" id="spd-cancel">ביטול</button>
-      </div>
-    </div>`;
-  document.getElementById('modal-root')!.appendChild(backdrop);
-  const close = (): void => backdrop.remove();
-  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
-  qs(backdrop, '#spd-cancel').addEventListener('click', close);
-  qs(backdrop, '#spd-save').addEventListener('click', () => {
-    void (async () => {
-      const en = qs<HTMLInputElement>(backdrop, '#spd-en').value.trim();
-      const sci = qs<HTMLInputElement>(backdrop, '#spd-sci').value.trim();
-      const family = qs<HTMLSelectElement>(backdrop, '#spd-family').value;
-      const manualTag = qs<HTMLSelectElement>(backdrop, '#spd-tag').value as SpeciesTag | '';
-      await updateSpeciesDetails(name, { en, sci, family, manualTag });
-      close();
-      toast(`פרטי "${name}" עודכנו`);
-    })();
-  });
 }
 
 /* ---------- species duplicate finder / merge ---------- */
