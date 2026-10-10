@@ -2439,10 +2439,28 @@ table.eq-table { min-width: 980px; }
 
 @media (min-width: 900px) and (pointer: fine) {
   .dash-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
-  .dash-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 16px; align-items: start; }
-  .dash-widget { grid-column: span var(--span, 12); position: relative; min-width: 0; }
-  .dash-widget > .stat-card { margin-bottom: 0; }
-  .dash-widget > .stat-range { margin-bottom: 0; }
+  /* Masonry-style: 8px rows, each widget spanning as many as it needs
+     (set from JS), packed densely so shorter widgets fill the holes. */
+  .dash-grid {
+    display: grid; grid-template-columns: repeat(12, minmax(0, 1fr));
+    grid-auto-rows: 8px; grid-auto-flow: row dense; column-gap: 16px; row-gap: 0;
+  }
+  .dash-widget, .dash-placeholder {
+    grid-column: span var(--span, 12); grid-row: span var(--rows, 20);
+    position: relative; min-width: 0;
+  }
+  .dash-content > .stat-card { margin-bottom: 0; }
+  .dash-content > .stat-range { margin-bottom: 0; }
+  /* A fixed-height widget (resized by hand) keeps its height and scrolls. */
+  .dash-fixed-height .dash-content { height: calc(100% - 16px); overflow: auto; border-radius: var(--radius); }
+  .dash-fixed-height .dash-content > .stat-card { min-height: 100%; box-sizing: border-box; }
+  .dash-placeholder {
+    border: 2px dashed var(--accent-600); border-radius: var(--radius);
+    background: color-mix(in srgb, var(--accent-100) 55%, transparent);
+    margin-bottom: 16px; box-sizing: border-box;
+    animation: dash-ready 1.2s ease-in-out infinite;
+  }
+  @keyframes dash-ready { 50% { background: color-mix(in srgb, var(--accent-100) 85%, transparent); } }
   .dash-drag {
     display: block; position: absolute; top: 4px; left: 50%; transform: translateX(-50%);
     z-index: 5; border: 0; background: var(--accent-100); color: var(--accent-900);
@@ -2450,19 +2468,19 @@ table.eq-table { min-width: 980px; }
     cursor: grab; opacity: 0; transition: opacity .15s; touch-action: none;
   }
   .dash-resize {
-    display: block; position: absolute; bottom: 2px; left: 2px; width: 18px; height: 18px; z-index: 5;
+    display: block; position: absolute; bottom: 18px; left: 2px; width: 18px; height: 18px; z-index: 5;
     cursor: nesw-resize; opacity: 0; transition: opacity .15s; touch-action: none;
     background: linear-gradient(225deg, transparent 50%, var(--accent-600) 50%, var(--accent-600) 60%, transparent 60%, transparent 70%, var(--accent-600) 70%, var(--accent-600) 80%, transparent 80%);
     border-bottom-left-radius: var(--radius);
   }
   .dash-widget:hover .dash-drag, .dash-widget:hover .dash-resize,
-  .dash-dragging .dash-drag, .dash-resizing .dash-resize { opacity: 1; }
+  .dash-floating .dash-drag, .dash-resizing .dash-resize { opacity: 1; }
   .dash-grid-active { user-select: none; }
-  .dash-grid-active .dash-drag { cursor: grabbing; }
-  .dash-dragging { opacity: .55; outline: 2px dashed var(--accent-600); outline-offset: 2px; border-radius: var(--radius); }
-  .dash-resizing { outline: 2px dashed var(--accent-600); outline-offset: 2px; border-radius: var(--radius); }
+  .dash-floating { pointer-events: none; opacity: .9; box-shadow: var(--shadow-lg); border-radius: var(--radius); transform: rotate(-1deg); }
+  .dash-floating .dash-drag { cursor: grabbing; }
+  .dash-resizing .dash-content { outline: 2px dashed var(--accent-600); outline-offset: 2px; }
   .dash-resizing::after {
-    content: attr(data-span-label); position: absolute; top: 8px; right: 8px; z-index: 6;
+    content: attr(data-size-label); position: absolute; top: 8px; right: 8px; z-index: 6;
     background: var(--accent-700); color: #fff; border-radius: 6px; padding: 2px 8px; font-size: .8rem; direction: ltr;
   }
 }

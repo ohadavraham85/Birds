@@ -992,7 +992,7 @@ function render(): void {
     ...statsWidgets(filteredObservations()),
   ];
   qs(container, '#home-body').innerHTML = draftBannerHtml() + smartVoiceButtonHtml() + rangeBarHtml() +
-    `<div class="dash-toolbar"><span class="hint">גררו את ⠿ כדי להזיז כרטיס, ואת הפינה התחתונה כדי לשנות את גודלו.</span>
+    `<div class="dash-toolbar"><span class="hint">גררו את ⠿ כדי להזיז כרטיס, ואת הפינה התחתונה כדי לשנות רוחב וגובה (לחיצה כפולה על הפינה מחזירה לגובה התוכן).</span>
       <button type="button" class="btn btn-sm" id="dash-reset">איפוס סידור</button></div>` +
     dashGridHtml(widgets);
   wireDashGrid(container);
