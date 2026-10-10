@@ -702,6 +702,8 @@ textarea { min-height: 130px; resize: vertical; white-space: pre-wrap; line-heig
 .btn-sm { padding: 6px 12px; font-size: .85rem; border-radius: 8px; }
 .btn-block { width: 100%; padding: 14px; font-size: 1.05rem; }
 .btn-icon { background: var(--accent-50); border: 1px solid var(--line); padding: 8px 10px; }
+/* .btn's display:inline-flex otherwise wins over the hidden attribute. */
+.btn[hidden] { display: none; }
 
 .view-mode-toggle {
   display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden;
@@ -1704,6 +1706,8 @@ a.media-link-icon:hover { color: var(--accent-700); }
 .sp-group-head:hover { background: var(--accent-100); }
 .sp-group-head .sp-caret { color: var(--accent-700); font-size: .75rem; }
 .sp-group-n { background: var(--accent-100); color: var(--accent-900); border-radius: 999px; padding: 1px 10px; font-size: .8rem; }
+.sp-group-head > span:first-child { text-align: right; }
+.sp-group-families { display: block; margin-top: 2px; font-size: .72rem; font-weight: 400; color: var(--ink-soft); line-height: 1.35; }
 
 .sp-card {
   background: var(--card); border: 1px solid var(--line);

@@ -14,6 +14,8 @@ import { qs, input, select } from '../lib/dom';
 import { icon, type IconName } from '../lib/icons';
 import { speciesInfoButtonHtml, openSpeciesInfoModal } from '../lib/species-info';
 import { viewModeToggleHtml, wireViewModeToggle, syncViewModeToggle, type ViewDisplayMode } from '../lib/view-mode';
+import { openSpeciesDetailsEditor } from '../lib/species-details-editor';
+import { generalGroupOf, generalGroupRank } from '../data/species-groups';
 import { navigate } from '../main';
 import type { ViewParams } from './view';
 import type { SpeciesDetail, ObservationImage, SpeciesTag } from '../types';
@@ -43,7 +45,7 @@ function speciesTagBadgeHtml(name: string): string {
   return `<button type="button" class="sp-tagbadge sp-tagbadge-${tag}" data-name="${escapeHtml(name)}" title="לחיצה לשינוי הסיווג — ${label}">${icon(SPECIES_TAG_ICONS[tag])} ${label}</button>`;
 }
 
-type SortMode = 'family' | 'alpha' | 'recent' | 'seen' | 'tag' | 'count' | 'details';
+type SortMode = 'general' | 'family' | 'alpha' | 'recent' | 'seen' | 'tag' | 'count' | 'details';
 type SortDir = 'asc' | 'desc';
 
 let container: HTMLElement;
@@ -55,7 +57,7 @@ let lastObserved: Record<string, string> = {};
 /** Every tag a species has been logged under, across all its observations — a species can span several tags, unlike location/family which are single-valued. */
 let tagsByName: Record<string, Set<string>> = {};
 let query = '';
-let sortMode: SortMode = 'family';
+let sortMode: SortMode = 'general';
 /** 'asc' reproduces each mode's original default ordering; 'desc' reverses it — see the toggle button's dynamic tooltip for what's actually shown. */
 let sortDir: SortDir = 'asc';
 let selectedTags = new Set<string>();
@@ -75,6 +77,7 @@ export function init(el: HTMLElement): void {
     <div class="filter-bar">
       <input type="search" id="sp-q" class="filter-search" placeholder="חיפוש מין (עברית / אנגלית / מדעי / משפחה)...">
       <select id="sp-group" class="filter-sel">
+        <option value="general">קיבוץ כללי</option>
         <option value="family">קיבוץ לפי משפחה</option>
         <option value="seen">נצפה / לא נצפה</option>
         <option value="details">עם פרטים / ללא פרטים</option>
@@ -86,6 +89,8 @@ export function init(el: HTMLElement): void {
       <button type="button" class="btn btn-icon sp-filter-btn" id="sp-filter-btn" title="סינון לפי תגית" aria-label="סינון לפי תגית">
         ${icon('filter')}<span class="filter-badge" id="sp-filter-badge" hidden></span>
       </button>
+      <button type="button" class="btn btn-icon" id="sp-expand-all" title="פתיחת כל הקבוצות" aria-label="פתיחת כל הקבוצות">${icon('chevronsDown')}</button>
+      <button type="button" class="btn btn-icon" id="sp-collapse-all" title="מיזעור כל הקבוצות" aria-label="מיזעור כל הקבוצות">${icon('chevronsUp')}</button>
       <button type="button" class="btn btn-icon" id="sp-sort-btn" title="היפוך סדר" aria-label="היפוך סדר">${icon('sortArrows')}</button>
       ${viewModeToggleHtml('sp-view-mode')}
     </div>
@@ -101,6 +106,11 @@ export function init(el: HTMLElement): void {
   input(container, '#sp-q').addEventListener('input', (e) => { query = (e.target as HTMLInputElement).value; render(); });
   select(container, '#sp-group').addEventListener('change', (e) => { sortMode = (e.target as HTMLSelectElement).value as SortMode; render(); });
   qs(container, '#sp-filter-btn').addEventListener('click', openFilterModal);
+  qs(container, '#sp-expand-all').addEventListener('click', () => { collapsedGroups = new Set(); render(); });
+  qs(container, '#sp-collapse-all').addEventListener('click', () => {
+    collapsedGroups = new Set(names.filter(matches).flatMap(groupKeysOf));
+    render();
+  });
   qs(container, '#sp-sort-btn').addEventListener('click', () => {
     sortDir = sortDir === 'asc' ? 'desc' : 'asc';
     render();
@@ -125,6 +135,7 @@ export function setParams(params: ViewParams): void {
   // regardless of which grouping mode is currently selected
   const family = detailsFor(params.species).family || '(ללא משפחה)';
   collapsedGroups.delete(family);
+  collapsedGroups.delete(generalGroupOf(detailsFor(params.species).family));
   collapsedGroups.delete('נצפה');
   collapsedGroups.delete('לא נצפה');
 }
@@ -195,9 +206,26 @@ function sortAlpha(list: string[]): string[] {
   return [...list].sort((a, b) => (sortDir === 'asc' ? a.localeCompare(b, 'he') : b.localeCompare(a, 'he')));
 }
 
+const GROUPED_MODES: readonly SortMode[] = ['general', 'family', 'seen', 'tag', 'details'];
+
+function groupKeysOf(n: string): string[] {
+  return sortMode === 'general' ? [generalGroupOf(detailsFor(n).family)]
+    : sortMode === 'family' ? [detailsFor(n).family || '(ללא משפחה)']
+    : sortMode === 'seen' ? [counts[n] ? 'נצפה' : 'לא נצפה']
+    : sortMode === 'details' ? [detailsFor(n).en ? 'יש פרטים' : 'אין פרטים']
+    : sortMode === 'tag' ? [...(tagsByName[n] ?? new Set(['(ללא תגית)']))]
+    : [];
+}
+
 function itemsHtml(list: string[]): string {
   if (displayMode === 'list') return list.map(cardHtml).join('');
   return `<div class="obs-tile-grid obs-tile-grid-${displayMode}">${list.map((n) => tileHtml(n, displayMode)).join('')}</div>`;
+}
+
+/** The families folded into a general group, so that detail isn't lost. */
+function familiesSubtitle(items: string[]): string {
+  const fams = [...new Set(items.map((n) => detailsFor(n).family).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'he'));
+  return fams.length ? `<span class="sp-group-families">${escapeHtml(fams.join(' · '))}</span>` : '';
 }
 
 /* ---------- advanced filter modal (by tag) ---------- */
@@ -264,16 +292,18 @@ function render(): void {
   const el = qs(container, '#sp-list');
   if (!list.length) { el.innerHTML = '<p style="color:var(--ink-soft)">אין מין תואם.</p>'; return; }
 
-  if (sortMode === 'family' || sortMode === 'seen' || sortMode === 'tag' || sortMode === 'details') {
+  const grouped = GROUPED_MODES.includes(sortMode);
+  qs<HTMLButtonElement>(container, '#sp-expand-all').hidden = !grouped;
+  qs<HTMLButtonElement>(container, '#sp-collapse-all').hidden = !grouped;
+
+  if (grouped) {
     const groups = new Map<string, string[]>();
     for (const n of list) {
-      const keys = sortMode === 'family' ? [detailsFor(n).family || '(ללא משפחה)']
-        : sortMode === 'seen' ? [counts[n] ? 'נצפה' : 'לא נצפה']
-        : sortMode === 'details' ? [detailsFor(n).en ? 'יש פרטים' : 'אין פרטים']
-        : [...(tagsByName[n] ?? new Set(['(ללא תגית)']))];
-      for (const key of keys) (groups.get(key) ?? groups.set(key, []).get(key)!).push(n);
+      for (const key of groupKeysOf(n)) (groups.get(key) ?? groups.set(key, []).get(key)!).push(n);
     }
-    const keys = sortMode === 'seen'
+    const keys = sortMode === 'general'
+      ? [...groups.keys()].sort((a, b) => (sortDir === 'asc' ? 1 : -1) * (generalGroupRank(a) - generalGroupRank(b)))
+      : sortMode === 'seen'
       ? (sortDir === 'asc' ? ['נצפה', 'לא נצפה'] : ['לא נצפה', 'נצפה']).filter((k) => groups.has(k))
       : sortMode === 'details'
         ? (sortDir === 'asc' ? ['אין פרטים', 'יש פרטים'] : ['יש פרטים', 'אין פרטים']).filter((k) => groups.has(k))
@@ -284,7 +314,7 @@ function render(): void {
       return `
       <div class="sp-group">
         <button type="button" class="sp-group-head" data-group="${escapeHtml(key)}">
-          <span>${escapeHtml(key)} <span class="sp-group-n">${items.length}</span></span>
+          <span>${escapeHtml(key)} <span class="sp-group-n">${items.length}</span>${sortMode === 'general' ? familiesSubtitle(items) : ''}</span>
           <span class="sp-caret">${collapsed ? '▼' : '▲'}</span>
         </button>
         ${collapsed ? '' : itemsHtml(items)}
@@ -479,6 +509,7 @@ function detailsHtml(name: string): string {
       <div class="sp-actions">
         ${n ? `<button class="btn btn-sm btn-primary act-obs" data-name="${escapeHtml(name)}">${icon('list')} הצגת ${n} התצפיות</button>` : ''}
         <button class="btn btn-sm act-report" data-name="${escapeHtml(name)}">${icon('plus')} דיווח תצפית</button>
+        <button class="btn btn-sm act-edit-species" data-name="${escapeHtml(name)}">${icon('edit')} עריכת פרטים</button>
         ${speciesInfoButtonHtml(d.he, d.sci)}
       </div>
     </div>`;
@@ -546,6 +577,12 @@ function onListClick(e: Event): void {
   }
   const obs = target.closest<HTMLElement>('.act-obs');
   if (obs) { e.stopPropagation(); navigate('cards', { filterSpecies: obs.dataset.name! }); return; }
+  const editSpecies = target.closest<HTMLElement>('.act-edit-species');
+  if (editSpecies) {
+    e.stopPropagation();
+    void openSpeciesDetailsEditor(editSpecies.dataset.name!, () => { void activate(); });
+    return;
+  }
   const report = target.closest<HTMLElement>('.act-report');
   if (report) { navigate('form', { species: report.dataset.name! }); return; }
   const groupHead = target.closest<HTMLElement>('.sp-group-head');
