@@ -65,7 +65,7 @@ export function wireStarButton(root: HTMLElement): void {
  * tags/observers hide behind a count toggle. The journal's list display
  * always wants them visible, so it passes false and gets a plain, always-
  * expanded block instead. */
-function headMetaHtml(o: Observation, collapsible = true): string {
+function headMetaHtml(o: Observation, collapsible = true, withThumb = false): string {
   const url = mapsUrl(o);
   const hasPhotos = allImages(o).length > 0;
   const mediaHref = o.mediaLink ? safeHttpUrl(o.mediaLink) : null;
@@ -89,7 +89,11 @@ function headMetaHtml(o: Observation, collapsible = true): string {
           ? `<a href="${url}" target="_blank" rel="noopener" class="place-link">${icon('pin')} ${escapeHtml(o.locationName || 'מיקום')}</a>`
           : `<span>${icon('pin')} ${escapeHtml(o.locationName || '—')}</span>`}
       </div>
-      ${starButtonHtml(o)}
+      ${withThumb ? `
+      <div class="card-side">
+        ${starButtonHtml(o)}
+        <button type="button" class="card-thumb" data-card-thumb aria-label="תמונת התצפית">${icon('bird')}</button>
+      </div>` : starButtonHtml(o)}
     </div>
     <div class="meta">
       ${o.seqNo ? `<span class="obs-seq" dir="ltr">#${o.seqNo}</span>` : ''}
@@ -143,13 +147,41 @@ export function wireCardMetaToggle(root: HTMLElement): void {
 export function renderObservationSummary(o: Observation): HTMLElement {
   const card = document.createElement('article');
   card.className = 'obs-card obs-card-compact';
-  card.innerHTML = headMetaHtml(o, false);
+  card.innerHTML = headMetaHtml(o, false, true);
   applyFamilyAccent(card, o);
   wireStarButton(card);
   wireTagBadges(card);
   wireCardMetaToggle(card);
   wireSeriesBadge(card, o);
+  wireCardThumb(card, o);
   return card;
+}
+
+/** Fills the round photo under the star with the observation's first photo
+ * that actually resolves (tapping it opens the photo full-size). Without a
+ * photo it stays a faint bird placeholder, and a tap opens the card as usual. */
+function wireCardThumb(card: HTMLElement, o: Observation): void {
+  const thumb = card.querySelector<HTMLButtonElement>('[data-card-thumb]');
+  if (!thumb) return;
+  const candidates = allImages(o);
+  if (!candidates.length) return;
+  void (async () => {
+    for (const img of candidates) {
+      const url = await getImageObjectUrl(img, o.id);
+      if (!url) continue;
+      const el = document.createElement('img');
+      el.src = url;
+      el.alt = primarySpecies(o) || o.locationName || 'תצפית';
+      el.loading = 'lazy';
+      thumb.replaceChildren(el);
+      thumb.classList.add('has-photo');
+      thumb.addEventListener('click', (e) => {
+        e.stopPropagation();
+        showImageModal(url, primarySpecies(o) || o.locationName || '');
+      });
+      return;
+    }
+  })();
 }
 
 export function renderObservationCard(o: Observation): HTMLElement {
