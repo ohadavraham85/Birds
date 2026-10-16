@@ -82,18 +82,14 @@ function headMetaHtml(o: Observation, collapsible = true, withThumb = false): st
       </button>
       <div class="card-meta-details" hidden>${metaDetailsHtml}</div>` : `
       <div class="card-meta-details">${metaDetailsHtml}</div>`;
-  return `
+  const body = `
     <div class="card-head">
       <div class="card-place">
         ${url
           ? `<a href="${url}" target="_blank" rel="noopener" class="place-link">${icon('pin')} ${escapeHtml(o.locationName || 'מיקום')}</a>`
           : `<span>${icon('pin')} ${escapeHtml(o.locationName || '—')}</span>`}
       </div>
-      ${withThumb ? `
-      <div class="card-side">
-        ${starButtonHtml(o)}
-        <button type="button" class="card-thumb" data-card-thumb aria-label="תמונת התצפית">${icon('bird')}</button>
-      </div>` : starButtonHtml(o)}
+      ${withThumb ? '' : starButtonHtml(o)}
     </div>
     <div class="meta">
       ${o.seqNo ? `<span class="obs-seq" dir="ltr">#${o.seqNo}</span>` : ''}
@@ -104,6 +100,15 @@ function headMetaHtml(o: Observation, collapsible = true, withThumb = false): st
     </div>
     ${o.seriesId ? `<div class="series-badge-row" data-series-badge="${escapeHtml(o.seriesId)}" hidden></div>` : ''}
     ${tagsObserversHtml}`;
+  if (!withThumb) return body;
+  // The round photo gets its own column spanning the card's full height, so
+  // it can be sized to the card instead of stretching the top row.
+  return `
+    <div class="card-body">${body}</div>
+    <div class="card-side">
+      <button type="button" class="card-thumb" data-card-thumb aria-label="תמונת התצפית">${icon('bird')}</button>
+      ${starButtonHtml(o)}
+    </div>`;
 }
 
 /** Fills in the series badge placeholder rendered by `headMetaHtml()` (if
