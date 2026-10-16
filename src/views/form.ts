@@ -78,6 +78,8 @@ let obsId = '';
 let savedLocations = new Map<string, LocationRow>();
 let currentLat: number | null = null;
 let currentLng: number | null = null;
+/** True while currentLat/Lng are only the saved location's stand-in point
+ * (no real GPS fix or map pick yet) — a real point replaces them. */
 let coordsLocked = false;
 let trackTimerHandle: ReturnType<typeof setInterval> | null = null;
 /** The observation's already-saved track when editing (if any) — the first
@@ -804,7 +806,7 @@ export async function activate(): Promise<void> {
   }
   if (prefillLocationName) input(container, '#f-location').value = prefillLocationName;
   applyLocationName(input(container, '#f-location').value);
-  if (prefillCoords) qs(container, '#gps-status').textContent = coordsLocked ? '(מיקום קבוע)' : '(נבחר על המפה)';
+  if (prefillCoords) qs(container, '#gps-status').textContent = '(נבחר על המפה)';
   if (prefillDate) {
     const [y, m, d] = prefillDate.split('-').map(Number);
     const now = new Date();
@@ -927,6 +929,7 @@ async function loadForEdit(id: string): Promise<void> {
   renderTagPicker();
   currentLat = obs.lat ?? null;
   currentLng = obs.lng ?? null;
+  coordsLocked = false;
   applyLocationName(obs.locationName || '');
   const entries = entriesOf(obs);
   // legacy top-level images fold into the first entry for editing
@@ -1145,20 +1148,24 @@ async function onQuickAddTag(): Promise<void> {
 
 /* ---------- location ---------- */
 
-/** Locks the coordinates to a saved location's fixed lat/lng whenever the
- * location field's text matches one (Settings → ניהול רשימת המיקומים) — the
- * whole point of a saved location is that its coordinates don't drift.
- * Any other (new/unrecognized) name leaves coordinates editable via the map. */
+/** The location name is just a label — a saved location (e.g. "נחל יששכר")
+ * can cover a large area, so the observation's own point (GPS fix or map
+ * pick) is what records where the bird actually was, and is never replaced
+ * by the saved location's point. That point is only a stand-in when there's
+ * no real one yet (coordsLocked), and a later GPS fix or map pick replaces it. */
 function applyLocationName(name: string): void {
   const saved = savedLocations.get(name.trim());
+  const hasRealPoint = currentLat != null && currentLng != null && !coordsLocked;
   if (saved && saved.lat != null && saved.lng != null) {
-    currentLat = saved.lat;
-    currentLng = saved.lng;
-    coordsLocked = true;
-  } else {
-    // Leaving a locked (saved) location for an unrecognized name: that saved
-    // place's coordinates belong to it, not to whatever's being typed now.
-    if (coordsLocked) { currentLat = null; currentLng = null; }
+    if (!hasRealPoint) {
+      currentLat = saved.lat;
+      currentLng = saved.lng;
+      coordsLocked = true;
+    }
+  } else if (coordsLocked) {
+    // The stand-in point belonged to the previously typed saved location.
+    currentLat = null;
+    currentLng = null;
     coordsLocked = false;
   }
   updateLocationPinUI();
@@ -1169,7 +1176,7 @@ function updateLocationPinUI(): void {
   const btn = qs<HTMLButtonElement>(container, '#pick-map-btn');
   btn.classList.toggle('locked', coordsLocked);
   const title = coordsLocked
-    ? 'מיקום קבוע — הצגה על המפה'
+    ? 'נקודת המיקום השמור — לחיצה לסימון הנקודה המדויקת על המפה'
     : currentLat != null && currentLng != null
       ? 'מיקום נבחר — לחיצה לשינוי על המפה'
       : 'בחירת מיקום על המפה';
@@ -1181,11 +1188,10 @@ function updateLocationPinUI(): void {
  * a fix lands within this many meters of it. */
 const NEARBY_LOCATION_RADIUS_M = 500;
 
-/** Whenever coordinates are (re)established — GPS auto-fill or a manual map
- * pick — snaps the location name to the closest saved location if one falls
- * within NEARBY_LOCATION_RADIUS_M, the same way typing a saved name locks
- * coordinates to it (see applyLocationName). Silently no-ops otherwise, so
- * an unrecognized spot just keeps whatever name/coords were set. */
+/** Whenever a real point is established — GPS auto-fill or a manual map
+ * pick — fills in the name of the closest saved location if one falls within
+ * NEARBY_LOCATION_RADIUS_M. Only the name: the point itself is kept (see
+ * applyLocationName). Silently no-ops otherwise. */
 function maybeSnapToNearbySavedLocation(lat: number, lng: number): void {
   let nearest: LocationRow | null = null;
   let nearestDist = Infinity;
@@ -1203,13 +1209,14 @@ function maybeSnapToNearbySavedLocation(lat: number, lng: number): void {
 function autoFillGps(): void {
   const status = qs(container, '#gps-status');
   if (!navigator.geolocation) { status.textContent = '(GPS לא זמין)'; return; }
-  if (currentLat != null || currentLng != null) return;
+  if (currentLat != null && !coordsLocked) return;
   status.textContent = '(מאתר מיקום...)';
   navigator.geolocation.getCurrentPosition(
     (pos) => {
-      if (currentLat != null || currentLng != null) return; // don't clobber a manual/map choice
+      if (currentLat != null && !coordsLocked) return; // don't clobber a manual/map choice
       currentLat = pos.coords.latitude;
       currentLng = pos.coords.longitude;
+      coordsLocked = false;
       status.textContent = `(דיוק ±${Math.round(pos.coords.accuracy)} מ')`;
       updateLocationPinUI();
       maybeSnapToNearbySavedLocation(currentLat, currentLng);
@@ -1221,11 +1228,11 @@ function autoFillGps(): void {
 
 async function openPicker(): Promise<void> {
   const initial = currentLat != null && currentLng != null ? { lat: currentLat, lng: currentLng } : null;
-  if (coordsLocked) { await pickLocation(initial, { readonly: true }); return; }
   const result = await pickLocation(initial);
   if (result) {
     currentLat = result.lat;
     currentLng = result.lng;
+    coordsLocked = false;
     qs(container, '#gps-status').textContent = '(נבחר על המפה)';
     updateLocationPinUI();
     maybeSnapToNearbySavedLocation(currentLat, currentLng);
