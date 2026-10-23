@@ -11,12 +11,17 @@ export interface ComboOptions {
   getDefault?: () => string[];
   /** Fired when a suggestion is picked (click or Enter) — not on free typing. */
   onSelect?: (value: string) => void;
+  /** Replaces the ▾ button's inline open/close with a custom picker. */
+  onToggle?: () => void;
 }
 
 export function wireCombo(inp: HTMLInputElement, list: HTMLElement, getSuggestions: () => string[], opts: ComboOptions = {}): void {
   const toggle = inp.closest('.combo')?.querySelector<HTMLButtonElement>('.combo-toggle');
   const matchMode = opts.matchMode ?? 'contains';
   let hlIndex = -1;
+  let openedAt = 0;
+  let blurTimer: ReturnType<typeof setTimeout> | null = null;
+  const cancelBlurClose = (): void => { if (blurTimer) { clearTimeout(blurTimer); blurTimer = null; } };
   const highlight = (s: string, q: string): string => {
     const esc = escapeHtml(s);
     return q ? esc.replaceAll(escapeHtml(q), `<mark>${escapeHtml(q)}</mark>`) : esc;
@@ -27,7 +32,7 @@ export function wireCombo(inp: HTMLInputElement, list: HTMLElement, getSuggestio
     if (showAll) matches = getSuggestions();
     else if (!q) matches = opts.getDefault ? opts.getDefault() : getSuggestions();
     else {
-      matches = getSuggestions().filter((s) => (matchMode === 'prefix' ? s.startsWith(q) : s.includes(q)));
+      matches = getSuggestions().filter((s) => (matchMode === 'prefix' ? String(s).startsWith(q) : String(s).includes(q)));
       // Tapping a field that already holds a value (e.g. a restored draft's
       // "מורדות נחל יששכר") would otherwise filter down to nothing, or just
       // that same value, and the list would never open — show everything.
@@ -39,6 +44,8 @@ export function wireCombo(inp: HTMLInputElement, list: HTMLElement, getSuggestio
     list.innerHTML = matches
       .map((s) => `<button type="button" data-name="${escapeHtml(s)}">${highlight(s, showAll ? '' : q)}</button>`)
       .join('');
+    cancelBlurClose();
+    if (list.hidden) openedAt = Date.now();
     list.hidden = false;
   };
   inp.addEventListener('focus', () => render(false, true));
@@ -70,7 +77,15 @@ export function wireCombo(inp: HTMLInputElement, list: HTMLElement, getSuggestio
   });
   toggle?.addEventListener('mousedown', (e) => {
     e.preventDefault();
-    if (list.hidden) { inp.focus(); render(true); } else { list.hidden = true; }
+    if (opts.onToggle) { list.hidden = true; opts.onToggle(); return; }
+    // On a phone the same tap can focus the field (which opens the list)
+    // just before this handler runs — don't immediately close it again.
+    if (list.hidden || Date.now() - openedAt < 500) { inp.focus(); render(true); } else { list.hidden = true; }
   });
-  inp.addEventListener('blur', () => setTimeout(() => { list.hidden = true; }, 150));
+  // A blur that's followed by a quick re-focus (common on phones as the
+  // keyboard opens) must not close the list the re-focus just opened.
+  inp.addEventListener('blur', () => {
+    cancelBlurClose();
+    blurTimer = setTimeout(() => { blurTimer = null; list.hidden = true; }, 150);
+  });
 }

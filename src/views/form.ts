@@ -274,6 +274,7 @@ export function init(el: HTMLElement): void {
   input(container, '#f-observer-new').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); void onQuickAddObserver(); } });
   wireCombo(input(container, '#f-location'), qs(container, '#location-list'), () => locationSuggestions, {
     onSelect: (name) => applyLocationName(name),
+    onToggle: () => openLocationSheet(),
   });
   input(container, '#f-location').addEventListener('input', (e) => applyLocationName((e.target as HTMLInputElement).value));
   qs(container, '#pick-map-btn').addEventListener('click', () => void openPicker());
@@ -1177,6 +1178,51 @@ function applyLocationName(name: string): void {
   }
   updateLocationPinUI();
   scheduleDraftSave();
+}
+
+/** The ▾ next to the location field: a full picker in a modal (recent first,
+ * with search), which a phone's keyboard or scrolling can't close on the user
+ * the way the inline dropdown can. Typing a name that isn't listed offers it
+ * as a new location. */
+function openLocationSheet(): void {
+  const field = input(container, '#f-location');
+  field.blur();
+  const current = field.value.trim();
+  const wrap = document.createElement('div');
+  wrap.className = 'gallery-assoc-modal';
+  wrap.innerHTML = `
+    <h3>${icon('pin')} בחירת מיקום</h3>
+    <input type="search" class="gallery-assoc-search" placeholder="חיפוש מיקום..." aria-label="חיפוש מיקום">
+    <div class="gallery-assoc-list"></div>`;
+  const close = showModal(wrap);
+  const search = wrap.querySelector<HTMLInputElement>('.gallery-assoc-search')!;
+  const listEl = wrap.querySelector<HTMLElement>('.gallery-assoc-list')!;
+  const draw = (): void => {
+    const q = search.value.trim();
+    const items = q ? locationSuggestions.filter((n) => String(n).includes(q)) : locationSuggestions;
+    const rows = items.map((n) => `
+      <button type="button" class="map-sheet-item" data-name="${escapeHtml(n)}">
+        <span class="map-sheet-item-species">${escapeHtml(n)}</span>
+        ${n === current ? `<span class="map-sheet-item-date">${icon('check')} נבחר</span>` : ''}
+      </button>`);
+    if (q && !locationSuggestions.includes(q)) {
+      rows.push(`
+      <button type="button" class="map-sheet-item" data-name="${escapeHtml(q)}">
+        <span class="map-sheet-item-species">${icon('plus')} מיקום חדש: ${escapeHtml(q)}</span>
+      </button>`);
+    }
+    listEl.innerHTML = rows.join('') || '<p class="hint">אין עדיין מיקומים שמורים — הקלידו שם בשדה החיפוש.</p>';
+  };
+  draw();
+  search.addEventListener('input', draw);
+  listEl.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-name]');
+    if (!btn) return;
+    const name = btn.dataset.name!;
+    close();
+    field.value = name;
+    applyLocationName(name);
+  });
 }
 
 function updateLocationPinUI(): void {
