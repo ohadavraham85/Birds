@@ -18,6 +18,11 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: 22, date: '2026-10-23',
+    title: 'אייקון דרייב בגיבוי',
+    items: ['לכפתורי הגיבוי לדרייב ולתזכורת השבועית יש עכשיו אייקון של דרייב.'],
+  },
+  {
     id: 21, date: '2026-10-23',
     title: 'גיבוי שבועי לדרייב',
     items: [
