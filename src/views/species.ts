@@ -76,7 +76,8 @@ export function init(el: HTMLElement): void {
     <h2>רשימת המינים</h2>
     <div class="filter-bar">
       <input type="search" id="sp-q" class="filter-search" placeholder="חיפוש מין (עברית / אנגלית / מדעי / משפחה)...">
-      <select id="sp-group" class="filter-sel">
+      <button type="button" class="btn btn-icon sp-tools-toggle" id="sp-tools-btn" title="אפשרויות תצוגה" aria-label="אפשרויות תצוגה" aria-expanded="false"><span aria-hidden="true">⋯</span></button>
+      <select id="sp-group" class="filter-sel sp-tool">
         <option value="general">קיבוץ כללי</option>
         <option value="family">קיבוץ לפי משפחה</option>
         <option value="seen">נצפה / לא נצפה</option>
@@ -86,26 +87,34 @@ export function init(el: HTMLElement): void {
         <option value="recent">לפי תצפית אחרונה</option>
         <option value="count">לפי מספר צפיות</option>
       </select>
-      <button type="button" class="btn btn-icon sp-filter-btn" id="sp-filter-btn" title="סינון לפי תגית" aria-label="סינון לפי תגית">
+      <button type="button" class="btn btn-icon sp-filter-btn sp-tool" id="sp-filter-btn" title="סינון לפי תגית" aria-label="סינון לפי תגית">
         ${icon('filter')}<span class="filter-badge" id="sp-filter-badge" hidden></span>
       </button>
-      <button type="button" class="btn btn-icon" id="sp-expand-all" title="פתיחת כל הקבוצות" aria-label="פתיחת כל הקבוצות">${icon('chevronsDown')}</button>
-      <button type="button" class="btn btn-icon" id="sp-collapse-all" title="מיזעור כל הקבוצות" aria-label="מיזעור כל הקבוצות">${icon('chevronsUp')}</button>
-      <button type="button" class="btn btn-icon" id="sp-sort-btn" title="היפוך סדר" aria-label="היפוך סדר">${icon('sortArrows')}</button>
-      ${viewModeToggleHtml('sp-view-mode')}
+      <button type="button" class="btn btn-icon sp-tool" id="sp-expand-all" title="פתיחת כל הקבוצות" aria-label="פתיחת כל הקבוצות">${icon('chevronsDown')}</button>
+      <button type="button" class="btn btn-icon sp-tool" id="sp-collapse-all" title="מיזעור כל הקבוצות" aria-label="מיזעור כל הקבוצות">${icon('chevronsUp')}</button>
+      <button type="button" class="btn btn-icon sp-tool" id="sp-sort-btn" title="היפוך סדר" aria-label="היפוך סדר">${icon('sortArrows')}</button>
+      <span class="sp-tool">${viewModeToggleHtml('sp-view-mode')}</span>
     </div>
-    <div class="add-species-row">
+    <div class="add-species-row sp-tool">
       <input type="text" id="sp-new" placeholder="הוספת מין חדש לרשימה...">
       <button class="btn" id="sp-add">${icon('plus')} הוספה</button>
     </div>
     <p class="sp-summary" id="sp-summary"></p>
-    <button type="button" class="btn btn-sm" id="sp-copy-missing">${icon('document')} העתקת רשימת מינים ללא פרטים</button>
+    <button type="button" class="btn btn-sm sp-tool" id="sp-copy-missing">${icon('document')} העתקת רשימת מינים ללא פרטים</button>
     <div id="sp-list" class="sp-cards"></div>
   `;
   wireViewModeToggle(container, 'sp-view-mode', (mode) => { displayMode = mode; render(); });
   input(container, '#sp-q').addEventListener('input', (e) => { query = (e.target as HTMLInputElement).value; render(); });
   select(container, '#sp-group').addEventListener('change', (e) => { sortMode = (e.target as HTMLSelectElement).value as SortMode; render(); });
   qs(container, '#sp-filter-btn').addEventListener('click', openFilterModal);
+  // Phone only (see .sp-tools-toggle in app.css): everything but the search
+  // folds away behind ⋯ so the list starts near the top of the screen.
+  const toolsBtn = qs<HTMLButtonElement>(container, '#sp-tools-btn');
+  toolsBtn.addEventListener('click', () => {
+    const open = container.classList.toggle('sp-tools-open');
+    toolsBtn.setAttribute('aria-expanded', String(open));
+    toolsBtn.classList.toggle('active', open);
+  });
   qs(container, '#sp-expand-all').addEventListener('click', () => { collapsedGroups = new Set(); render(); });
   qs(container, '#sp-collapse-all').addEventListener('click', () => {
     collapsedGroups = new Set(names.filter(matches).flatMap(groupKeysOf));

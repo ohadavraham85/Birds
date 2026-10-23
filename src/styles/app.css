@@ -2538,3 +2538,45 @@ table.eq-table { min-width: 980px; }
 .whats-new-meta { font-size: .78rem; color: var(--ink-soft); white-space: nowrap; }
 .whats-new-entry ul { margin: 6px 0 0; padding-inline-start: 18px; font-size: .9rem; }
 .whats-new-entry li { margin: 2px 0; }
+
+/* ---------- compact phone layout ---------- */
+/* Phone only: a shorter top bar and a flat tab bar, and in the species tab
+ * the toolbar folds behind ⋯ so more of the list fits on screen. Desktop is
+ * unchanged. Kept last so it wins over the general rules above. */
+.sp-tools-toggle { display: none; }
+@media (max-width: 600px) {
+  :root { --topbar-h: 52px; --tabbar-h: 56px; }
+  .topbar { padding: 0 10px; }
+  .topbar-datetime, .topbar-version, .topbar-owner, .topbar-flying-bird { display: none; }
+  .topbar-title h1 { font-size: 1.05rem; }
+  .topbar-actions { gap: 8px; }
+  .sync-pill { padding: 4px 6px; }
+  .sync-pill span { display: none; }
+
+  .tab-home { justify-content: center; color: var(--ink-soft); }
+  .tab-home .tab-icon {
+    width: auto; height: auto; margin-top: 0; border: 0; border-radius: 0;
+    background: none; color: inherit; box-shadow: none;
+  }
+  .tab-home.active .tab-icon { background: none; transform: scale(1.12); }
+  .tab-home.active::before { display: block; }
+
+  .view:not(.view-flush) { padding: 12px; }
+  .view h2 { font-size: 1.15rem; margin: 2px 0 10px; }
+
+  .sp-tools-toggle { display: inline-flex; font-size: 1.3rem; line-height: 1; }
+  #view-species .filter-bar { flex-wrap: wrap; }
+  #view-species .filter-search { flex: 1 1 calc(100% - 64px); min-width: 0; }
+  #view-species .filter-bar .filter-sel { flex: 1 1 auto; }
+  #view-species:not(.sp-tools-open) .sp-tool { display: none; }
+  .sp-summary { font-size: .8rem; margin: 0 0 8px; }
+  .sp-cards { gap: 6px; }
+  .sp-card .sp-row { padding: 8px 12px; }
+  .sp-group { margin-bottom: 6px; }
+  .sp-group-head { padding: 6px 10px; margin-bottom: 4px; }
+  .obs-tile-grid-square { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; }
+  /* A species tile with no photo yet: a short strip instead of a full square of logo. */
+  .sp-tile-head:has(.obs-tile-fallback-icon) { aspect-ratio: auto; }
+  .sp-tile-head:has(.obs-tile-fallback-icon) .obs-tile-media { flex: none; height: 52px; }
+  .sp-tile-head:has(.obs-tile-fallback-icon) .obs-tile-fallback-icon { width: 30px; height: 30px; }
+}
