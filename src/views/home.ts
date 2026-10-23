@@ -6,21 +6,20 @@
  * ולחיצה על כל נתון שמפנה ליומן/ללוח השנה המסונן. חוזרים למסך הזה תמיד
  * באותו מצב סינון/גרפים וגלילה שהיו כשיצאת ממנו (למשל אחרי לחיצה על גרף). */
 
-import { listObservations, listSpeciesRows, listAllMedia, listSeriesRows, saveSeries, deleteSeries, getSetting, setSetting } from '../db/repository';
+import { listObservations, listSpeciesRows, listAllMedia, getSetting, setSetting } from '../db/repository';
 import { getSpeciesDetail, speciesStatusTag } from '../lib/species-details-cache';
 import { SPECIES_DETAILS } from '../data/species-data';
 import { speciesNames, speciesLabel, entriesOf, entryImages } from '../lib/observation';
 import { getImageObjectUrl } from '../lib/media';
 import { escapeHtml } from '../lib/markdown';
-import { fmtDateTime, confirmDialog, showModal, toast } from '../lib/ui';
+import { fmtDateTime, showModal, toast } from '../lib/ui';
 import { icon, type IconName } from '../lib/icons';
 import { listDrafts, clearDraft } from '../lib/draft';
 import { openSmartVoiceModal } from '../lib/voice-observation-modal';
-import { seriesDayLabel, isSeriesOverdue, openCreateSeriesModal, seriesPhotoCandidates, seriesChain, seriesYear } from '../lib/series';
 import { qs, input } from '../lib/dom';
 import { navigate } from '../main';
 import { loadDashLayout, resetDashLayout, dashGridHtml, wireDashGrid, type DashWidget } from '../lib/dashboard-layout';
-import type { Observation, ObservationImage, SeriesRow, SpeciesTag } from '../types';
+import type { Observation, ObservationImage, SpeciesTag } from '../types';
 
 type BreakdownKind = 'species' | 'location' | 'tag';
 type ChartMode = 'bar' | 'pie';
@@ -45,16 +44,6 @@ let manualTags = new Map<string, SpeciesTag>();
  * first one per species, used as a fallback photo when a species has no
  * observation photo yet. */
 let orphanPhotoBySpecies: Record<string, ObservationImage> = {};
-/** Active "מעקבים" (tracking series) — see types.ts's SeriesRow and
- * lib/series.ts. Shown as a widget on the home screen with a live day
- * counter, so opening a new observation for an ongoing nesting/migration
- * watch always shows exactly how far along it is. */
-let activeSeries: SeriesRow[] = [];
-/** Every series (any status) — only needed to compute multi-phase chains
- * (lib/series.ts's seriesChain) for the widget's rows, since a chain's
- * earlier phase can be 'completed' while the current one is still active. */
-let allSeriesRows: SeriesRow[] = [];
-
 const chartMode: Record<BreakdownKind, ChartMode> = { species: 'pie', location: 'bar', tag: 'bar' };
 let yearMode: 'bar' | 'line' = 'bar';
 
@@ -77,8 +66,6 @@ export async function activate(): Promise<void> {
   const speciesRows = await listSpeciesRows();
   speciesMasterList = speciesRows.map((r) => r.name);
   manualTags = new Map(speciesRows.flatMap((r) => (r.manualTag ? [[r.name, r.manualTag] as const] : [])));
-  allSeriesRows = await listSeriesRows();
-  activeSeries = allSeriesRows.filter((s) => s.status === 'active');
   goalsSettings = await getSetting<GoalsSettings>('birdingGoals', DEFAULT_GOALS_SETTINGS);
   await loadDashLayout();
   orphanPhotoBySpecies = {};
@@ -86,96 +73,6 @@ export async function activate(): Promise<void> {
     if (m.obsId || !m.species || orphanPhotoBySpecies[m.species]) continue;
     orphanPhotoBySpecies[m.species] = { localId: m.id, name: m.name, remoteId: m.remoteId };
   }
-  render();
-}
-
-/* ---------- active series ("מעקבים פעילים") widget ---------- */
-
-function seriesWidgetHtml(): string {
-  const head = `
-    <div class="stat-card-head">
-      <h3>${icon('target')} מעקבים פעילים</h3>
-      <div class="series-widget-head-actions">
-        <button type="button" class="btn btn-sm" id="series-widget-library">${icon('folder')} ספריית מעקבים</button>
-        <button type="button" class="btn btn-icon" id="series-widget-add" title="מעקב חדש" aria-label="מעקב חדש">${icon('plus')}</button>
-      </div>
-    </div>`;
-  if (!activeSeries.length) {
-    return `<div class="stat-card series-widget">${head}<p class="hint">אין מעקבים פעילים כרגע — לחצו על ${icon('plus')} כדי להתחיל אחד.</p></div>`;
-  }
-  const now = new Date();
-  const sorted = [...activeSeries].sort((a, b) => {
-    const ya = seriesYear(a), yb = seriesYear(b);
-    if (ya !== yb) return yb - ya; // newest year first
-    const ao = isSeriesOverdue(a, now) ? 0 : 1;
-    const bo = isSeriesOverdue(b, now) ? 0 : 1;
-    return ao !== bo ? ao - bo : b.startDate.localeCompare(a.startDate);
-  });
-  const rows = sorted.map((s) => {
-    const overdue = isSeriesOverdue(s, now);
-    const chain = seriesChain(s, allSeriesRows);
-    const phaseLabel = chain.length > 1 ? ` <span class="series-widget-phase">${icon('link')} שלב ${chain.findIndex((c) => c.id === s.id) + 1}/${chain.length}</span>` : '';
-    return `
-      <div class="series-widget-row${overdue ? ' overdue' : ''}">
-        <button type="button" class="series-widget-main" data-series-open="${s.id}">
-          <span class="series-widget-year">${seriesYear(s)}</span>
-          <span class="series-widget-thumb" data-thumb-series="${s.id}">${icon('target')}</span>
-          <span class="series-widget-text">
-            <span class="series-widget-name">${overdue ? icon('alert') : ''}${escapeHtml(s.name)}${s.species ? ` <span class="series-widget-species">· ${escapeHtml(s.species)}</span>` : ''}${phaseLabel}</span>
-            <span class="series-widget-day">${escapeHtml(seriesDayLabel(s, now))}</span>
-          </span>
-        </button>
-        <div class="series-widget-actions">
-          <button type="button" class="btn btn-icon" data-series-complete="${s.id}" title="סימון כהושלם" aria-label="סימון כהושלם">${icon('check')}</button>
-          <button type="button" class="btn btn-icon" data-series-abandon="${s.id}" title="סימון כנכשל" aria-label="סימון כנכשל">✕</button>
-          <button type="button" class="btn btn-icon" data-series-delete="${s.id}" title="מחיקת המעקב" aria-label="מחיקת המעקב">${icon('trash')}</button>
-        </div>
-      </div>`;
-  }).join('');
-  return `<div class="stat-card series-widget">${head}<div class="series-widget-list">${rows}</div></div>`;
-}
-
-/** Fills in each widget row's round cover thumbnail — a photo from one of
- * the series' own linked observations — same approach and fallback (the
- * generic target icon) as the series library's own list rows. */
-function renderSeriesWidgetThumbnails(): void {
-  for (const el of container.querySelectorAll<HTMLElement>('.series-widget-thumb[data-thumb-series]')) {
-    const series = activeSeries.find((s) => s.id === el.dataset.thumbSeries);
-    if (!series) continue;
-    const candidates = seriesPhotoCandidates(series, allObservations);
-    if (!candidates.length) continue;
-    void (async () => {
-      for (const { img, obsId } of candidates) {
-        const url = await getImageObjectUrl(img, obsId);
-        if (!url) continue;
-        el.innerHTML = '';
-        const imgEl = document.createElement('img');
-        imgEl.src = url;
-        imgEl.alt = series.name;
-        imgEl.loading = 'lazy';
-        el.appendChild(imgEl);
-        return;
-      }
-    })();
-  }
-}
-
-async function onSeriesStatusChange(id: string, status: SeriesRow['status']): Promise<void> {
-  const series = activeSeries.find((s) => s.id === id);
-  if (!series) return;
-  await saveSeries({ ...series, status });
-  allSeriesRows = await listSeriesRows();
-  activeSeries = allSeriesRows.filter((s) => s.status === 'active');
-  render();
-}
-
-async function onSeriesDelete(id: string): Promise<void> {
-  const series = activeSeries.find((s) => s.id === id);
-  if (!series) return;
-  if (!(await confirmDialog(`למחוק את המעקב "${series.name}"? התצפיות המקושרות אליו יישארו, אך יאבדו את הקישור.`, 'מחיקת מעקב'))) return;
-  await deleteSeries(id);
-  allSeriesRows = await listSeriesRows();
-  activeSeries = allSeriesRows.filter((s) => s.status === 'active');
   render();
 }
 
@@ -1056,7 +953,6 @@ function smartVoiceButtonHtml(): string {
 function render(): void {
   const widgets: DashWidget[] = [
     { id: 'mySpecies', title: 'המינים שלי', defaultSpan: 12, html: mySpeciesHtml() },
-    { id: 'series', title: 'מעקבים פעילים', defaultSpan: 12, html: seriesWidgetHtml() },
     { id: 'birdOfDay', title: 'ציפור היום', defaultSpan: 6, html: birdOfDayHtml() },
     { id: 'onThisDay', title: 'בתאריך הזה', defaultSpan: 6, html: onThisDayHtml() },
     ...statsWidgets(filteredObservations()),
@@ -1068,7 +964,6 @@ function render(): void {
   wireDashGrid(container);
   renderBirdOfDayPhoto();
   renderOnThisDayPhoto();
-  renderSeriesWidgetThumbnails();
 }
 
 function onClick(e: Event): void {
@@ -1085,25 +980,6 @@ function onClick(e: Event): void {
 
   const monthValueBtn = target.closest<HTMLElement>('.goal-legend-value-btn');
   if (monthValueBtn) { startEditMonthGoal(monthValueBtn); return; }
-
-  if (target.closest('#series-widget-library')) { navigate('series'); return; }
-  if (target.closest('#series-widget-add')) {
-    void openCreateSeriesModal(speciesMasterList).then(async (created) => {
-      if (!created) return;
-      allSeriesRows = await listSeriesRows();
-      activeSeries = allSeriesRows.filter((s) => s.status === 'active');
-      render();
-    });
-    return;
-  }
-  const seriesOpen = target.closest<HTMLElement>('[data-series-open]');
-  if (seriesOpen) { navigate('series', { seriesId: seriesOpen.dataset.seriesOpen! }); return; }
-  const seriesComplete = target.closest<HTMLElement>('[data-series-complete]');
-  if (seriesComplete) { void onSeriesStatusChange(seriesComplete.dataset.seriesComplete!, 'completed'); return; }
-  const seriesAbandon = target.closest<HTMLElement>('[data-series-abandon]');
-  if (seriesAbandon) { void onSeriesStatusChange(seriesAbandon.dataset.seriesAbandon!, 'abandoned'); return; }
-  const seriesDelete = target.closest<HTMLElement>('[data-series-delete]');
-  if (seriesDelete) { void onSeriesDelete(seriesDelete.dataset.seriesDelete!); return; }
 
   const draftAction = target.closest<HTMLElement>('[data-draft-action]');
   if (draftAction) {
