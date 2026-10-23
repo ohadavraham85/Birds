@@ -6,9 +6,9 @@
  * ולחיצה על כל נתון שמפנה ליומן/ללוח השנה המסונן. חוזרים למסך הזה תמיד
  * באותו מצב סינון/גרפים וגלילה שהיו כשיצאת ממנו (למשל אחרי לחיצה על גרף). */
 
-import { listObservations, listSpeciesRows, listAllMedia, getSetting, setSetting } from '../db/repository';
+import { listObservations, listSpeciesRows, listAllMedia, listLocationRows, getSetting, setSetting } from '../db/repository';
 import { getSpeciesDetail, speciesStatusTag } from '../lib/species-details-cache';
-import { SPECIES_DETAILS } from '../data/species-data';
+import { isInIsrael } from '../lib/israel';
 import { speciesNames, speciesLabel, entriesOf, entryImages } from '../lib/observation';
 import { getImageObjectUrl } from '../lib/media';
 import { escapeHtml } from '../lib/markdown';
@@ -39,6 +39,8 @@ let allObservations: Observation[] = [];
 let speciesMasterList: string[] = [];
 /** Status badges set by hand in the species tab (SpeciesRow.manualTag). */
 let manualTags = new Map<string, SpeciesTag>();
+/** Saved places' points, for an observation that has no point of its own. */
+let locationPoints = new Map<string, { lat: number; lng: number }>();
 /** Gallery photos tagged with a species directly (no observation link) —
  * first one per species, used as a fallback photo when a species has no
  * observation photo yet. */
@@ -65,6 +67,8 @@ export async function activate(): Promise<void> {
   const speciesRows = await listSpeciesRows();
   speciesMasterList = speciesRows.map((r) => r.name);
   manualTags = new Map(speciesRows.flatMap((r) => (r.manualTag ? [[r.name, r.manualTag] as const] : [])));
+  locationPoints = new Map((await listLocationRows()).flatMap((l) =>
+    (l.lat != null && l.lng != null ? [[l.name, { lat: l.lat, lng: l.lng }] as const] : [])));
   goalsSettings = await getSetting<GoalsSettings>('birdingGoals', DEFAULT_GOALS_SETTINGS);
   await loadDashLayout();
   orphanPhotoBySpecies = {};
@@ -278,12 +282,17 @@ type SpeciesSetKey = 'all' | 'seen' | 'target' | 'lifers' | 'foreign';
 /** Every species count on the card, as the actual names so a tap can show
  * exactly those species. Target species and lifers follow the same status
  * badge as the species tab (lifer = exactly one observation, unless marked
- * otherwise by hand); "לא מהארץ" = species not in the bundled Israeli list
- * (data/species-data.ts). */
+ * otherwise by hand); "לא מהארץ" = species observed at least once abroad. */
 function speciesSets(): Record<SpeciesSetKey, string[]> {
   const counts = new Map<string, number>();
+  const abroad = new Set<string>();
   for (const o of allObservations) {
-    for (const name of speciesNames(o)) if (name) counts.set(name, (counts.get(name) || 0) + 1);
+    const outside = isAbroad(o);
+    for (const name of speciesNames(o)) {
+      if (!name) continue;
+      counts.set(name, (counts.get(name) || 0) + 1);
+      if (outside) abroad.add(name);
+    }
   }
   const known = [...new Set([...speciesMasterList, ...counts.keys()])];
   const withStatus = (tag: SpeciesTag): string[] =>
@@ -293,8 +302,16 @@ function speciesSets(): Record<SpeciesSetKey, string[]> {
     seen: [...counts.keys()],
     target: withStatus('target'),
     lifers: withStatus('lifer'),
-    foreign: known.filter((name) => !SPECIES_DETAILS[name]),
+    foreign: [...abroad],
   };
+}
+
+/** By the observation's own point, else its saved place's point. With
+ * neither, it can't be placed and counts as Israel. */
+function isAbroad(o: Observation): boolean {
+  const own = o.lat != null && o.lng != null && (o.lat !== 0 || o.lng !== 0) ? { lat: o.lat, lng: o.lng } : undefined;
+  const point = own ?? locationPoints.get(o.locationName);
+  return !!point && !isInIsrael(point.lat, point.lng);
 }
 
 function mySpeciesHtml(): string {
@@ -327,7 +344,7 @@ function mySpeciesHtml(): string {
 }
 
 const SPECIES_SET_LABELS: Record<SpeciesSetKey, string> = {
-  all: 'כל המינים', seen: 'מינים שנצפו', target: 'מיני מטרה', lifers: 'לייפרים', foreign: 'מינים לא מהארץ',
+  all: 'כל המינים', seen: 'מינים שנצפו', target: 'מיני מטרה', lifers: 'לייפרים', foreign: 'מינים שנצפו בחו״ל',
 };
 
 function openSpeciesSet(key: SpeciesSetKey): void {
