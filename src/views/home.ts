@@ -282,16 +282,18 @@ type SpeciesSetKey = 'all' | 'seen' | 'target' | 'lifers' | 'foreign';
 /** Every species count on the card, as the actual names so a tap can show
  * exactly those species. Target species and lifers follow the same status
  * badge as the species tab (lifer = exactly one observation, unless marked
- * otherwise by hand); "לא מהארץ" = species observed at least once abroad. */
+ * otherwise by hand); "לא מהארץ" = species seen abroad and never in Israel. */
 function speciesSets(): Record<SpeciesSetKey, string[]> {
   const counts = new Map<string, number>();
   const abroad = new Set<string>();
+  const inIsrael = new Set<string>();
   for (const o of allObservations) {
-    const outside = isAbroad(o);
+    const where = whereObserved(o);
     for (const name of speciesNames(o)) {
       if (!name) continue;
       counts.set(name, (counts.get(name) || 0) + 1);
-      if (outside) abroad.add(name);
+      if (where === 'abroad') abroad.add(name);
+      else if (where === 'israel') inIsrael.add(name);
     }
   }
   const known = [...new Set([...speciesMasterList, ...counts.keys()])];
@@ -302,16 +304,17 @@ function speciesSets(): Record<SpeciesSetKey, string[]> {
     seen: [...counts.keys()],
     target: withStatus('target'),
     lifers: withStatus('lifer'),
-    foreign: [...abroad],
+    foreign: [...abroad].filter((name) => !inIsrael.has(name)),
   };
 }
 
 /** By the observation's own point, else its saved place's point. With
- * neither, it can't be placed and counts as Israel. */
-function isAbroad(o: Observation): boolean {
+ * neither it can't be placed, and counts neither way. */
+function whereObserved(o: Observation): 'israel' | 'abroad' | 'unknown' {
   const own = o.lat != null && o.lng != null && (o.lat !== 0 || o.lng !== 0) ? { lat: o.lat, lng: o.lng } : undefined;
   const point = own ?? locationPoints.get(o.locationName);
-  return !!point && !isInIsrael(point.lat, point.lng);
+  if (!point) return 'unknown';
+  return isInIsrael(point.lat, point.lng) ? 'israel' : 'abroad';
 }
 
 function mySpeciesHtml(): string {
@@ -344,7 +347,7 @@ function mySpeciesHtml(): string {
 }
 
 const SPECIES_SET_LABELS: Record<SpeciesSetKey, string> = {
-  all: 'כל המינים', seen: 'מינים שנצפו', target: 'מיני מטרה', lifers: 'לייפרים', foreign: 'מינים שנצפו בחו״ל',
+  all: 'כל המינים', seen: 'מינים שנצפו', target: 'מיני מטרה', lifers: 'לייפרים', foreign: 'מינים שנצפו רק בחו״ל',
 };
 
 function openSpeciesSet(key: SpeciesSetKey): void {
