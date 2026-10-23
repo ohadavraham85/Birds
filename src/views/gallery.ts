@@ -7,7 +7,7 @@
  * לכל תמונה משויכת, ולחיצה ארוכה על תמונה נכנסת לבחירה מרובה כדי לשייך או
  * למחוק כמה תמונות יחד. */
 
-import { listAllMedia, deleteMediaAndUnlink, saveMedia, associateMediaWithObservation, listObservations, listSpecies, findMediaByHash, getSetting, setSetting } from '../db/repository';
+import { listAllMedia, deleteMediaAndUnlink, saveMedia, associateMediaWithObservation, repairStaleOrphanMedia, listObservations, listSpecies, findMediaByHash, getSetting, setSetting } from '../db/repository';
 import { getMediaObjectUrl, hashBlob } from '../lib/media';
 import { resolvePhotoDate } from '../lib/exif';
 import { isFirebaseSyncActive, getMediaStorageUsage } from '../firebase/firestore-sync';
@@ -227,6 +227,7 @@ async function ensureHashBackfill(): Promise<void> {
 
 export async function activate(): Promise<void> {
   void ensureHashBackfill();
+  await repairStaleOrphanMedia();
   allItems = await listAllMedia();
   await buildOwnerIndex();
   applyFilter();
@@ -300,8 +301,8 @@ async function refreshStorageUsage(): Promise<void> {
  * with a species but not yet filed into an observation. */
 function applyFilter(): void {
   const byAssoc = assocFilter === 'all' ? allItems
-    : assocFilter === 'assoc' ? allItems.filter((m) => !!m.obsId || !!m.species)
-    : allItems.filter((m) => !m.obsId && !m.species);
+    : assocFilter === 'assoc' ? allItems.filter((m) => !!ownerInfo(m) || !!m.obsId || !!m.species)
+    : allItems.filter((m) => !ownerInfo(m) && !m.obsId && !m.species);
   const bySearch = query.trim() ? byAssoc.filter(matchesQuery) : byAssoc;
   const key = (m: MediaRecord): string => (sortMode === 'taken' ? m.takenAt || m.addedAt || '' : m.addedAt || '');
   items = [...bySearch].sort((a, b) => {
@@ -383,7 +384,7 @@ function renderGrid(): void {
     tile.innerHTML = `
       <div class="gallery-tile-img">
         <img alt="">
-        ${m.obsId ? `<span class="gallery-tile-badge" title="משויכת לתצפית">${icon('link')}</span>` : ''}
+        ${m.obsId || ownerInfo(m) ? `<span class="gallery-tile-badge" title="משויכת לתצפית">${icon('link')}</span>` : ''}
         <button type="button" class="gallery-tile-info" title="מידע מקורי" aria-label="מידע מקורי על התמונה">${icon('info')}</button>
         <span class="gallery-tile-select-check">${icon('check')}</span>
       </div>
@@ -451,7 +452,8 @@ function toggleSelect(id: string, tile: HTMLElement): void {
  * the specific entry that holds it — looked up from the batch-built
  * ownerIndex (see buildOwnerIndex) rather than a per-call DB query. */
 function ownerInfo(m: MediaRecord): { obs: Observation; species: string } | null {
-  if (!m.obsId) return null;
+  // The observation's own image list is the source of truth — a row's
+  // obsId can be stale on a device that pulled an old orphan copy.
   return ownerIndex.get(m.id) || null;
 }
 
