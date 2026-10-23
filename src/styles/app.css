@@ -1595,6 +1595,13 @@ a.media-link-icon:hover { color: var(--accent-700); }
 /* ---------- gallery tab ---------- */
 
 .gallery-count { color: var(--ink-soft); font-size: .88rem; margin: 0 0 10px; }
+.sp-preset-chip {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  background: var(--accent-50); border: 1px solid var(--accent-600); border-radius: var(--radius);
+  padding: 4px 4px 4px 12px; padding-inline-start: 12px; margin-bottom: 8px; font-size: .9rem;
+}
+.sp-preset-chip[hidden] { display: none; }
+.sp-preset-chip b { color: var(--accent-700); }
 .gallery-storage-card {
   background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
   padding: 10px 12px; margin-bottom: 14px;
@@ -2071,6 +2078,28 @@ a.media-link-icon:hover { color: var(--accent-700); }
 .stat-tile-link { border: 1px solid var(--line); font: inherit; color: inherit; cursor: pointer; }
 .stat-tile-link:hover { background: var(--accent-50); border-color: var(--accent-200, var(--line)); }
 .stat-range { color: var(--ink-soft); font-size: .85rem; margin: 6px 0 18px; text-align: center; }
+
+/* "המינים שלי" — species progress and counts on the home screen. */
+.my-species { display: flex; flex-direction: column; gap: 10px; }
+.my-sp-main, .my-sp-tile {
+  font: inherit; color: inherit; cursor: pointer; text-align: start;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+}
+.my-sp-main:hover, .my-sp-tile:hover { background: var(--accent-50); }
+.my-sp-main { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; }
+.my-sp-main-text { font-size: .95rem; }
+.my-sp-main-text b { font-size: 1.5rem; color: var(--accent-700); margin-inline-end: 4px; }
+.my-sp-of { color: var(--ink-soft); font-size: .85rem; }
+.my-sp-bar { display: block; height: 8px; border-radius: 4px; background: var(--accent-100); overflow: hidden; }
+.my-sp-bar > span { display: block; height: 100%; border-radius: 4px; background: var(--accent-700); }
+.my-sp-pct { font-size: .78rem; color: var(--ink-soft); }
+.my-sp-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.my-sp-tile { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 4px; text-align: center; }
+.my-sp-icon { color: var(--accent-700); line-height: 0; }
+.my-sp-icon .icon { width: 20px; height: 20px; }
+.my-sp-value { font-size: 1.25rem; font-weight: 700; color: var(--accent-900); }
+.my-sp-label { font-size: .74rem; color: var(--ink-soft); line-height: 1.25; }
+@media (max-width: 420px) { .my-sp-tiles { grid-template-columns: repeat(2, 1fr); } }
 
 .stat-card {
   background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);

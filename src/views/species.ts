@@ -65,6 +65,12 @@ let selectedTags = new Set<string>();
 let displayMode: ViewDisplayMode = 'list';
 let openKey: string | null = null;
 let collapsedGroups = new Set<string>();
+/** Set from the home screen's "המינים שלי" card — limits the list to one
+ * computed set (seen, target, lifers...) until the chip's ✕ clears it. */
+let presetFilter: { label: string; names: Set<string> } | null = null;
+/** A short preset list (target species, lifers...) opens with its groups
+ * expanded; a long one stays collapsed like the full list. */
+const PRESET_EXPAND_MAX = 40;
 /** Each grouped mode opens with every group collapsed the first time it's
  * shown; the user's own expand/collapse taps are kept from then on. */
 const collapseInitialized = new Set<SortMode>();
@@ -103,6 +109,10 @@ export function init(el: HTMLElement): void {
       <input type="text" id="sp-new" placeholder="הוספת מין חדש לרשימה...">
       <button class="btn" id="sp-add">${icon('plus')} הוספה</button>
     </div>
+    <div class="sp-preset-chip" id="sp-preset" hidden>
+      <span>מוצגים: <b id="sp-preset-label"></b></span>
+      <button type="button" class="btn btn-icon btn-sm" id="sp-preset-clear" title="הצגת כל המינים" aria-label="הצגת כל המינים">✕</button>
+    </div>
     <p class="sp-summary" id="sp-summary"></p>
     <button type="button" class="btn btn-sm view-tool" id="sp-copy-missing">${icon('document')} העתקת רשימת מינים ללא פרטים</button>
     <div id="sp-list" class="sp-cards"></div>
@@ -112,6 +122,7 @@ export function init(el: HTMLElement): void {
   select(container, '#sp-group').addEventListener('change', (e) => { sortMode = (e.target as HTMLSelectElement).value as SortMode; render(); });
   qs(container, '#sp-filter-btn').addEventListener('click', openFilterModal);
   wireToolsToggle(container, 'sp-tools-btn');
+  qs(container, '#sp-preset-clear').addEventListener('click', () => { presetFilter = null; render(); });
   qs(container, '#sp-expand-all').addEventListener('click', () => { collapsedGroups = new Set(); render(); });
   qs(container, '#sp-collapse-all').addEventListener('click', () => {
     collapsedGroups = new Set(names.filter(matches).flatMap(groupKeysOf));
@@ -134,6 +145,10 @@ export function init(el: HTMLElement): void {
 /** Opens a specific species' card directly (e.g. from the home screen's
  * "Bird of the Day" widget) instead of the default collapsed list. */
 export function setParams(params: ViewParams): void {
+  presetFilter = params.speciesFilter
+    ? { label: params.speciesFilter.label, names: new Set(params.speciesFilter.names) }
+    : null;
+  if (presetFilter) query = '';
   if (!params.species) return;
   openKey = params.species;
   scrollToOnActivate = params.species;
@@ -195,6 +210,7 @@ function detailsFor(name: string): SpeciesDetail {
 }
 
 function matches(name: string): boolean {
+  if (presetFilter && !presetFilter.names.has(name)) return false;
   const q = query.trim().toLowerCase();
   if (q) {
     const d = detailsFor(name);
@@ -294,7 +310,11 @@ function render(): void {
   const list = names.filter(matches);
   const withDetails = names.filter((n) => detailsFor(n).en).length;
   qs(container, '#sp-summary').textContent =
-    `${names.length} מינים ברשימה · ${withDetails} עם פרטים מלאים` + (query || filterCount ? ` · ${list.length} תואמים לסינון` : '');
+    `${names.length} מינים ברשימה · ${withDetails} עם פרטים מלאים` + (query || filterCount || presetFilter ? ` · ${list.length} תואמים לסינון` : '');
+  qs(container, '#sp-preset').hidden = !presetFilter;
+  qs(container, '#sp-preset-label').textContent = presetFilter?.label ?? '';
+  const searchInput = input(container, '#sp-q');
+  if (searchInput.value !== query) searchInput.value = query;
 
   const el = qs(container, '#sp-list');
   if (!list.length) { el.innerHTML = '<p style="color:var(--ink-soft)">אין מין תואם.</p>'; return; }
@@ -317,11 +337,14 @@ function render(): void {
         : sortAlpha([...groups.keys()]);
     if (!collapseInitialized.has(sortMode)) {
       collapseInitialized.add(sortMode);
-      for (const k of keys) collapsedGroups.add(k);
+      // Every group of the whole list, not just the filtered one, so clearing
+      // a search or a home-screen filter later still finds them collapsed.
+      for (const n of names) for (const k of groupKeysOf(n)) collapsedGroups.add(k);
       if (openKey) for (const k of groupKeysOf(openKey)) collapsedGroups.delete(k);
     }
-    // While searching, every matching group stays open so results are visible.
-    const searching = !!query.trim();
+    // While searching (or showing a short list from the home screen), every
+    // matching group stays open so the results are visible.
+    const searching = !!query.trim() || (!!presetFilter && list.length <= PRESET_EXPAND_MAX);
     el.innerHTML = keys.map((key) => {
       const items = sortAlpha(groups.get(key)!);
       const collapsed = !searching && collapsedGroups.has(key);
