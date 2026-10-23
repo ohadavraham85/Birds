@@ -346,7 +346,7 @@ function syncHtml(fbCode: string): string {
       <h3>${icon('save')} גיבוי ושחזור</h3>
       <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
         קובץ גיבוי יחיד (כולל תמונות באיכות מקור, מסלולים, מעקבים וציוד). ניתן לשחזור בכל מכשיר.
-        "גיבוי לדרייב" שולח גם טבלת תצפיות לאקסל, ותזכורת קופצת פעם בשבוע.
+        "גיבוי לדרייב" שולח קובץ שחזור בלי קובצי התמונות (הן שמורות בענן, והקובץ שומר קישור לכל אחת) וטבלת תצפיות לאקסל. תזכורת קופצת פעם בשבוע.
       </p>
       <p style="font-size:.85rem;margin-top:0">${lastDriveBackup() ? `גיבוי אחרון לדרייב: ${fmtDateTime(lastDriveBackup()!)}` : 'עוד לא בוצע גיבוי לדרייב מהמכשיר הזה.'}</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -1471,7 +1471,7 @@ async function onRestore(e: Event): Promise<void> {
     tags?: TagRow[]; projects?: { name: string }[]; // `projects` kept for restoring pre-tags backups
     observers?: ObserverRow[];
     tracks?: ObservationTrack[]; series?: SeriesRow[]; equipment?: EquipmentItem[];
-    media?: Array<{ id: string; obsId: string; name: string; mime: string; data: string; species?: string; takenAt?: string; takenAtSource?: 'exif' | 'file' }>;
+    media?: Array<{ id: string; obsId: string; name: string; mime: string; data?: string; remoteId?: string; species?: string; takenAt?: string; takenAtSource?: 'exif' | 'file' }>;
   };
   try {
     backup = JSON.parse(await file.text());
@@ -1497,8 +1497,13 @@ async function onRestore(e: Event): Promise<void> {
   for (const sr of backup.series || []) await putSeriesRaw(sr);
   for (const eq of backup.equipment || []) await putEquipmentRaw(eq);
   for (const m of backup.media || []) {
+    // A backup without photo bytes still carries each photo's cloud link —
+    // an empty blob plus remoteId makes the app load it from the cloud.
+    if (!m.data && !m.remoteId) continue;
     await saveMedia({
-      id: m.id, obsId: m.obsId, name: m.name, mime: m.mime, blob: await dataUrlToBlob(m.data),
+      id: m.id, obsId: m.obsId, name: m.name, mime: m.mime,
+      blob: m.data ? await dataUrlToBlob(m.data) : new Blob([], { type: m.mime }),
+      ...(m.remoteId ? { remoteId: m.remoteId } : {}),
       ...(m.species ? { species: m.species } : {}),
       ...(m.takenAt ? { takenAt: m.takenAt, takenAtSource: m.takenAtSource } : {}),
     });

@@ -290,7 +290,7 @@ export async function pullAllObservationMedia(): Promise<{ downloaded: number; o
         const remoteId = img.remoteId;
         if (!img.localId || !remoteId || !/^https?:\/\//.test(remoteId)) continue;
         const existing = await getMedia(img.localId);
-        if (existing?.blob) continue;
+        if (existing?.blob?.size) continue; // an empty blob (restored without photo bytes) still needs downloading
         try {
           const blob = await (await fetch(remoteId)).blob();
           await withSuppressedPush(() => saveMedia({
@@ -547,7 +547,7 @@ async function pushObservationMedia(obs: Observation): Promise<void> {
     for (const img of entry.images) {
       if (img.remoteId?.startsWith('http')) continue; // already uploaded to Firebase
       const media = await getMedia(img.localId);
-      if (!media?.blob) continue;
+      if (!media?.blob?.size) continue; // never upload an empty placeholder over the real photo
       try {
         const path = `households/${activeCode}/media/${img.localId}`;
         await uploadBytes(ref(firebaseStorage(), path), media.blob, { contentType: media.mime || 'application/octet-stream' });
@@ -642,7 +642,7 @@ async function pushMedia(media: MediaRecord & { deleted?: boolean }): Promise<vo
   // (e.g. tagging a species onto it later) — re-uploading the same blob would
   // be redundant.
   if (!media.deleted && !media.remoteId) {
-    if (!media.blob) return;
+    if (!media.blob?.size) return;
     try {
       const path = `households/${activeCode}/media/${media.id}`;
       await uploadBytes(ref(firebaseStorage(), path), media.blob, { contentType: media.mime || 'application/octet-stream' });

@@ -26,7 +26,21 @@ const today = (): string => new Date().toISOString().slice(0, 10);
 /** Everything needed to restore the app on any device (photos at original
  * quality). Built from many small Blob parts rather than one giant string,
  * so a large photo collection doesn't exhaust a phone's memory. */
-export async function buildFullBackup(): Promise<{ blob: Blob; observations: number; photos: number }> {
+export interface BackupResult {
+  blob: Blob;
+  observations: number;
+  /** Photos whose image bytes are inside the file. */
+  photos: number;
+  /** Photos that also have a cloud copy (restorable from the file's link). */
+  cloudPhotos: number;
+  /** Photos that exist only on this device (no cloud copy). */
+  localOnlyPhotos: number;
+}
+
+/** `withPhotos: false` keeps every photo's details and cloud link but not
+ * its bytes — small enough for the phone's share sheet (which refuses
+ * hundreds of MB); photos then reload from the cloud after a restore. */
+export async function buildFullBackup({ withPhotos = true } = {}): Promise<BackupResult> {
   const [observations, species, locations, tags, observers, tracks, series, equipment] = await Promise.all([
     listObservationsRaw(), listSpecies(), listLocationRows(), listTagRows(), listObserverRows(),
     listTracksRaw(), listSeriesRows(), listEquipmentRaw(),
@@ -37,21 +51,29 @@ export async function buildFullBackup(): Promise<{ blob: Blob; observations: num
   });
   const parts: Blob[] = [new Blob([meta.slice(0, -1), ',"media":['])];
   let photos = 0;
+  let cloudPhotos = 0;
+  let localOnlyPhotos = 0;
+  let written = 0;
   for (const m of await listAllMedia()) {
-    if (!m.blob?.size) continue;
+    const hasBytes = !!m.blob?.size;
+    const remote = m.remoteId && /^https?:\/\//.test(m.remoteId) ? m.remoteId : undefined;
+    if (!hasBytes && !remote) continue;
+    if (remote) cloudPhotos++; else localOnlyPhotos++;
+    const include = withPhotos && hasBytes;
     const item = {
-      id: m.id, obsId: m.obsId, name: m.name, mime: m.mime,
+      id: m.id, obsId: m.obsId, name: m.name, mime: m.mime, remoteId: remote,
       species: m.species, takenAt: m.takenAt, takenAtSource: m.takenAtSource,
-      data: await blobToDataUrl(m.blob),
+      ...(include ? { data: await blobToDataUrl(m.blob) } : {}),
     };
-    parts.push(new Blob([(photos ? ',' : '') + JSON.stringify(item)]));
-    photos++;
+    if (include) photos++;
+    parts.push(new Blob([(written ? ',' : '') + JSON.stringify(item)]));
+    written++;
   }
   parts.push(new Blob([']}']));
   return {
     blob: new Blob(parts, { type: 'text/plain' }),
     observations: observations.filter((o) => !o.deleted).length,
-    photos,
+    photos, cloudPhotos, localOnlyPhotos,
   };
 }
 
@@ -118,7 +140,7 @@ export function openDriveBackup(): void {
   wrap.className = 'drive-backup-modal';
   wrap.innerHTML = `
     <h3>${icon('drive')} גיבוי לדרייב</h3>
-    <p class="hint" style="margin-top:0">שני קבצים: קובץ שחזור מלא (כולל תמונות) וטבלת תצפיות לאקסל/גיליונות.</p>
+    <p class="hint" style="margin-top:0">שני קבצים: קובץ שחזור (כל הנתונים, וקישור לכל תמונה בענן) וטבלת תצפיות לאקסל/גיליונות. קובצי התמונות עצמם גדולים מדי לשליחה מהטלפון — הם שמורים בענן הסנכרון, וגיבוי מלא איתם אפשר להוריד בהגדרות.</p>
     <p class="drive-backup-status">מכין את הקבצים...</p>
     <div class="modal-actions">
       <button type="button" class="btn btn-primary" id="db-share" disabled>${icon('drive')} שליחה לדרייב</button>
@@ -132,7 +154,7 @@ export function openDriveBackup(): void {
   void (async () => {
     let files: File[];
     try {
-      const [full, table] = await Promise.all([buildFullBackup(), buildObservationsTable()]);
+      const [full, table] = await Promise.all([buildFullBackup({ withPhotos: false }), buildObservationsTable()]);
       // Android's share sheet refuses .json files, so the restore file is
       // shared as .txt — its content is the same JSON the restore button reads.
       files = [
@@ -141,7 +163,10 @@ export function openDriveBackup(): void {
         new File([table], `birds-observations-table-${today()}.csv`, { type: 'text/csv' }),
       ];
       const mb = (full.blob.size / (1024 * 1024)).toFixed(1);
-      status.textContent = `מוכן: ${full.observations} תצפיות, ${full.photos} תמונות (${mb} MB). לחצו "שליחה לדרייב" ובחרו Drive.`;
+      const localNote = full.localOnlyPhotos
+        ? ` שימו לב: ${full.localOnlyPhotos} תמונות שמורות רק בטלפון ולא בענן — גבו אותן ב"הורדת קובץ גיבוי מלא".`
+        : '';
+      status.textContent = `מוכן: ${full.observations} תצפיות, ${full.cloudPhotos} תמונות בענן (${mb} MB). לחצו "שליחה לדרייב" ובחרו Drive.${localNote}`;
       shareBtn.disabled = false;
     } catch (err) {
       status.textContent = `הכנת הגיבוי נכשלה: ${(err as Error).message || err}`;
@@ -157,7 +182,12 @@ export function openDriveBackup(): void {
             close();
             toast('הגיבוי נשלח ✓');
           } catch (err) {
-            if ((err as Error).name !== 'AbortError') toast(`השליחה נכשלה: ${(err as Error).message}`, true, 6000);
+            if ((err as Error).name === 'AbortError') return;
+            // Sharing refused (e.g. too large for this phone): save the files instead.
+            files.forEach(downloadFile);
+            markBackedUp();
+            close();
+            toast('השליחה לא הצליחה, אז הקבצים נשמרו בהורדות — העלו אותם לדרייב מאפליקציית Drive', true, 8000);
           }
           return;
         }

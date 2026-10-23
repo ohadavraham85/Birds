@@ -13,15 +13,17 @@ export async function hashBlob(blob: Blob): Promise<string> {
 }
 
 export async function getImageObjectUrl(img: ObservationImage, obsId = ''): Promise<string | null> {
+  let m: MediaRecord | undefined;
   if (img?.localId) {
-    const m = await getMedia(img.localId);
-    if (m?.blob) return URL.createObjectURL(m.blob);
+    m = await getMedia(img.localId);
+    // An empty blob (restored from a backup without photo bytes) means "load from the cloud".
+    if (m?.blob?.size) return URL.createObjectURL(m.blob);
   }
-  const remoteId = img?.remoteId || img?.localId;
+  const remoteId = img?.remoteId || m?.remoteId || img?.localId;
   if (remoteId && navigator.onLine && /^https?:\/\//.test(remoteId)) {
     try {
       const blob = await (await fetch(remoteId)).blob();
-      await saveMedia({ id: img.localId || remoteId, obsId, name: img.name || '', mime: blob.type, blob, remoteId });
+      await saveMedia({ ...(m ?? {}), id: img.localId || remoteId, obsId: m?.obsId || obsId, name: img.name || m?.name || '', mime: blob.type, blob, remoteId });
       return URL.createObjectURL(blob);
     } catch {
       /* offline / Storage object not reachable — nothing to show */
