@@ -1742,6 +1742,15 @@ a.media-link-icon:hover { color: var(--accent-700); }
 .sp-group-head .sp-caret { color: var(--accent-700); font-size: .75rem; }
 .sp-group-n { background: var(--accent-100); color: var(--accent-900); border-radius: 999px; padding: 1px 10px; font-size: .8rem; }
 .sp-group-head > span:first-child { text-align: right; }
+.sp-group-title { flex: 1; min-width: 0; }
+.sp-group-side { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.sp-group-thumb {
+  width: 44px; height: 44px; border-radius: 50%; overflow: hidden; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--card); border: 2px solid var(--accent-600);
+}
+.sp-group-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sp-group-thumb .icon-logo { width: 100%; height: 100%; opacity: .45; }
 .sp-group-families { display: block; margin-top: 2px; font-size: .72rem; font-weight: 400; color: var(--ink-soft); line-height: 1.35; }
 
 .sp-card {
