@@ -19,6 +19,7 @@ import { haptic } from './lib/haptics';
 import { isPatternLockEnabled, renderLockScreen } from './lib/pattern-lock';
 import { SHARE_TARGET_HASH } from './lib/share-target';
 import { startBackgroundSlideshow } from './lib/bg-slideshow';
+import { setupBackupReminder } from './lib/backup';
 import type { View, ViewParams } from './views/view';
 
 initTheme();
@@ -370,6 +371,7 @@ async function init(): Promise<void> {
   setupWhatsNewButton();
   setupHaptics();
   void startBackgroundSlideshow();
+  setupBackupReminder();
 
   // register the Workbox service worker — with onNeedRefresh set, a new
   // deploy no longer reloads the page out from under the user the moment

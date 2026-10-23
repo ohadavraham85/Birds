@@ -1846,6 +1846,21 @@ a.media-link-icon:hover { color: var(--accent-700); }
   font-size: .9rem;
 }
 .update-banner[hidden] { display: none; }
+.backup-reminder {
+  position: fixed; left: 16px; right: 16px; margin: 0 auto; max-width: 480px;
+  bottom: calc(var(--tabbar-h) + 16px + env(safe-area-inset-bottom));
+  display: flex; align-items: center; gap: 8px; z-index: 1990;
+  background: var(--card); color: var(--ink); border: 2px solid var(--accent-600);
+  padding: 8px 10px; border-radius: 10px; box-shadow: 0 4px 14px rgba(0,0,0,.2); font-size: .9rem;
+}
+.backup-reminder .icon { width: 18px; height: 18px; color: var(--accent-700); flex-shrink: 0; }
+.backup-reminder-text { flex: 1; font-weight: 600; }
+.backup-reminder button {
+  border: 0; border-radius: 8px; padding: 6px 12px; font: inherit; font-weight: 600; cursor: pointer; flex-shrink: 0;
+}
+.backup-reminder-go { background: var(--accent-700); color: #fff; }
+.backup-reminder-later { background: var(--accent-50); color: var(--accent-900); }
+.drive-backup-status { font-weight: 600; color: var(--accent-900); }
 .update-banner #update-banner-text { flex: 1; }
 .update-banner .icon { width: 18px; height: 18px; flex-shrink: 0; }
 .update-banner button {
