@@ -8,12 +8,14 @@ import {
   listObserverRows, addObserver, deleteObserver,
   findDuplicateSpeciesGroups, findDuplicateLocationGroups,
   mergeSpeciesNames, mergeLocationNames,
-  clearAllData, listObservations, listObservationsRaw, getObservation, saveObservation,
-  putObservationRaw, saveMedia, mediaForObservation, repairMissingImageLinks,
+  clearAllData, listObservations, getObservation, saveObservation,
+  putObservationRaw, saveMedia, repairMissingImageLinks,
+  putTrackRaw, putSeriesRaw, putEquipmentRaw,
   listFiles, saveFile, getFile, deleteFile,
 } from '../db/repository';
 import { equipmentHtml, wireEquipment } from './equipment';
 import { openSpeciesDetailsEditor } from '../lib/species-details-editor';
+import { buildFullBackup, openDriveBackup, lastDriveBackup } from '../lib/backup';
 import type { DuplicateGroup } from '../db/repository';
 import { getFirebaseSyncCode, configureFirebaseSync, onFirebaseSyncStatus, isFirebaseSyncActive, forceResyncListsFromCloud, retryMediaUploads, pullAllObservationMedia, retryMissingGalleryDownloads, type FirebaseSyncStatus } from '../firebase/firestore-sync';
 import {
@@ -38,7 +40,7 @@ import {
   currentBgPhoto, setBgPhoto, currentCardTransparency, setCardTransparency, MAX_CARD_TRANSPARENCY,
   type ThemeId, type AccentId, type FontColorId, type FontSizeId, type FontWeightId, type DisplayModeId,
 } from '../lib/theme';
-import type { Observation, LocationRow, TagRow, TagIconName, ObserverRow } from '../types';
+import type { Observation, LocationRow, TagRow, TagIconName, ObserverRow, ObservationTrack, SeriesRow, EquipmentItem } from '../types';
 import { TAG_ICON_NAMES } from '../types';
 
 const TAG_ICON_LABELS: Record<TagIconName, string> = {
@@ -343,12 +345,15 @@ function syncHtml(fbCode: string): string {
     <div class="settings-card">
       <h3>${icon('save')} גיבוי ושחזור</h3>
       <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
-        קובץ גיבוי יחיד (כולל תמונות באיכות מקור). ניתן לשחזור בכל מכשיר.
+        קובץ גיבוי יחיד (כולל תמונות באיכות מקור, מסלולים, מעקבים וציוד). ניתן לשחזור בכל מכשיר.
+        "גיבוי לדרייב" שולח גם טבלת תצפיות לאקסל, ותזכורת קופצת פעם בשבוע.
       </p>
+      <p style="font-size:.85rem;margin-top:0">${lastDriveBackup() ? `גיבוי אחרון לדרייב: ${fmtDateTime(lastDriveBackup()!)}` : 'עוד לא בוצע גיבוי לדרייב מהמכשיר הזה.'}</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-primary" id="s-backup">${icon('download')} הורדת קובץ גיבוי מלא</button>
+        <button class="btn btn-primary" id="s-drive-backup">${icon('upload')} גיבוי לדרייב</button>
+        <button class="btn" id="s-backup">${icon('download')} הורדת קובץ גיבוי מלא</button>
         <label class="btn" style="cursor:pointer">${icon('upload')} שחזור מקובץ גיבוי
-          <input type="file" id="s-restore" accept=".json,application/json" hidden>
+          <input type="file" id="s-restore" accept=".json,.txt,application/json,text/plain" hidden>
         </label>
       </div>
     </div>
@@ -369,6 +374,7 @@ function syncHtml(fbCode: string): string {
 function wireSync(): void {
   qs(container, '#s-fb-save').addEventListener('click', () => void onSaveFirebaseSync());
   qs(container, '#s-backup').addEventListener('click', () => void onBackup());
+  qs(container, '#s-drive-backup').addEventListener('click', () => openDriveBackup());
   input(container, '#s-restore').addEventListener('change', (e) => void onRestore(e));
   input(container, '#s-csv-import').addEventListener('change', (e) => void onImportCsv(e));
   container.querySelector('#s-fb-resync')?.addEventListener('click', () => void onForceResync());
@@ -1440,34 +1446,19 @@ async function onNotifEnabledChange(e: Event): Promise<void> {
 
 /* ---------- backup / restore ---------- */
 
-function blobToDataUrl(blob: Blob): Promise<string> {
-  return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result as string); r.onerror = rej; r.readAsDataURL(blob); });
-}
 async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
   return (await fetch(dataUrl)).blob();
 }
 
 async function onBackup(): Promise<void> {
   toast('מכין קובץ גיבוי...', false, 8000);
-  const observations = await listObservationsRaw();
-  const species = await listSpecies();
-  const locations = await listLocationRows();
-  const tags = await listTagRows();
-  const observers = await listObserverRows();
-  const media: Array<{ id: string; obsId: string; name: string; mime: string; data: string }> = [];
-  for (const o of observations) {
-    for (const m of await mediaForObservation(o.id)) {
-      media.push({ id: m.id, obsId: m.obsId, name: m.name, mime: m.mime, data: await blobToDataUrl(m.blob) });
-    }
-  }
-  const backup = { app: 'birds-journal', format: 3, exportedAt: new Date().toISOString(), species, locations, tags, observers, observations, media };
-  const blob = new Blob([JSON.stringify(backup)], { type: 'application/json' });
+  const { blob, observations, photos } = await buildFullBackup();
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
+  a.href = URL.createObjectURL(new Blob([blob], { type: 'application/json' }));
   a.download = `גיבוי-תצפיות-${new Date().toISOString().slice(0, 10)}.json`;
   a.click();
-  URL.revokeObjectURL(a.href);
-  toast(`קובץ הגיבוי הורד ✓ (${observations.length} תצפיות, ${media.length} תמונות)`);
+  setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+  toast(`קובץ הגיבוי הורד ✓ (${observations} תצפיות, ${photos} תמונות)`);
 }
 
 async function onRestore(e: Event): Promise<void> {
@@ -1479,7 +1470,8 @@ async function onRestore(e: Event): Promise<void> {
     app?: string; observations?: Observation[]; species?: string[]; locations?: LocationRow[];
     tags?: TagRow[]; projects?: { name: string }[]; // `projects` kept for restoring pre-tags backups
     observers?: ObserverRow[];
-    media?: Array<{ id: string; obsId: string; name: string; mime: string; data: string }>;
+    tracks?: ObservationTrack[]; series?: SeriesRow[]; equipment?: EquipmentItem[];
+    media?: Array<{ id: string; obsId: string; name: string; mime: string; data: string; species?: string; takenAt?: string; takenAtSource?: 'exif' | 'file' }>;
   };
   try {
     backup = JSON.parse(await file.text());
@@ -1501,8 +1493,15 @@ async function onRestore(e: Event): Promise<void> {
     const tagsArr = Array.isArray(o.tags) ? o.tags : (legacy.project ? [legacy.project] : []);
     await putObservationRaw({ ...o, entries, tags: tagsArr, updatedAt: o.updatedAt || new Date().toISOString() });
   }
+  for (const t of backup.tracks || []) await putTrackRaw(t);
+  for (const sr of backup.series || []) await putSeriesRaw(sr);
+  for (const eq of backup.equipment || []) await putEquipmentRaw(eq);
   for (const m of backup.media || []) {
-    await saveMedia({ id: m.id, obsId: m.obsId, name: m.name, mime: m.mime, blob: await dataUrlToBlob(m.data) });
+    await saveMedia({
+      id: m.id, obsId: m.obsId, name: m.name, mime: m.mime, blob: await dataUrlToBlob(m.data),
+      ...(m.species ? { species: m.species } : {}),
+      ...(m.takenAt ? { takenAt: m.takenAt, takenAtSource: m.takenAtSource } : {}),
+    });
   }
   toast('השחזור הושלם ✓');
   await activate();
