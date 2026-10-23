@@ -1861,6 +1861,8 @@ a.media-link-icon:hover { color: var(--accent-700); }
 .backup-reminder-go { background: var(--accent-700); color: #fff; }
 .backup-reminder-later { background: var(--accent-50); color: var(--accent-900); }
 .drive-backup-status { font-weight: 600; color: var(--accent-900); }
+.modal .drive-backup-actions { flex-wrap: wrap; }
+.drive-backup-actions a.btn { text-decoration: none; }
 .update-banner #update-banner-text { flex: 1; }
 .update-banner .icon { width: 18px; height: 18px; flex-shrink: 0; }
 .update-banner button {
