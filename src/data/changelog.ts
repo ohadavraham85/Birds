@@ -18,6 +18,11 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: 34, date: '2026-10-23',
+    title: '"תצפית קולית חכמה" הוסרה זמנית',
+    items: ['הכפתור ירד ממסך הבית עד שהתכונה תתוקן. ההכתבה הרגילה בטופס התצפית ממשיכה לעבוד.'],
+  },
+  {
     id: 33, date: '2026-10-23',
     title: 'ספריית המעקבים עברה ליומן',
     items: [
