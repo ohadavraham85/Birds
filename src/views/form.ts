@@ -5,7 +5,7 @@
 import {
   saveObservation, getObservation, listObservations, listSpecies,
   saveMedia, getMedia, mediaForObservation, deleteMedia, listLocationRows, listTagRows, addTag, listObserverRows, addObserver, saveTrack, getTrack,
-  listSeriesRows, getSeries, lastSeriesForSpecies,
+  listSeriesRows, getSeries, lastSeriesForSpecies, onDataChanged,
 } from '../db/repository';
 import { seriesDayLabel, openCreateSeriesModal } from '../lib/series';
 import { toast, toLocalInputValue, fromLocalInputValue, safeHttpUrl, confirmDialog, showModal } from '../lib/ui';
@@ -153,6 +153,11 @@ function updateSpeciesCountBadge(): void {
 
 export function init(el: HTMLElement): void {
   container = el;
+  let listsRefresh: ReturnType<typeof setTimeout> | null = null;
+  onDataChanged(() => {
+    if (listsRefresh) clearTimeout(listsRefresh);
+    listsRefresh = setTimeout(() => { listsRefresh = null; void refreshSuggestionLists(); }, 500);
+  });
   container.innerHTML = `
     <div class="form-head">
       <button type="button" class="btn btn-sm" id="back-btn">→ חזרה</button>
@@ -274,7 +279,7 @@ export function init(el: HTMLElement): void {
   input(container, '#f-observer-new').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); void onQuickAddObserver(); } });
   wireCombo(input(container, '#f-location'), qs(container, '#location-list'), () => locationSuggestions, {
     onSelect: (name) => applyLocationName(name),
-    onToggle: () => openLocationSheet(),
+    onToggle: () => void openLocationSheet(),
   });
   input(container, '#f-location').addEventListener('input', (e) => applyLocationName((e.target as HTMLInputElement).value));
   qs(container, '#pick-map-btn').addEventListener('click', () => void openPicker());
@@ -767,7 +772,11 @@ export function setParams(params: ViewParams): void {
   resumeDraftId = params?.resumeDraftId || null;
 }
 
-export async function activate(): Promise<void> {
+/** Species and location suggestion lists — reloaded on every data change
+ * (not only when the form opens), so a form opened before the data was
+ * available (app start, a sync still downloading) doesn't keep empty lists
+ * that leave the location picker blank and reject every species typed. */
+async function refreshSuggestionLists(): Promise<void> {
   speciesCache = await listSpecies();
   const all = await listObservations();
   const seen = new Set<string>();
@@ -789,6 +798,10 @@ export async function activate(): Promise<void> {
   }
   const neverUsed = savedLocationRows.map((l) => l.name).filter((n) => !used.has(n)).sort((a, b) => a.localeCompare(b, 'he'));
   locationSuggestions = [...usedByRecency, ...neverUsed];
+}
+
+export async function activate(): Promise<void> {
+  await refreshSuggestionLists();
 
   if (editId) {
     await loadForEdit(editId);
@@ -1184,9 +1197,10 @@ function applyLocationName(name: string): void {
  * with search), which a phone's keyboard or scrolling can't close on the user
  * the way the inline dropdown can. Typing a name that isn't listed offers it
  * as a new location. */
-function openLocationSheet(): void {
+async function openLocationSheet(): Promise<void> {
   const field = input(container, '#f-location');
   field.blur();
+  if (!locationSuggestions.length) await refreshSuggestionLists();
   const current = field.value.trim();
   const wrap = document.createElement('div');
   wrap.className = 'gallery-assoc-modal';
