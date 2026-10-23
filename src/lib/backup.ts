@@ -142,13 +142,16 @@ export function openDriveBackup(): void {
     <h3>${icon('drive')} גיבוי לדרייב</h3>
     <p class="hint" style="margin-top:0">שני קבצים: קובץ שחזור (כל הנתונים, וקישור לכל תמונה בענן) וטבלת תצפיות לאקסל/גיליונות. קובצי התמונות עצמם גדולים מדי לשליחה מהטלפון — הם שמורים בענן הסנכרון, וגיבוי מלא איתם אפשר להוריד בהגדרות.</p>
     <p class="drive-backup-status">מכין את הקבצים...</p>
-    <div class="modal-actions">
+    <div class="modal-actions drive-backup-actions">
       <button type="button" class="btn btn-primary" id="db-share" disabled>${icon('drive')} שליחה לדרייב</button>
+      <button type="button" class="btn" id="db-download" disabled>${icon('download')} הורדה לטלפון</button>
       <button type="button" class="btn" id="db-cancel">ביטול</button>
     </div>`;
   const close = showModal(wrap);
   const status = wrap.querySelector<HTMLElement>('.drive-backup-status')!;
+  const actions = wrap.querySelector<HTMLElement>('.drive-backup-actions')!;
   const shareBtn = wrap.querySelector<HTMLButtonElement>('#db-share')!;
+  const downloadBtn = wrap.querySelector<HTMLButtonElement>('#db-download')!;
   wrap.querySelector('#db-cancel')!.addEventListener('click', close);
 
   void (async () => {
@@ -166,36 +169,41 @@ export function openDriveBackup(): void {
       const localNote = full.localOnlyPhotos
         ? ` שימו לב: ${full.localOnlyPhotos} תמונות שמורות רק בטלפון ולא בענן — גבו אותן ב"הורדת קובץ גיבוי מלא".`
         : '';
-      status.textContent = `מוכן: ${full.observations} תצפיות, ${full.cloudPhotos} תמונות בענן (${mb} MB). לחצו "שליחה לדרייב" ובחרו Drive.${localNote}`;
+      const canShareFiles = !!navigator.canShare?.({ files });
+      shareBtn.hidden = !canShareFiles;
+      if (!canShareFiles) downloadBtn.classList.add('btn-primary');
+      status.textContent = `מוכן: ${full.observations} תצפיות, ${full.cloudPhotos} תמונות בענן (${mb} MB).${localNote}`;
       shareBtn.disabled = false;
+      downloadBtn.disabled = false;
     } catch (err) {
       status.textContent = `הכנת הגיבוי נכשלה: ${(err as Error).message || err}`;
       return;
     }
 
+    // Saves both files to the phone's Downloads, then offers to open Drive to upload them.
+    const downloadThenOfferDrive = (note = ''): void => {
+      files.forEach(downloadFile);
+      markBackedUp();
+      status.textContent = `${note}שני הקבצים נשמרו בתיקיית ההורדות. פתחו את Google Drive, לחצו + ← העלאה, ובחרו את שני הקבצים.`;
+      actions.innerHTML = `
+        <a class="btn btn-primary" href="https://drive.google.com/drive/my-drive" target="_blank" rel="noopener">${icon('drive')} פתיחת Google Drive</a>
+        <button type="button" class="btn" id="db-done">סיום</button>`;
+      actions.querySelector('#db-done')!.addEventListener('click', close);
+    };
+
+    downloadBtn.addEventListener('click', () => downloadThenOfferDrive());
     shareBtn.addEventListener('click', () => {
       void (async () => {
-        if (navigator.canShare?.({ files })) {
-          try {
-            await navigator.share({ files, title: `גיבוי יומן צפרות ${today()}` });
-            markBackedUp();
-            close();
-            toast('הגיבוי נשלח ✓');
-          } catch (err) {
-            if ((err as Error).name === 'AbortError') return;
-            // Sharing refused (e.g. too large for this phone): save the files instead.
-            files.forEach(downloadFile);
-            markBackedUp();
-            close();
-            toast('השליחה לא הצליחה, אז הקבצים נשמרו בהורדות — העלו אותם לדרייב מאפליקציית Drive', true, 8000);
-          }
-          return;
+        try {
+          await navigator.share({ files, title: `גיבוי יומן צפרות ${today()}` });
+          markBackedUp();
+          close();
+          toast('הגיבוי נשלח ✓');
+        } catch (err) {
+          if ((err as Error).name === 'AbortError') return;
+          // Sharing refused (e.g. too large for this phone): save the files instead.
+          downloadThenOfferDrive('השליחה לא הצליחה. ');
         }
-        // No file sharing (e.g. desktop): download both, to upload to Drive by hand.
-        files.forEach(downloadFile);
-        markBackedUp();
-        close();
-        toast('שני הקבצים הורדו — העלו אותם לתיקיית הגיבויים בדרייב', false, 6000);
       })();
     });
   })();
