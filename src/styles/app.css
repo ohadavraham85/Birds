@@ -161,6 +161,22 @@
   --accent-100: #d3f0ec; --accent-50: #eafaf8; --primary-shadow: rgba(31, 154, 143, .35);
 }
 
+/* The rest of the palette follows the chosen accent too — the header's
+ * gradient end and toasts take its darkest shade, and on the light classic
+ * theme (whose greys are tinted green) a non-green accent gets neutral greys,
+ * so nothing green is left mixed in with, say, red. */
+:root[data-accent="blue"]:not([data-theme="dark"]):not([data-theme="oled"]) { --topbar-end: #12275c; --toast-bg: #12275c; }
+:root[data-accent="purple"]:not([data-theme="dark"]):not([data-theme="oled"]) { --topbar-end: #2e1f57; --toast-bg: #2e1f57; }
+:root[data-accent="orange"]:not([data-theme="dark"]):not([data-theme="oled"]) { --topbar-end: #5c3410; --toast-bg: #5c3410; }
+:root[data-accent="red"]:not([data-theme="dark"]):not([data-theme="oled"]) { --topbar-end: #5c1e1a; --toast-bg: #5c1e1a; }
+:root[data-accent="teal"]:not([data-theme="dark"]):not([data-theme="oled"]) { --topbar-end: #0f3733; --toast-bg: #0f3733; }
+:root[data-theme="classic"]:is([data-accent="blue"], [data-accent="purple"], [data-accent="orange"], [data-accent="red"], [data-accent="teal"]) {
+  --ink: #1f2328; --ink-soft: #646a71;
+  --paper: #f7f7f8; --line: #e2e4e7;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .08); --shadow-lg: 0 6px 18px rgba(0, 0, 0, .12);
+  --empty-overlay: rgba(247, 247, 248, .85);
+}
+
 /* ---------- font color (curated primary/secondary pairs, independent of theme/accent) ---------- */
 
 :root[data-font-color="navy"] { --ink: #1b2a4a; --ink-soft: #4f5f83; }
@@ -295,7 +311,7 @@ body {
 
 .topbar-actions { display: flex; align-items: center; gap: 10px; }
 
-.net-status { width: 10px; height: 10px; border-radius: 50%; background: #9ad0a6; }
+.net-status { width: 10px; height: 10px; border-radius: 50%; background: rgba(255, 255, 255, .85); }
 .net-status.offline { background: #e8a13c; }
 
 .sync-pill {
@@ -312,7 +328,7 @@ body {
 .sync-pill[hidden] { display: none; }
 .sync-pill.syncing { background: rgba(255, 255, 255, 0.3); }
 .sync-pill.syncing .icon { animation: sync-spin 1s linear infinite; }
-.sync-pill.idle { background: rgba(154, 208, 166, 0.9); }
+.sync-pill.idle { background: rgba(255, 255, 255, 0.22); }
 .sync-pill.offline { background: rgba(232, 161, 60, 0.9); }
 .sync-pill.error { background: rgba(193, 68, 60, 0.95); }
 .sync-pill-dot { width: 6px; height: 6px; border-radius: 50%; background: #fff; margin-inline-start: 2px; }
@@ -345,12 +361,12 @@ body {
   color: #fff;
   font-size: 1.6rem;
   line-height: 1;
-  box-shadow: 0 3px 10px rgba(27, 67, 50, 0.3);
+  box-shadow: 0 3px 10px var(--primary-shadow);
   cursor: pointer;
   z-index: 1050;
 }
 .fab[hidden] { display: none; }
-.fab:hover { background: var(--accent-600); box-shadow: 0 5px 14px rgba(27, 67, 50, 0.36); transform: translateY(-1px); }
+.fab:hover { background: var(--accent-600); box-shadow: 0 5px 14px var(--primary-shadow); transform: translateY(-1px); }
 .fab:active { transform: translateY(0) scale(.96); }
 
 /* ---------- form header (back + title) ---------- */
@@ -491,7 +507,7 @@ label.notif-toggle-row.track-toggle-row input[type="checkbox"]:checked { backgro
 .map-empty[hidden] { display: none; }
 .map-hint {
   position: absolute; top: 10px; right: 50%; transform: translateX(50%);
-  background: rgba(27, 67, 50, 0.85); color: #fff;
+  background: color-mix(in srgb, var(--accent-900) 85%, transparent); color: #fff;
   font-size: .8rem; padding: 5px 12px; border-radius: 8px;
   z-index: 600; pointer-events: none; max-width: 92%; text-align: center;
 }
@@ -1280,7 +1296,7 @@ a.media-link-icon:hover { color: var(--accent-700); }
 }
 .badge {
   display: inline-block; background: var(--accent-100); color: var(--accent-900);
-  border: 1px solid rgba(45, 106, 79, .12);
+  border: 1px solid color-mix(in srgb, var(--accent-700) 12%, transparent);
   border-radius: 999px; padding: 2px 10px; font-size: .78rem; font-weight: 600;
 }
 
@@ -1950,14 +1966,14 @@ a.media-link-icon:hover { color: var(--accent-700); }
 .bird-marker-badge {
   width: 30px; height: 30px; border-radius: 50%;
   background: var(--accent-700); border: 2px solid #fff; color: #fff;
-  box-shadow: 0 2px 5px rgba(27, 67, 50, .35);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, .3);
   display: flex; align-items: center; justify-content: center;
   font-size: 16px; line-height: 1;
 }
 .bird-marker-badge .icon { width: 15px; height: 15px; }
 .bird-marker-thumb {
   width: 44px; height: 44px; border-radius: 50%; overflow: hidden;
-  border: 2px solid #fff; box-shadow: 0 2px 5px rgba(27, 67, 50, .35);
+  border: 2px solid #fff; box-shadow: 0 2px 5px rgba(0, 0, 0, .3);
 }
 .bird-marker-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 

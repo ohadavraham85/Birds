@@ -122,6 +122,11 @@ function applyAll(): void {
   root.setAttribute('data-display-mode', currentDisplayMode());
   root.style.setProperty('--bg-wash', String(1 - currentBgPhoto() / 100));
   root.style.setProperty('--card-opacity', String(1 - currentCardTransparency() / 100));
+  // The phone's own status bar follows the chosen color too (index.html's
+  // static theme-color is the default green).
+  const barColor = getComputedStyle(root).getPropertyValue('--accent-700').trim();
+  const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+  if (meta && barColor) meta.content = barColor;
 }
 
 export function setTheme(v: ThemeId): void { localStorage.setItem(KEYS.theme, v); applyAll(); }
