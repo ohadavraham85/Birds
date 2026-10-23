@@ -117,11 +117,11 @@ export function openDriveBackup(): void {
   const wrap = document.createElement('div');
   wrap.className = 'drive-backup-modal';
   wrap.innerHTML = `
-    <h3>${icon('save')} גיבוי לדרייב</h3>
+    <h3>${icon('drive')} גיבוי לדרייב</h3>
     <p class="hint" style="margin-top:0">שני קבצים: קובץ שחזור מלא (כולל תמונות) וטבלת תצפיות לאקסל/גיליונות.</p>
     <p class="drive-backup-status">מכין את הקבצים...</p>
     <div class="modal-actions">
-      <button type="button" class="btn btn-primary" id="db-share" disabled>${icon('upload')} שליחה לדרייב</button>
+      <button type="button" class="btn btn-primary" id="db-share" disabled>${icon('drive')} שליחה לדרייב</button>
       <button type="button" class="btn" id="db-cancel">ביטול</button>
     </div>`;
   const close = showModal(wrap);
@@ -177,7 +177,7 @@ function showReminder(): void {
   bar.id = 'backup-reminder';
   bar.className = 'backup-reminder';
   bar.innerHTML = `
-    <span class="icon" aria-hidden="true">${icon('save')}</span>
+    <span class="icon" aria-hidden="true">${icon('drive')}</span>
     <span class="backup-reminder-text">הגיע הזמן לגיבוי השבועי לדרייב</span>
     <button type="button" class="backup-reminder-go">גיבוי</button>
     <button type="button" class="backup-reminder-later">אחר כך</button>`;

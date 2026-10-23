@@ -350,7 +350,7 @@ function syncHtml(fbCode: string): string {
       </p>
       <p style="font-size:.85rem;margin-top:0">${lastDriveBackup() ? `גיבוי אחרון לדרייב: ${fmtDateTime(lastDriveBackup()!)}` : 'עוד לא בוצע גיבוי לדרייב מהמכשיר הזה.'}</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-primary" id="s-drive-backup">${icon('upload')} גיבוי לדרייב</button>
+        <button class="btn btn-primary" id="s-drive-backup">${icon('drive')} גיבוי לדרייב</button>
         <button class="btn" id="s-backup">${icon('download')} הורדת קובץ גיבוי מלא</button>
         <label class="btn" style="cursor:pointer">${icon('upload')} שחזור מקובץ גיבוי
           <input type="file" id="s-restore" accept=".json,.txt,application/json,text/plain" hidden>
