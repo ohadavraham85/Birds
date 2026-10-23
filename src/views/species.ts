@@ -3,7 +3,7 @@
  * לכל מין, וקישור לתצפיות. */
 
 import { listSpeciesRows, addSpecies, setSpeciesDescription, updateSpeciesDetails, listObservations, listAllMedia, saveMedia, findMediaByHash, getMedia, deleteMediaAndUnlink, removeBrokenObservationImage } from '../db/repository';
-import { getSpeciesDetail, getManualSpeciesTag, getCoverPhotoId } from '../lib/species-details-cache';
+import { getSpeciesDetail, getManualSpeciesTag, getCoverPhotoId, speciesStatusTag } from '../lib/species-details-cache';
 import { toast, showImageModal, fmtDateTime, showModal, confirmDialog } from '../lib/ui';
 import { escapeHtml } from '../lib/markdown';
 import { speciesNames, entriesOf, entryImages } from '../lib/observation';
@@ -32,12 +32,7 @@ const SPECIES_TAG_ICONS: Record<SpeciesTag, IconName> = {
 };
 
 function speciesTag(name: string): SpeciesTag {
-  const manual = getManualSpeciesTag(name);
-  if (manual) return manual;
-  const n = counts[name] || 0;
-  if (n === 0) return 'unseen';
-  if (n === 1) return 'lifer';
-  return 'seen';
+  return speciesStatusTag(counts[name] || 0, getManualSpeciesTag(name));
 }
 
 function speciesTagBadgeHtml(name: string): string {
