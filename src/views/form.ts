@@ -797,7 +797,10 @@ export async function activate(): Promise<void> {
   }
 
   await ensureDefaultTag();
-  resetForm(!prefillCoords);
+  // A resumed draft locates (if it still needs to) only after it's restored —
+  // otherwise this fix would race the draft's own point and location name.
+  const resuming = resumeDraftRequested && !!resumeDraftId;
+  resetForm(!prefillCoords && !resuming);
   if (prefillEntries) setEntries(prefillEntries);
   else if (prefillSpecies) setEntries([{ species: prefillSpecies, quantity: 0 }]);
   if (prefillCoords) {
@@ -833,7 +836,11 @@ export async function activate(): Promise<void> {
   prefillMediaId = null;
   prefillSeriesId = null;
 
-  if (resumeDraftRequested && resumeDraftId) resumeFromDraft(resumeDraftId);
+  if (resuming) {
+    resumeFromDraft(resumeDraftId!);
+    if (currentLat == null || coordsLocked) autoFillGps();
+    else qs(container, '#gps-status').textContent = '';
+  }
   resumeDraftRequested = false;
 }
 
@@ -1200,8 +1207,10 @@ function maybeSnapToNearbySavedLocation(lat: number, lng: number): void {
     const d = haversineMeters({ lat, lng, t: 0 }, { lat: loc.lat, lng: loc.lng, t: 0 });
     if (d < nearestDist) { nearestDist = d; nearest = loc; }
   }
+  const field = input(container, '#f-location');
+  if (field.value.trim()) return; // never overwrite a name that's already there (typed, or restored from a draft)
   if (nearest && nearestDist <= NEARBY_LOCATION_RADIUS_M) {
-    input(container, '#f-location').value = nearest.name;
+    field.value = nearest.name;
     applyLocationName(nearest.name);
   }
 }
@@ -1213,7 +1222,7 @@ function autoFillGps(): void {
   status.textContent = '(מאתר מיקום...)';
   navigator.geolocation.getCurrentPosition(
     (pos) => {
-      if (currentLat != null && !coordsLocked) return; // don't clobber a manual/map choice
+      if (currentLat != null && !coordsLocked) { status.textContent = ''; return; } // don't clobber a manual/map choice
       currentLat = pos.coords.latitude;
       currentLng = pos.coords.longitude;
       coordsLocked = false;

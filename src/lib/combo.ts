@@ -21,12 +21,18 @@ export function wireCombo(inp: HTMLInputElement, list: HTMLElement, getSuggestio
     const esc = escapeHtml(s);
     return q ? esc.replaceAll(escapeHtml(q), `<mark>${escapeHtml(q)}</mark>`) : esc;
   };
-  const render = (showAll = false): void => {
+  const render = (showAll = false, fromFocus = false): void => {
     const q = inp.value.trim();
     let matches: string[];
     if (showAll) matches = getSuggestions();
     else if (!q) matches = opts.getDefault ? opts.getDefault() : getSuggestions();
-    else matches = getSuggestions().filter((s) => (matchMode === 'prefix' ? s.startsWith(q) : s.includes(q)));
+    else {
+      matches = getSuggestions().filter((s) => (matchMode === 'prefix' ? s.startsWith(q) : s.includes(q)));
+      // Tapping a field that already holds a value (e.g. a restored draft's
+      // "מורדות נחל יששכר") would otherwise filter down to nothing, or just
+      // that same value, and the list would never open — show everything.
+      if (fromFocus && (!matches.length || (matches.length === 1 && matches[0] === q))) matches = getSuggestions();
+    }
     matches = matches.slice(0, 60);
     hlIndex = -1;
     if (!matches.length) { list.hidden = true; return; }
@@ -35,7 +41,8 @@ export function wireCombo(inp: HTMLInputElement, list: HTMLElement, getSuggestio
       .join('');
     list.hidden = false;
   };
-  inp.addEventListener('focus', () => render());
+  inp.addEventListener('focus', () => render(false, true));
+  inp.addEventListener('click', () => { if (list.hidden) render(false, true); });
   inp.addEventListener('input', () => render());
   inp.addEventListener('keydown', (e) => {
     const items = Array.from(list.querySelectorAll<HTMLButtonElement>('button'));
