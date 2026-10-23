@@ -64,6 +64,9 @@ let selectedTags = new Set<string>();
 let displayMode: ViewDisplayMode = 'list';
 let openKey: string | null = null;
 let collapsedGroups = new Set<string>();
+/** Each grouped mode opens with every group collapsed the first time it's
+ * shown; the user's own expand/collapse taps are kept from then on. */
+const collapseInitialized = new Set<SortMode>();
 /** Set by setParams when arriving via a direct deep link (e.g. the home
  * screen's "Bird of the Day"); consumed once in the next activate() to
  * scroll straight to that species' card, so the trip feels like opening its
@@ -317,18 +320,31 @@ function render(): void {
       : sortMode === 'details'
         ? (sortDir === 'asc' ? ['אין פרטים', 'יש פרטים'] : ['יש פרטים', 'אין פרטים']).filter((k) => groups.has(k))
         : sortAlpha([...groups.keys()]);
+    if (!collapseInitialized.has(sortMode)) {
+      collapseInitialized.add(sortMode);
+      for (const k of keys) collapsedGroups.add(k);
+      if (openKey) for (const k of groupKeysOf(openKey)) collapsedGroups.delete(k);
+    }
+    // While searching, every matching group stays open so results are visible.
+    const searching = !!query.trim();
     el.innerHTML = keys.map((key) => {
       const items = sortAlpha(groups.get(key)!);
-      const collapsed = collapsedGroups.has(key);
+      const collapsed = !searching && collapsedGroups.has(key);
+      const thumbName = items.find((n) => getCoverPhotoId(n) && (imagesByName[n] || []).length)
+        ?? items.find((n) => (imagesByName[n] || []).length);
       return `
       <div class="sp-group">
         <button type="button" class="sp-group-head" data-group="${escapeHtml(key)}">
-          <span>${escapeHtml(key)} <span class="sp-group-n">${items.length}</span>${sortMode === 'general' ? familiesSubtitle(items) : ''}</span>
-          <span class="sp-caret">${collapsed ? '▼' : '▲'}</span>
+          <span class="sp-group-title">${escapeHtml(key)} <span class="sp-group-n">${items.length}</span>${sortMode === 'general' ? familiesSubtitle(items) : ''}</span>
+          <span class="sp-group-side">
+            <span class="sp-group-thumb"${thumbName ? ` data-name="${escapeHtml(thumbName)}"` : ''}>${icon('bird')}</span>
+            <span class="sp-caret">${collapsed ? '▼' : '▲'}</span>
+          </span>
         </button>
         ${collapsed ? '' : itemsHtml(items)}
       </div>`;
     }).join('');
+    renderGroupThumbnails();
   } else if (sortMode === 'recent') {
     const sorted = [...list].sort((a, b) => {
       const la = lastObserved[a] || '';
@@ -466,28 +482,35 @@ async function onDeleteBrokenPhoto(mediaId: string, obsId: string): Promise<void
  * hand-picked cover photo (getCoverPhotoId — set via the star button in the
  * species detail gallery) is tried first, ahead of the rest in their normal
  * order, so long as it's still one of the species' actual photos. */
+/** Puts a species' cover photo (or its first photo that loads) into `target`. */
+function loadSpeciesPhoto(target: HTMLElement, name: string): void {
+  const all = imagesByName[name] || [];
+  if (!all.length) return;
+  const coverId = getCoverPhotoId(name);
+  const cover = coverId ? all.find((c) => c.img.localId === coverId) : undefined;
+  const candidates = cover ? [cover, ...all.filter((c) => c !== cover)] : all;
+  void (async () => {
+    for (const { img, obsId } of candidates) {
+      const url = await getImageObjectUrl(img, obsId);
+      if (!url) continue;
+      target.innerHTML = '';
+      const el = document.createElement('img');
+      el.src = url;
+      el.alt = name;
+      el.loading = 'lazy';
+      target.appendChild(el);
+      return;
+    }
+  })();
+}
+
 function renderTileThumbnails(): void {
-  for (const media of container.querySelectorAll<HTMLElement>('.sp-tile-media[data-name]')) {
-    const name = media.dataset.name!;
-    const all = imagesByName[name] || [];
-    if (!all.length) continue;
-    const coverId = getCoverPhotoId(name);
-    const cover = coverId ? all.find((c) => c.img.localId === coverId) : undefined;
-    const candidates = cover ? [cover, ...all.filter((c) => c !== cover)] : all;
-    void (async () => {
-      for (const { img, obsId } of candidates) {
-        const url = await getImageObjectUrl(img, obsId);
-        if (!url) continue;
-        media.innerHTML = '';
-        const el = document.createElement('img');
-        el.src = url;
-        el.alt = name;
-        el.loading = 'lazy';
-        media.appendChild(el);
-        return;
-      }
-    })();
-  }
+  for (const media of container.querySelectorAll<HTMLElement>('.sp-tile-media[data-name]')) loadSpeciesPhoto(media, media.dataset.name!);
+}
+
+/** The round photo on each group's header — one of the group's own species. */
+function renderGroupThumbnails(): void {
+  for (const thumb of container.querySelectorAll<HTMLElement>('.sp-group-thumb[data-name]')) loadSpeciesPhoto(thumb, thumb.dataset.name!);
 }
 
 function detailsHtml(name: string): string {
