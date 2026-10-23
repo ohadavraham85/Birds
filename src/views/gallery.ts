@@ -16,6 +16,7 @@ import { escapeHtml } from '../lib/markdown';
 import { speciesLabel, entriesOf } from '../lib/observation';
 import { icon } from '../lib/icons';
 import { qs } from '../lib/dom';
+import { toolsToggleHtml, wireToolsToggle, markToolsFiltered } from '../lib/view-tools';
 import { navigate } from '../main';
 import { SHARE_TARGET_CACHE } from '../lib/share-target';
 import type { MediaRecord, Observation, SpeciesEntry } from '../types';
@@ -63,29 +64,26 @@ let selectedIds = new Set<string>();
 export function init(el: HTMLElement): void {
   container = el;
   container.innerHTML = `
-    <div class="gallery-toolbar">
-      <span class="gallery-count" id="gallery-count"></span>
-      <div class="gallery-toolbar-actions">
-        <button type="button" class="btn btn-primary" id="gallery-upload-btn">${icon('upload')} העלאת תמונות</button>
-      </div>
-      <input type="file" id="gallery-upload-input" accept="image/*" multiple hidden>
-    </div>
     <div class="filter-bar">
       <input type="search" id="gallery-q" class="filter-search" placeholder="חיפוש לפי מין / מיקום / שם קובץ...">
-      <select id="gallery-sort" class="filter-sel">
+      ${toolsToggleHtml('gallery-tools-btn')}
+      <select id="gallery-sort" class="filter-sel view-tool">
         <option value="added">נוספו לאחרונה</option>
         <option value="taken">לפי תאריך צילום</option>
       </select>
-      <button type="button" class="btn btn-icon" id="gallery-sort-dir" title="היפוך סדר" aria-label="היפוך סדר">${icon('sortArrows')}</button>
+      <button type="button" class="btn btn-icon view-tool" id="gallery-sort-dir" title="היפוך סדר" aria-label="היפוך סדר">${icon('sortArrows')}</button>
     </div>
-    <div class="gallery-storage-card" id="gallery-storage-card" hidden>
+    <p class="gallery-count" id="gallery-count"></p>
+    <input type="file" id="gallery-upload-input" accept="image/*" multiple hidden>
+    <button type="button" class="fab" id="gallery-upload-btn" title="העלאת תמונות" aria-label="העלאת תמונות"><span class="icon icon-lg">${icon('plus')}</span></button>
+    <div class="gallery-storage-card view-tool" id="gallery-storage-card" hidden>
       <div class="gallery-storage-head">
         <span id="gallery-storage-label"></span>
         <span id="gallery-storage-pct"></span>
       </div>
       <div class="gallery-storage-bar"><div class="gallery-storage-fill" id="gallery-storage-fill"></div></div>
     </div>
-    <div class="seg-toggle" id="gallery-assoc-filter">
+    <div class="seg-toggle view-tool" id="gallery-assoc-filter">
       <button type="button" class="seg-btn active" data-filter="all">הכל</button>
       <button type="button" class="seg-btn" data-filter="assoc">משויכות</button>
       <button type="button" class="seg-btn" data-filter="orphan">ללא שיוך</button>
@@ -103,6 +101,7 @@ export function init(el: HTMLElement): void {
   `;
   qs(container, '#gallery-upload-btn').addEventListener('click', () => qs(container, '#gallery-upload-input').click());
   qs<HTMLInputElement>(container, '#gallery-upload-input').addEventListener('change', (e) => void onUpload(e));
+  wireToolsToggle(container, 'gallery-tools-btn');
 
   qs<HTMLInputElement>(container, '#gallery-q').addEventListener('input', (e) => {
     query = (e.target as HTMLInputElement).value;
@@ -126,6 +125,7 @@ export function init(el: HTMLElement): void {
     if (!btn) return;
     assocFilter = btn.dataset.filter as 'all' | 'assoc' | 'orphan';
     qs(container, '#gallery-assoc-filter').querySelectorAll('.seg-btn').forEach((el) => el.classList.toggle('active', el === btn));
+    markToolsFiltered(container, 'gallery-tools-btn', assocFilter !== 'all');
     selectionMode = false;
     selectedIds.clear();
     applyFilter();
@@ -370,6 +370,7 @@ function renderGrid(): void {
     : 'אין תמונות שתואמות את הסינון הנוכחי.';
   qs(container, '#gallery-count').textContent = items.length ? `${items.length} תמונות` : '';
   qs(container, '#gallery-bulk-toolbar').hidden = !selectionMode;
+  qs(container, '#gallery-upload-btn').hidden = selectionMode;
   qs(container, '#gallery-bulk-count').textContent = selectionMode ? `${selectedIds.size} נבחרו` : '';
   grid.innerHTML = '';
   items.forEach((m, i) => {

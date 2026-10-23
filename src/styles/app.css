@@ -1602,9 +1602,7 @@ a.media-link-icon:hover { color: var(--accent-700); }
 
 /* ---------- gallery tab ---------- */
 
-.gallery-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
-.gallery-count { color: var(--ink-soft); font-size: .88rem; }
-.gallery-toolbar-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.gallery-count { color: var(--ink-soft); font-size: .88rem; margin: 0 0 10px; }
 .gallery-storage-card {
   background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
   padding: 10px 12px; margin-bottom: 14px;
@@ -2565,10 +2563,15 @@ table.eq-table { min-width: 980px; }
 .whats-new-entry li { margin: 2px 0; }
 
 /* ---------- compact phone layout ---------- */
-/* Phone only: a shorter top bar and a flat tab bar, and in the species tab
- * the toolbar folds behind ⋯ so more of the list fits on screen. Desktop is
- * unchanged. Kept last so it wins over the general rules above. */
-.sp-tools-toggle { display: none; }
+/* Phone only: a shorter top bar and a flat tab bar, and in the species,
+ * journal and gallery tabs every `.view-tool` folds behind ⋯ (lib/view-tools.ts)
+ * so the top of the screen is just the search. Desktop is unchanged. Kept
+ * last so it wins over the general rules above. */
+.tools-toggle { display: none; position: relative; }
+.tools-toggle.has-filter::after {
+  content: ''; position: absolute; top: 5px; right: 5px;
+  width: 8px; height: 8px; border-radius: 50%; background: var(--accent-600);
+}
 @media (max-width: 600px) {
   :root { --topbar-h: 52px; --tabbar-h: 56px; }
   .topbar { padding: 0 10px; }
@@ -2589,11 +2592,10 @@ table.eq-table { min-width: 980px; }
   .view:not(.view-flush) { padding: 12px; }
   .view h2 { font-size: 1.15rem; margin: 2px 0 10px; }
 
-  .sp-tools-toggle { display: inline-flex; font-size: 1.3rem; line-height: 1; }
-  #view-species .filter-bar { flex-wrap: wrap; }
-  #view-species .filter-search { flex: 1 1 calc(100% - 64px); min-width: 0; }
-  #view-species .filter-bar .filter-sel { flex: 1 1 auto; }
-  #view-species:not(.sp-tools-open) .sp-tool { display: none; }
+  .tools-toggle { display: inline-flex; font-size: 1.3rem; line-height: 1; }
+  .filter-search:has(+ .tools-toggle) { flex: 1 1 calc(100% - 64px); min-width: 0; }
+  .view:has(.tools-toggle) .filter-bar .filter-sel { flex: 1 1 auto; }
+  .view:not(.tools-open) .view-tool { display: none; }
   .sp-summary { font-size: .8rem; margin: 0 0 8px; }
   .sp-cards { gap: 6px; }
   .sp-card .sp-row { padding: 8px 12px; }

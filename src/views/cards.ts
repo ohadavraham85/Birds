@@ -16,6 +16,7 @@ import { exportObservationsExcel } from '../lib/export-excel';
 import { exportObservationsPdf } from '../lib/pdf';
 import { icon } from '../lib/icons';
 import { viewModeToggleHtml, wireViewModeToggle, syncViewModeToggle, type ViewDisplayMode } from '../lib/view-mode';
+import { toolsToggleHtml, wireToolsToggle, markToolsFiltered } from '../lib/view-tools';
 import { qs, input, select } from '../lib/dom';
 import { navigate } from '../main';
 import * as calendarPanel from './calendar';
@@ -65,21 +66,22 @@ export function init(el: HTMLElement): void {
     <div class="filter-bar">
       <div class="filter-bar-list-controls" id="j-list-controls">
         <input type="search" id="j-q" class="filter-search" placeholder="חיפוש (מין, מיקום, תגית, הערות)...">
-        <select id="j-group" class="filter-sel">
+        ${toolsToggleHtml('j-tools-btn')}
+        <select id="j-group" class="filter-sel view-tool">
           <option value="none">ללא קיבוץ</option>
           <option value="day">קיבוץ לפי יום</option>
           <option value="month">קיבוץ לפי חודש</option>
           <option value="location">קיבוץ לפי מיקום</option>
           <option value="tag">קיבוץ לפי תגית</option>
         </select>
-        <button type="button" class="btn btn-icon j-filter-btn" id="j-filter-btn" title="סינון מתקדם" aria-label="סינון מתקדם">
+        <button type="button" class="btn btn-icon j-filter-btn view-tool" id="j-filter-btn" title="סינון מתקדם" aria-label="סינון מתקדם">
           ${icon('filter')}<span class="filter-badge" id="j-filter-badge" hidden></span>
         </button>
-        <button type="button" class="btn btn-icon j-starred-btn" id="j-starred-btn" title="הצגת מועדפים בלבד" aria-label="הצגת מועדפים בלבד">${icon('star')}</button>
-        <button type="button" class="btn btn-icon" id="j-sort-btn" title="היפוך סדר כרונולוגי" aria-label="היפוך סדר כרונולוגי">${icon('sortArrows')}</button>
-        <button type="button" class="btn btn-icon" id="j-expand-all" title="פתיחת כל הקבוצות" aria-label="פתיחת כל הקבוצות">${icon('chevronsDown')}</button>
-        <button type="button" class="btn btn-icon" id="j-collapse-all" title="סגירת כל הקבוצות" aria-label="סגירת כל הקבוצות">${icon('chevronsUp')}</button>
-        ${viewModeToggleHtml('j-view-mode', { includeTable: true })}
+        <button type="button" class="btn btn-icon j-starred-btn view-tool" id="j-starred-btn" title="הצגת מועדפים בלבד" aria-label="הצגת מועדפים בלבד">${icon('star')}</button>
+        <button type="button" class="btn btn-icon view-tool" id="j-sort-btn" title="היפוך סדר כרונולוגי" aria-label="היפוך סדר כרונולוגי">${icon('sortArrows')}</button>
+        <button type="button" class="btn btn-icon view-tool" id="j-expand-all" title="פתיחת כל הקבוצות" aria-label="פתיחת כל הקבוצות">${icon('chevronsDown')}</button>
+        <button type="button" class="btn btn-icon view-tool" id="j-collapse-all" title="סגירת כל הקבוצות" aria-label="סגירת כל הקבוצות">${icon('chevronsUp')}</button>
+        <span class="view-tool">${viewModeToggleHtml('j-view-mode', { includeTable: true })}</span>
       </div>
       <button type="button" class="btn btn-icon" id="j-calendar-toggle" title="תצוגת לוח שנה" aria-label="תצוגת לוח שנה">${icon('calendar')}</button>
     </div>
@@ -100,6 +102,7 @@ export function init(el: HTMLElement): void {
     <div id="j-calendar-panel" hidden></div>
   `;
   wireViewModeToggle(container, 'j-view-mode', (mode) => { displayMode = mode; render(); });
+  wireToolsToggle(container, 'j-tools-btn');
   qs(container, '#j-calendar-toggle').addEventListener('click', () => { calendarMode = !calendarMode; render(); });
   input(container, '#j-q').addEventListener('input', (e) => { query = (e.target as HTMLInputElement).value; render(); });
   select(container, '#j-group').addEventListener('change', (e) => {
@@ -358,7 +361,11 @@ function groupsOf(list: Observation[]): Map<string, { label: string; items: Obse
 }
 
 function render(): void {
-  qs(container, '#j-calendar-toggle').classList.toggle('active', calendarMode);
+  const calendarToggle = qs(container, '#j-calendar-toggle');
+  calendarToggle.classList.toggle('active', calendarMode);
+  // In the calendar the search row is gone, so this is the only way back to
+  // the list — it can't fold away behind ⋯ there.
+  calendarToggle.classList.toggle('view-tool', !calendarMode);
   qs(container, '#j-list-controls').hidden = calendarMode;
   qs(container, '#cards-feed-wrap').hidden = calendarMode;
   const calendarPanelEl = qs(container, '#j-calendar-panel');
@@ -382,6 +389,7 @@ function render(): void {
   badge.textContent = String(filterCount);
   qs(container, '#j-filter-btn').classList.toggle('active', !!filterCount);
   qs(container, '#j-starred-btn').classList.toggle('active', starredOnly);
+  markToolsFiltered(container, 'j-tools-btn', !!filterCount || starredOnly);
   qs<HTMLButtonElement>(container, '#j-expand-all').hidden = groupBy === 'none';
   qs<HTMLButtonElement>(container, '#j-collapse-all').hidden = groupBy === 'none';
   const sortBtn = qs(container, '#j-sort-btn');
