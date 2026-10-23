@@ -2081,9 +2081,10 @@ a.media-link-icon:hover { color: var(--accent-700); }
 
 /* "המינים שלי" — species progress and counts on the home screen. */
 .my-species { display: flex; flex-direction: column; gap: 10px; }
+/* No fill of their own — the card behind them follows the transparency slider. */
 .my-sp-main, .my-sp-tile {
   font: inherit; color: inherit; cursor: pointer; text-align: start;
-  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+  background: transparent; border: 1px solid var(--line); border-radius: var(--radius);
 }
 .my-sp-main:hover, .my-sp-tile:hover { background: var(--accent-50); }
 .my-sp-main { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; }

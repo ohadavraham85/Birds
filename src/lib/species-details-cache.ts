@@ -28,6 +28,16 @@ export function getManualSpeciesTag(name: string): SpeciesTag | undefined {
   return cache.get(name)?.manualTag;
 }
 
+/** A species' birding status, as its badge in the species tab shows it: the
+ * manual choice if one was set, otherwise from how many observations it has
+ * — 0 → not seen, exactly 1 → lifer, 2+ → seen. */
+export function speciesStatusTag(observationCount: number, manual?: SpeciesTag): SpeciesTag {
+  if (manual) return manual;
+  if (observationCount === 0) return 'unseen';
+  if (observationCount === 1) return 'lifer';
+  return 'seen';
+}
+
 /** The photo hand-picked (species.ts's star button) to represent this
  * species on its closed card/tile — undefined means auto-pick instead. */
 export function getCoverPhotoId(name: string): string | undefined {
