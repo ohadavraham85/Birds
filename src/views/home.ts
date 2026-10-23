@@ -8,11 +8,12 @@
 
 import { listObservations, listSpeciesRows, listAllMedia, listSeriesRows, saveSeries, deleteSeries, getSetting, setSetting } from '../db/repository';
 import { getSpeciesDetail } from '../lib/species-details-cache';
+import { SPECIES_DETAILS } from '../data/species-data';
 import { speciesNames, speciesLabel, entriesOf, entryImages } from '../lib/observation';
 import { getImageObjectUrl } from '../lib/media';
 import { escapeHtml } from '../lib/markdown';
 import { fmtDateTime, confirmDialog, showModal, toast } from '../lib/ui';
-import { icon } from '../lib/icons';
+import { icon, type IconName } from '../lib/icons';
 import { listDrafts, clearDraft } from '../lib/draft';
 import { openSmartVoiceModal } from '../lib/voice-observation-modal';
 import { seriesDayLabel, isSeriesOverdue, openCreateSeriesModal, seriesPhotoCandidates, seriesChain, seriesYear } from '../lib/series';
@@ -38,6 +39,8 @@ function colorFor(i: number): string {
 let container: HTMLElement;
 let allObservations: Observation[] = [];
 let speciesMasterList: string[] = [];
+/** Species hand-marked "מין מטרה" in the species tab (SpeciesRow.manualTag). */
+let targetSpecies: string[] = [];
 /** Gallery photos tagged with a species directly (no observation link) —
  * first one per species, used as a fallback photo when a species has no
  * observation photo yet. */
@@ -71,7 +74,9 @@ export function init(el: HTMLElement): void {
 
 export async function activate(): Promise<void> {
   allObservations = await listObservations();
-  speciesMasterList = (await listSpeciesRows()).map((r) => r.name);
+  const speciesRows = await listSpeciesRows();
+  speciesMasterList = speciesRows.map((r) => r.name);
+  targetSpecies = speciesRows.filter((r) => r.manualTag === 'target').map((r) => r.name);
   allSeriesRows = await listSeriesRows();
   activeSeries = allSeriesRows.filter((s) => s.status === 'active');
   goalsSettings = await getSetting<GoalsSettings>('birdingGoals', DEFAULT_GOALS_SETTINGS);
@@ -368,6 +373,82 @@ function rangeBarHtml(): string {
         <span class="home-range-sep">–</span>
         <input type="date" id="home-range-to" value="${customTo}">` : ''}
     </div>`;
+}
+
+/* ---------- "המינים שלי" ---------- */
+
+type SpeciesSetKey = 'all' | 'seen' | 'target' | 'lifers' | 'foreign';
+
+/** Short label of the selected range, for the lifers tile ("לייפרים · 2026"). */
+function rangeLabel(): string {
+  if (rangeMode === 'year') return String(rangeYear);
+  if (rangeMode === 'month') return `${MONTH_NAMES[rangeMonth - 1]} ${rangeYear}`;
+  if (rangeMode === 'custom') return 'בטווח שנבחר';
+  return 'כל הזמן';
+}
+
+/** Every species count on the card, as the actual names so a tap can show
+ * exactly those species. Lifers follow the selected range (a species whose
+ * first-ever observation falls inside it); the rest are all-time. "לא מהארץ"
+ * = species not in the bundled Israeli list (data/species-data.ts). */
+function speciesSets(): Record<SpeciesSetKey, string[]> {
+  const firstSeen = new Map<string, string>();
+  for (const o of allObservations) {
+    const day = o.dateTime.slice(0, 10);
+    for (const name of speciesNames(o)) {
+      if (!name) continue;
+      const prev = firstSeen.get(name);
+      if (!prev || day < prev) firstSeen.set(name, day);
+    }
+  }
+  const { from, to } = activeRangeAsDates();
+  const known = new Set([...speciesMasterList, ...firstSeen.keys()]);
+  return {
+    all: speciesMasterList,
+    seen: [...firstSeen.keys()],
+    target: targetSpecies,
+    lifers: [...firstSeen].filter(([, day]) => (!from || day >= from) && (!to || day <= to)).map(([name]) => name),
+    foreign: [...known].filter((name) => !SPECIES_DETAILS[name]),
+  };
+}
+
+function mySpeciesHtml(): string {
+  const sets = speciesSets();
+  const listed = new Set(sets.all);
+  const seenListed = sets.seen.filter((n) => listed.has(n)).length;
+  const pct = sets.all.length ? Math.round((seenListed / sets.all.length) * 100) : 0;
+  const n = (v: number): string => v.toLocaleString('he-IL');
+  const tile = (key: SpeciesSetKey, label: string, iconName: IconName): string => `
+    <button type="button" class="my-sp-tile" data-sp-set="${key}">
+      <span class="my-sp-icon">${icon(iconName)}</span>
+      <span class="my-sp-value">${n(sets[key].length)}</span>
+      <span class="my-sp-label">${escapeHtml(label)}</span>
+    </button>`;
+  return `
+    <div class="stat-card my-species">
+      <div class="stat-card-head"><h3>${icon('binoculars')} המינים שלי</h3></div>
+      <button type="button" class="my-sp-main" data-sp-set="seen">
+        <span class="my-sp-main-text"><b>${n(sets.seen.length)}</b> מינים נצפו <span class="my-sp-of">מתוך ${n(sets.all.length)} ברשימה</span></span>
+        <span class="my-sp-bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><span style="width:${pct}%"></span></span>
+        <span class="my-sp-pct">${pct}% מהרשימה</span>
+      </button>
+      <div class="my-sp-tiles">
+        ${tile('all', 'מינים ברשימה', 'list')}
+        ${tile('target', 'מיני מטרה', 'target')}
+        ${tile('lifers', `לייפרים · ${rangeLabel()}`, 'star')}
+        ${tile('foreign', 'לא מהארץ', 'globe')}
+      </div>
+    </div>`;
+}
+
+const SPECIES_SET_LABELS: Record<SpeciesSetKey, string> = {
+  all: 'כל המינים', seen: 'מינים שנצפו', target: 'מיני מטרה', lifers: 'לייפרים', foreign: 'מינים לא מהארץ',
+};
+
+function openSpeciesSet(key: SpeciesSetKey): void {
+  if (key === 'all') { navigate('species'); return; }
+  const label = key === 'lifers' ? `לייפרים · ${rangeLabel()}` : SPECIES_SET_LABELS[key];
+  navigate('species', { speciesFilter: { label, names: speciesSets()[key] } });
 }
 
 /* ---------- stats dashboard (moved from the old stats tab) ---------- */
@@ -986,6 +1067,7 @@ function smartVoiceButtonHtml(): string {
 
 function render(): void {
   const widgets: DashWidget[] = [
+    { id: 'mySpecies', title: 'המינים שלי', defaultSpan: 12, html: mySpeciesHtml() },
     { id: 'series', title: 'מעקבים פעילים', defaultSpan: 12, html: seriesWidgetHtml() },
     { id: 'birdOfDay', title: 'ציפור היום', defaultSpan: 6, html: birdOfDayHtml() },
     { id: 'onThisDay', title: 'בתאריך הזה', defaultSpan: 6, html: onThisDayHtml() },
@@ -1050,6 +1132,9 @@ function onClick(e: Event): void {
 
   const otd = target.closest<HTMLElement>('#otd-card');
   if (otd) { navigate('detail', { viewId: otd.dataset.id! }); return; }
+
+  const spSet = target.closest<HTMLElement>('[data-sp-set]');
+  if (spSet) { openSpeciesSet(spSet.dataset.spSet as SpeciesSetKey); return; }
 
   const tile = target.closest<HTMLElement>('[data-tile]');
   if (tile) {
