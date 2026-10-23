@@ -84,6 +84,7 @@ export function init(el: HTMLElement): void {
         <span class="view-tool">${viewModeToggleHtml('j-view-mode', { includeTable: true })}</span>
       </div>
       <button type="button" class="btn btn-icon" id="j-calendar-toggle" title="תצוגת לוח שנה" aria-label="תצוגת לוח שנה">${icon('calendar')}</button>
+      <button type="button" class="btn btn-icon view-tool" id="j-series-btn" title="ספריית מעקבים" aria-label="ספריית מעקבים">${icon('target')}</button>
     </div>
     <div class="bulk-toolbar" id="j-bulk-toolbar" hidden>
       <span id="j-bulk-count"></span>
@@ -104,6 +105,7 @@ export function init(el: HTMLElement): void {
   wireViewModeToggle(container, 'j-view-mode', (mode) => { displayMode = mode; render(); });
   wireToolsToggle(container, 'j-tools-btn');
   qs(container, '#j-calendar-toggle').addEventListener('click', () => { calendarMode = !calendarMode; render(); });
+  qs(container, '#j-series-btn').addEventListener('click', () => navigate('series'));
   input(container, '#j-q').addEventListener('input', (e) => { query = (e.target as HTMLInputElement).value; render(); });
   select(container, '#j-group').addEventListener('change', (e) => {
     groupBy = (e.target as HTMLSelectElement).value as GroupMode;
