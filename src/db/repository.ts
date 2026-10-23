@@ -966,6 +966,29 @@ export async function deleteMediaAndUnlink(id: string): Promise<void> {
  * same slot the bulk photo-import flow uses) and claims it (sets its
  * `obsId`) so it stops showing as unassociated. A no-op if the photo is
  * already attached to this observation. */
+/** Photos that an observation's entries point to but whose own row still
+ * says "orphan" (obsId '') — e.g. pulled onto a fresh device from a stale
+ * orphan copy in the cloud's `media` collection. Marks them associated and
+ * drops that stale cloud copy (metadata only; the Storage file the
+ * observation links to is untouched), same as associateMediaWithObservation. */
+export async function repairStaleOrphanMedia(): Promise<number> {
+  const owners = new Map<string, string>();
+  for (const o of await listObservations()) {
+    for (const e of entriesOf(o)) for (const img of e.images ?? []) if (img.localId) owners.set(img.localId, o.id);
+  }
+  let fixed = 0;
+  for (const m of await db.media.toArray()) {
+    if (m.obsId) continue;
+    const obsId = owners.get(m.id);
+    if (!obsId) continue;
+    await db.media.put({ ...m, obsId, updatedAt: now() });
+    emitMutation('media', m.id, 'delete', { ...m, deleted: true, updatedAt: now() });
+    fixed++;
+  }
+  if (fixed) emitChange();
+  return fixed;
+}
+
 export async function associateMediaWithObservation(mediaId: string, obsId: string, entryIndex = 0): Promise<void> {
   const media = await db.media.get(mediaId);
   const obs = await getObservation(obsId);
