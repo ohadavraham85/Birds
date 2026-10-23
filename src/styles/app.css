@@ -1703,7 +1703,11 @@ a.media-link-icon:hover { color: var(--accent-700); }
 .photo-picker-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .photo-picker-tile.selected { border-color: var(--accent-700); }
 
-.gallery-assoc-modal .gallery-assoc-search { width: 100%; margin: 10px 0; }
+.gallery-assoc-modal .gallery-assoc-search {
+  width: 100%; margin: 10px 0; padding: 10px 12px; box-sizing: border-box;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--card); color: var(--ink); font: inherit;
+}
 .gallery-assoc-modal .gallery-assoc-list { display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow-y: auto; }
 
 /* ---------- species tab ---------- */
