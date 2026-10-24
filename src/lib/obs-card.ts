@@ -149,10 +149,25 @@ export function wireCardMetaToggle(root: HTMLElement): void {
 
 /** Compact row: location, time, tags and coordinates only — no species
  * or notes. Used by the journal's "list" display mode. */
+/** Keeps each compact row's round photo as tall as the row's own text (so
+ * it fills the row at any font size or number of text lines) — measured,
+ * since a CSS-only "as tall as the row" circle feeds its own size back into
+ * the row height. */
+const thumbSizer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver((entries) => {
+  for (const entry of entries) {
+    const thumb = (entry.target.parentElement as HTMLElement | null)?.querySelector<HTMLElement>(':scope > .card-side .card-thumb');
+    if (!thumb) continue;
+    const size = Math.round(Math.min(140, Math.max(44, entry.contentRect.height)));
+    if (thumb.style.getPropertyValue('--thumb-size') !== `${size}px`) thumb.style.setProperty('--thumb-size', `${size}px`);
+  }
+});
+
 export function renderObservationSummary(o: Observation): HTMLElement {
   const card = document.createElement('article');
   card.className = 'obs-card obs-card-compact';
   card.innerHTML = headMetaHtml(o, false, true);
+  const body = card.querySelector<HTMLElement>(':scope > .card-body');
+  if (body) thumbSizer?.observe(body);
   applyFamilyAccent(card, o);
   wireStarButton(card);
   wireTagBadges(card);
