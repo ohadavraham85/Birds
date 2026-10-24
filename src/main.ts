@@ -229,11 +229,9 @@ async function fetchDeployedVersion(): Promise<string> {
 
 const LAST_SEEN_VERSION_KEY = 'lastSeenAppVersion';
 const UPDATE_CHECK_INTERVAL_MS = 5 * 60 * 1000;
-let updateApply: (() => void) | null = null;
-let updatePromptShownFor = '';
 
-/** "עדכון זמין: מגרסה X לגרסה Y" — pops a dialog once per new version (and
- * keeps the bottom banner up afterwards if dismissed with "אחר כך"). */
+/** "עדכון זמין: מגרסה X לגרסה Y" — shown only in the small bottom banner
+ * (the user asked for no separate popup dialog on top of it). */
 async function showUpdateAvailable(knownNext?: string): Promise<void> {
   const next = knownNext ?? await fetchDeployedVersion();
   const current = __APP_VERSION__;
@@ -244,32 +242,6 @@ async function showUpdateAvailable(knownNext?: string): Promise<void> {
   const label = document.getElementById('update-banner-text');
   if (label) label.textContent = text;
   if (banner) banner.hidden = false;
-
-  const key = next || 'unknown';
-  if (updatePromptShownFor === key) return;
-  updatePromptShownFor = key;
-  const box = document.createElement('div');
-  box.className = 'version-dialog';
-  box.innerHTML = `
-    <h3>${icon('refresh')} גרסה חדשה זמינה</h3>
-    <div class="version-dialog-versions">
-      <span><small>גרסה נוכחית</small><strong dir="ltr">${current || '—'}</strong></span>
-      <span class="version-dialog-arrow">←</span>
-      <span><small>גרסה חדשה</small><strong dir="ltr">${next || '?'}</strong></span>
-    </div>
-    <p class="hint">העדכון יטען מחדש את האפליקציה. הנתונים שלך שמורים ולא יימחקו.</p>
-    <div class="modal-actions">
-      <button type="button" class="btn btn-primary" id="vd-update">עדכון עכשיו</button>
-      <button type="button" class="btn" id="vd-later">אחר כך</button>
-    </div>`;
-  const close = showModal(box);
-  qs<HTMLButtonElement>(box, '#vd-later').addEventListener('click', close);
-  qs<HTMLButtonElement>(box, '#vd-update').addEventListener('click', (e) => {
-    const btn = e.currentTarget as HTMLButtonElement;
-    btn.disabled = true;
-    btn.textContent = 'מעדכן...';
-    updateApply?.();
-  });
 }
 
 /** After an update lands: "האפליקציה עודכנה מגרסה X לגרסה Y", once. */
@@ -392,7 +364,6 @@ async function init(): Promise<void> {
     // anyway rather than leaving the button stuck on "מעדכן..." forever.
     setTimeout(() => window.location.reload(), 4000);
   };
-  updateApply = applyUpdate;
   const updateBtn = document.getElementById('update-banner-btn') as HTMLButtonElement | null;
   updateBtn?.addEventListener('click', () => {
     updateBtn.disabled = true;
