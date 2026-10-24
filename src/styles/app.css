@@ -2619,8 +2619,32 @@ table.eq-table { min-width: 980px; }
 .obs-card-compact .card-body > .tag-badge-row { margin-top: 0; }
 .obs-card-compact .card-body .tag-badge-row { margin-top: 0; }
 
-/* The round photo is as tall as the row's text (--thumb-size, measured in
-   lib/obs-card.ts), so it fills nearly the whole row at any font size. */
 .obs-card.obs-card-compact { padding-top: 3px; padding-bottom: 3px; }
-.obs-card-compact .card-thumb { width: var(--thumb-size, 46px); height: var(--thumb-size, 46px); }
-.obs-card-compact .card-thumb .icon { width: 45%; height: 45%; }
+
+
+/* ---------- journal list: every row the same size ----------
+   Two fixed lines — place, then number · date · icons · tags/observers —
+   cut off with an ellipsis rather than wrapping, so every row and every
+   round photo is exactly the same size. Coordinates and the series badge
+   stay in the full observation view. Sizes are in rem so the whole row
+   scales evenly with the app's text-size setting. */
+.obs-card.obs-card-compact { padding: 4px 10px; }
+.obs-card-compact .card-body {
+  display: grid; grid-template-columns: max-content minmax(0, 1fr); grid-template-rows: 1.55rem 1.45rem;
+  column-gap: 8px; row-gap: 0; align-items: center; height: 3rem; overflow: hidden;
+}
+.obs-card-compact .card-body > .card-head { grid-column: 1 / -1; min-width: 0; }
+.obs-card-compact .card-place { flex-wrap: nowrap; min-width: 0; overflow: hidden; }
+.obs-card-compact .place-link, .obs-card-compact .card-place > span {
+  display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+.obs-card-compact .card-body > .meta { grid-column: 1; grid-row: 2; flex-wrap: nowrap; white-space: nowrap; }
+.obs-card-compact .meta-coords, .obs-card-compact .series-badge-row { display: none !important; }
+.obs-card-compact .card-body > .card-meta-details {
+  grid-column: 2; grid-row: 2; display: flex; align-items: center; gap: 6px;
+  min-width: 0; overflow: hidden; white-space: nowrap; margin: 0;
+}
+.obs-card-compact .card-meta-details .tag-badge-row { flex-wrap: nowrap; margin: 0; flex-shrink: 0; }
+.obs-card-compact .card-meta-details .observer-row { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.obs-card-compact .card-thumb { width: 3.2rem; height: 3.2rem; }
+.obs-card-compact .card-thumb .icon { width: 1.4rem; height: 1.4rem; }
