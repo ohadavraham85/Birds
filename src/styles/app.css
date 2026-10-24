@@ -2618,3 +2618,9 @@ table.eq-table { min-width: 980px; }
 .obs-card-compact .card-body > .card-meta-details,
 .obs-card-compact .card-body > .tag-badge-row { margin-top: 0; }
 .obs-card-compact .card-body .tag-badge-row { margin-top: 0; }
+
+/* The round photo fills nearly the whole row height: two lines of text
+   are ~42px tall, so a 46px circle with 3px padding sets the row. */
+.obs-card.obs-card-compact { padding-top: 3px; padding-bottom: 3px; }
+.obs-card-compact .card-thumb { width: 46px; height: 46px; }
+.obs-card-compact .card-thumb .icon { width: 20px; height: 20px; }
