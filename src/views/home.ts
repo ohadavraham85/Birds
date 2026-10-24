@@ -352,7 +352,48 @@ const SPECIES_SET_LABELS: Record<SpeciesSetKey, string> = {
 
 function openSpeciesSet(key: SpeciesSetKey): void {
   if (key === 'all') { navigate('species'); return; }
+  if (key === 'foreign') { openForeignSpecies(); return; }
   navigate('species', { speciesFilter: { label: SPECIES_SET_LABELS[key], names: speciesSets()[key] } });
+}
+
+/** "לא מהארץ" — each species with the places that count it as abroad, so a
+ * wrongly-placed observation (or a saved place with wrong coordinates) is
+ * easy to spot, plus a button through to the species list as before. */
+function openForeignSpecies(): void {
+  const names = speciesSets().foreign;
+  const places = new Map<string, Set<string>>();
+  for (const o of allObservations) {
+    if (whereObserved(o) !== 'abroad') continue;
+    for (const name of speciesNames(o)) {
+      if (!names.includes(name)) continue;
+      const own = o.lat != null && o.lng != null && (o.lat !== 0 || o.lng !== 0);
+      const p = own ? { lat: o.lat!, lng: o.lng! } : locationPoints.get(o.locationName)!;
+      const label = `${o.locationName.trim() || 'ללא שם מקום'} (${p.lat.toFixed(3)}, ${p.lng.toFixed(3)})`;
+      if (!places.has(name)) places.set(name, new Set());
+      places.get(name)!.add(label);
+    }
+  }
+  const box = document.createElement('div');
+  box.className = 'foreign-dialog';
+  box.innerHTML = `
+    <h3>${icon('globe')} ${SPECIES_SET_LABELS.foreign} (${names.length})</h3>
+    <p class="hint">ליד כל מין: המקום שבגללו הוא נספר כתצפית בחו״ל. אם מקום מופיע כאן בטעות, כנראה שהקואורדינטות שלו שגויות — אפשר לתקן אותן בהגדרות ← ניהול רשימות ← מיקומים, או בעריכת התצפית.</p>
+    <div class="foreign-list">
+      ${names.length ? names.sort((a, b) => a.localeCompare(b, 'he')).map((n) => `
+        <div class="foreign-row"><strong>${escapeHtml(n)}</strong>
+          <span>${[...(places.get(n) ?? [])].map((l) => `<span dir="auto">${escapeHtml(l)}</span>`).join(' · ')}</span></div>`).join('')
+        : '<p class="hint">אין מינים שנצפו רק בחו״ל.</p>'}
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-primary" id="fd-close">סגירה</button>
+      ${names.length ? '<button type="button" class="btn" id="fd-open">פתיחה ברשימת המינים</button>' : ''}
+    </div>`;
+  const close = showModal(box);
+  qs(box, '#fd-close').addEventListener('click', close);
+  box.querySelector('#fd-open')?.addEventListener('click', () => {
+    close();
+    navigate('species', { speciesFilter: { label: SPECIES_SET_LABELS.foreign, names } });
+  });
 }
 
 /* ---------- stats dashboard (moved from the old stats tab) ---------- */
