@@ -2590,3 +2590,31 @@ table.eq-table { min-width: 980px; }
 .foreign-row { display: flex; flex-direction: column; gap: 2px; padding: 8px 0; border-bottom: 1px solid var(--line); min-width: 0; overflow-wrap: anywhere; }
 .foreign-row:last-child { border-bottom: 0; }
 .foreign-row > span { font-size: .82rem; color: var(--ink-soft); }
+
+/* ---------- journal list: compact rows ----------
+   The list-mode journal card at about half its old height — photo,
+   text, star, tags and spacing all scaled down together. */
+.cards-feed:has(.obs-card-compact) { gap: 6px; }
+.obs-card.obs-card-compact { padding: 5px 10px; border-inline-start-width: 3px; }
+.obs-card-compact:has(> .card-side) { gap: 10px; }
+.obs-card-compact .card-thumb { width: 40px; height: 40px; border-width: 1.5px; }
+.obs-card-compact .card-thumb .icon { width: 18px; height: 18px; }
+.obs-card-compact .card-side .star-btn { width: 20px; height: 20px; top: -6px; inset-inline-end: -6px; }
+.obs-card-compact .card-side .star-btn .icon { width: 12px; height: 12px; }
+.obs-card-compact .card-head { gap: 6px; }
+.obs-card-compact .card-place { gap: 4px; }
+.obs-card-compact .place-link { font-size: .88rem; }
+.obs-card-compact .place-link .icon { width: 13px; height: 13px; }
+.obs-card-compact .meta { font-size: .72rem; margin-top: 0; gap: 8px; }
+.obs-card-compact .meta .icon { width: 12px; height: 12px; }
+.obs-card-compact .tag-badge-row { margin-top: 2px; gap: 4px; }
+.obs-card-compact .tag-badge { font-size: .64rem; padding: 0 7px; line-height: 1.5; }
+.obs-card-compact .tag-badge .icon { width: 11px; height: 11px; }
+.obs-card-compact .observer-row { font-size: .7rem; }
+.obs-card-compact .card-meta-toggle { font-size: .72rem; padding-top: 0; padding-bottom: 0; }
+/* Date and tags share one line, so a row is two lines instead of three. */
+.obs-card-compact .card-body { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; row-gap: 1px; }
+.obs-card-compact .card-body > .card-head { flex-basis: 100%; }
+.obs-card-compact .card-body > .card-meta-details,
+.obs-card-compact .card-body > .tag-badge-row { margin-top: 0; }
+.obs-card-compact .card-body .tag-badge-row { margin-top: 0; }
