@@ -18,6 +18,11 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: 39, date: '2026-10-24',
+    title: 'יומן: שורות קטנות יותר',
+    items: ['כל תצפית ברשימת היומן תופסת בערך חצי מהגובה שתפסה קודם: התמונה, הטקסט, הכוכב והתגיות קטנו יחד.'],
+  },
+  {
     id: 38, date: '2026-10-24',
     title: 'החרמון בארץ, ופירוט "לא מהארץ"',
     items: [
