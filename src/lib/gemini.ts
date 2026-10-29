@@ -115,6 +115,7 @@ async function call<T>(endpoint: Endpoint, path: string, init?: RequestInit): Pr
     try { detail = ((await res.json()) as { error?: { message?: string } }).error?.message || ''; } catch { /* not JSON */ }
     if (isKeyError(res.status, detail)) throw new GeminiError('Google לא מכיר את המפתח. כדאי להעתיק אותו שוב.', res.status, detail);
     if (res.status === 403) throw new GeminiError(forbiddenMessage(detail, endpoint), res.status, detail);
+    if (res.status === 402) throw new GeminiError('נגמר הקרדיט בפרויקט של המפתח ב-Google (מסלול בתשלום מראש). אפשר להוסיף קרדיט ב-ai.studio/projects, או ליצור מפתח בפרויקט חדש בלי חיוב — שם עובד המסלול החינמי.', res.status, detail);
     if (res.status === 429) throw new GeminiError('אין מכסת שימוש פנויה ב-Gemini כרגע. נסו שוב בעוד דקה.', res.status, detail);
     if (res.status === 404) throw new GeminiError('המודל לא נמצא.', res.status, detail);
     throw new GeminiError(`שגיאה מ-Gemini (${res.status}).`, res.status, detail);

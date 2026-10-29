@@ -18,6 +18,11 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: 49, date: '2026-10-29',
+    title: 'עוזר קולי: הסבר כשנגמר הקרדיט',
+    items: ['כשנגמר הקרדיט בפרויקט של מפתח ה-Gemini, ההודעה מסבירה בעברית מה אפשר לעשות: להוסיף קרדיט, או ליצור מפתח בפרויקט חדש וחינמי.'],
+  },
+  {
     id: 48, date: '2026-10-29',
     title: 'עוזר קולי: מפתח AQ. מ-AI Studio עובד',
     items: [
