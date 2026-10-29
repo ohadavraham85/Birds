@@ -4,6 +4,8 @@ export interface ViewParams {
   editId?: string;
   viewId?: string;
   species?: string;
+  /** Opens Settings directly on one category (e.g. 'assistant'). */
+  settingsCategory?: string;
   /** Drill-down from the home screen's "המינים שלי" card: the species tab
    * shows only these species, under a removable "מוצגים: <label>" chip. */
   speciesFilter?: { label: string; names: string[] };

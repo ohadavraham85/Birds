@@ -40,6 +40,8 @@ import {
   currentBgPhoto, setBgPhoto, currentCardTransparency, setCardTransparency, MAX_CARD_TRANSPARENCY,
   type ThemeId, type AccentId, type FontColorId, type FontSizeId, type FontWeightId, type DisplayModeId,
 } from '../lib/theme';
+import { assistantHtml, wireAssistant } from './settings-assistant';
+import type { ViewParams } from './view';
 import type { Observation, LocationRow, TagRow, TagIconName, ObserverRow, ObservationTrack, SeriesRow, EquipmentItem } from '../types';
 import { TAG_ICON_NAMES } from '../types';
 
@@ -76,12 +78,13 @@ let photoImportObsCache: Observation[] = [];
 
 /* ---------- category menu ---------- */
 
-type SettingsCategory = 'appearance' | 'sync' | 'lists' | 'equipment' | 'photos' | 'notifications' | 'files' | 'security' | 'data';
+type SettingsCategory = 'appearance' | 'sync' | 'assistant' | 'lists' | 'equipment' | 'photos' | 'notifications' | 'files' | 'security' | 'data';
 let activeCategory: SettingsCategory | null = null;
 
 const CATEGORY_META: Record<SettingsCategory, { icon: IconName; title: string; subtitle: string }> = {
   appearance: { icon: 'palette', title: 'עיצוב', subtitle: 'ערכת נושא, צבעים, גודל ומשקל טקסט' },
   sync: { icon: 'cloud', title: 'סנכרון וגיבוי', subtitle: 'סנכרון לענן (Firebase), גיבוי ושחזור' },
+  assistant: { icon: 'sparkles', title: 'עוזר קולי', subtitle: 'מפתח Gemini לפתיחת תצפית, הוספת ציפורים ושאלות בקול' },
   lists: { icon: 'list', title: 'ניהול רשימות', subtitle: 'מינים, מיקומים, תגיות וצופים' },
   equipment: { icon: 'binoculars', title: 'מלאי ציוד', subtitle: 'מצלמות, עדשות, משקפות וציוד נלווה — סינון וייצוא' },
   photos: { icon: 'camera', title: 'ייבוא תמונות', subtitle: 'שיוך תמונות לתצפיות לפי תאריך' },
@@ -93,6 +96,11 @@ const CATEGORY_META: Record<SettingsCategory, { icon: IconName; title: string; s
 
 export function init(el: HTMLElement): void {
   container = el;
+}
+
+/** Opens straight on one category (e.g. the voice assistant's "להגדרות"). */
+export function setParams(params: ViewParams): void {
+  if (params.settingsCategory && params.settingsCategory in CATEGORY_META) activeCategory = params.settingsCategory as SettingsCategory;
 }
 
 function renderCategoryMenu(): void {
@@ -161,6 +169,7 @@ export async function activate(): Promise<void> {
     </div>
     ${activeCategory === 'appearance' ? appearanceHtml(activeTheme, activeAccent, activeFontColor, activeFontSize, activeFontWeight, currentDisplayMode()) : ''}
     ${activeCategory === 'sync' ? syncHtml(fbCode) : ''}
+    ${activeCategory === 'assistant' ? assistantHtml() : ''}
     ${activeCategory === 'notifications' ? notificationsHtml(notifSupported, notifPermission, notifEnabled, notifMigration, notifOnThisDay, notifInactivity) : ''}
     ${activeCategory === 'lists' ? listsHtml() : ''}
     ${activeCategory === 'equipment' ? equipmentHtml() : ''}
@@ -174,6 +183,7 @@ export async function activate(): Promise<void> {
 
   if (activeCategory === 'appearance') wireAppearance();
   if (activeCategory === 'sync') wireSync();
+  if (activeCategory === 'assistant') wireAssistant(container);
   if (activeCategory === 'notifications' && notifSupported) wireNotifications();
   if (activeCategory === 'lists') wireLists();
   if (activeCategory === 'equipment') wireEquipment(container);

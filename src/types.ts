@@ -54,6 +54,16 @@ export interface Observation {
    * chronologically-ordered observations tracking the same ongoing subject
    * (nesting, migration, molting, etc.) over time. */
   seriesId?: string;
+  /** Ongoing ("מתמשכת") observation opened by voice (lib/voice-assistant.ts):
+   * 'active' while it's open and further sightings are being added to it,
+   * 'completed' once closed. Absent on ordinary observations. At most one is
+   * active at a time. */
+  status?: 'active' | 'completed';
+  /** When an ongoing observation was opened / closed (ISO), and the minutes
+   * between them — set on close. */
+  startTime?: string;
+  endTime?: string;
+  durationMinutes?: number;
   /** Soft-delete tombstone — kept so the deletion propagates on sync. */
   deleted: boolean;
   /** Last local modification, ISO. Used for last-write-wins merging. */

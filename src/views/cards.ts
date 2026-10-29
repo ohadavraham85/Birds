@@ -17,6 +17,7 @@ import { exportObservationsPdf } from '../lib/pdf';
 import { icon } from '../lib/icons';
 import { viewModeToggleHtml, wireViewModeToggle, syncViewModeToggle, type ViewDisplayMode } from '../lib/view-mode';
 import { toolsToggleHtml, wireToolsToggle, markToolsFiltered } from '../lib/view-tools';
+import { openVoiceAssistant, voiceAssistantBarHtml } from '../lib/voice-assistant-modal';
 import { qs, input, select } from '../lib/dom';
 import { navigate } from '../main';
 import * as calendarPanel from './calendar';
@@ -85,7 +86,9 @@ export function init(el: HTMLElement): void {
       </div>
       <button type="button" class="btn btn-icon" id="j-calendar-toggle" title="תצוגת לוח שנה" aria-label="תצוגת לוח שנה">${icon('calendar')}</button>
       <button type="button" class="btn btn-icon view-tool" id="j-series-btn" title="ספריית מעקבים" aria-label="ספריית מעקבים">${icon('target')}</button>
+      <button type="button" class="btn btn-icon view-tool" data-voice-assistant title="עוזר קולי" aria-label="עוזר קולי">${icon('mic')}</button>
     </div>
+    <div id="j-va-bar"></div>
     <div class="bulk-toolbar" id="j-bulk-toolbar" hidden>
       <span id="j-bulk-count"></span>
       <button type="button" class="btn btn-sm btn-primary" id="j-bulk-edit">${icon('edit')} עריכה מרוכזת</button>
@@ -106,6 +109,7 @@ export function init(el: HTMLElement): void {
   wireToolsToggle(container, 'j-tools-btn');
   qs(container, '#j-calendar-toggle').addEventListener('click', () => { calendarMode = !calendarMode; render(); });
   qs(container, '#j-series-btn').addEventListener('click', () => navigate('series'));
+  container.addEventListener('click', (e) => { if ((e.target as HTMLElement).closest('[data-voice-assistant]')) openVoiceAssistant(); });
   input(container, '#j-q').addEventListener('input', (e) => { query = (e.target as HTMLInputElement).value; render(); });
   select(container, '#j-group').addEventListener('change', (e) => {
     groupBy = (e.target as HTMLSelectElement).value as GroupMode;
@@ -363,6 +367,7 @@ function groupsOf(list: Observation[]): Map<string, { label: string; items: Obse
 }
 
 function render(): void {
+  qs(container, '#j-va-bar').innerHTML = voiceAssistantBarHtml(observations.find((o) => o.status === 'active'), false);
   const calendarToggle = qs(container, '#j-calendar-toggle');
   calendarToggle.classList.toggle('active', calendarMode);
   // In the calendar the search row is gone, so this is the only way back to
