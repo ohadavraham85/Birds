@@ -1,62 +1,48 @@
-/* lib/theme.ts — appearance settings: background theme, accent color, font
- * color, font size, and font weight. All device-local (like the rest of
- * Settings' local-only preferences), persisted in localStorage so each can be
- * applied synchronously before first paint (see the inline snippet in
- * index.html) instead of waiting on an async IndexedDB read. Each dimension
- * is independent — e.g. any accent color can be combined with any background
- * theme — applied as separate data-attributes on <html> that app.css keys
- * its overrides off of. */
+/* lib/theme.ts — appearance settings: the color set, font size and weight,
+ * layout, background-photo wash and card transparency. All device-local,
+ * persisted in localStorage so each can be applied synchronously before
+ * first paint (see the inline snippet in index.html) instead of waiting on an
+ * async IndexedDB read.
+ *
+ * Colors come only from ready-made sets (PALETTES): each is a background, a
+ * card color, a text color and two accent colors that blend into a gradient
+ * on the top bar, the main buttons and the selected tab. Every other shade
+ * the CSS uses (--accent-50…900, --ink-soft, --line, shadows…) is derived
+ * from those here, set as custom properties on <html>, and cached as one
+ * style string for the before-first-paint snippet. Picking background /
+ * accent / text color separately is gone — mixing them produced clashes. */
 
-export const THEMES = [
-  { id: 'classic', label: 'ירוק קלאסי', swatch: '#2d6a4f' },
-  { id: 'forest', label: 'ירוק מאופק', swatch: '#3d5c46' },
-  { id: 'slate', label: 'כחול-אפור ארגוני', swatch: '#3a5a7d' },
-  { id: 'dark', label: 'כהה', swatch: '#3f8a7d' },
-  { id: 'oled', label: 'כהה עמוק (OLED)', swatch: '#0a0a0a' },
-  { id: 'nature', label: 'גווני טבע', swatch: '#8a5a34' },
-] as const;
-export type ThemeId = (typeof THEMES)[number]['id'];
+export interface Palette {
+  id: string;
+  label: string;
+  dark: boolean;
+  bg: string;
+  card: string;
+  text: string;
+  /** Main accent — buttons, links, the right end of gradients (white text on it). */
+  accent: string;
+  /** Second accent — the far end of the gradients. */
+  accent2: string;
+}
 
-export const ACCENTS = [
-  { id: 'default', label: 'ברירת מחדל', swatch: null },
-  { id: 'blue', label: 'כחול', swatch: '#2f6fed' },
-  { id: 'purple', label: 'סגול', swatch: '#7c4dcc' },
-  { id: 'orange', label: 'כתום', swatch: '#e07a2e' },
-  { id: 'red', label: 'אדום', swatch: '#c1443c' },
-  { id: 'teal', label: 'טורקיז', swatch: '#1f9a8f' },
-] as const;
-export type AccentId = (typeof ACCENTS)[number]['id'];
-
-/** Ready-made color sets: background, cards, text and an accent color chosen
- * together, so they always match (picking theme / accent / text color one by
- * one can produce clashing mixes, like a blue-grey theme under an orange bar).
- * Each set sits on a base theme for everything not color-related (dark sets
- * on "dark") and its colors live in app.css under [data-palette]. The four
- * swatch colors here only draw its preview card in Settings. */
-export const PALETTES = [
-  { id: 'desert', label: 'מדבר', base: 'classic', bg: '#f4ebdd', card: '#fffaf2', text: '#3b2a1d', accent: '#b9582f' },
-  { id: 'sea', label: 'ים תיכון', base: 'classic', bg: '#e8f1f5', card: '#ffffff', text: '#10293b', accent: '#1d6fa3' },
-  { id: 'olive', label: 'זית ושמנת', base: 'classic', bg: '#f1efe3', card: '#fdfcf5', text: '#2b2d1c', accent: '#62752a' },
-  { id: 'sunset', label: 'שקיעה', base: 'classic', bg: '#f7ebe6', card: '#fffaf7', text: '#3a1e28', accent: '#b0435a' },
-  { id: 'lavender', label: 'לבנדר וצפחה', base: 'classic', bg: '#eeedf5', card: '#fcfcff', text: '#24213a', accent: '#6152c0' },
-  { id: 'shore', label: 'חוף', base: 'classic', bg: '#f5efe4', card: '#fffdf8', text: '#1f3434', accent: '#1b7e78' },
-  { id: 'night', label: 'לילה בשטח', base: 'dark', bg: '#12161b', card: '#1d232a', text: '#e9edf1', accent: '#b06d25' },
-  { id: 'ember', label: 'פחם וגחלים', base: 'dark', bg: '#141010', card: '#211a19', text: '#f3ece9', accent: '#c4502d' },
-] as const;
-export type PaletteId = (typeof PALETTES)[number]['id'];
-
-/** Curated primary+secondary text-color pairs, chosen to keep contrast
- * against any of the background themes above — rather than a free-form
- * color wheel, which could easily produce illegible text. */
-export const FONT_COLORS = [
-  { id: 'default', label: 'ברירת מחדל', swatch: null },
-  { id: 'navy', label: 'כחול כהה', swatch: '#1b2a4a' },
-  { id: 'charcoal', label: 'אפור פחם', swatch: '#26282b' },
-  { id: 'forest-text', label: 'ירוק כהה', swatch: '#1c3324' },
-  { id: 'plum', label: 'סגול כהה', swatch: '#3a1f3d' },
-  { id: 'high-contrast', label: 'ניגודיות מרבית', swatch: '#000000' },
-] as const;
-export type FontColorId = (typeof FONT_COLORS)[number]['id'];
+export const PALETTES: readonly Palette[] = [
+  { id: 'sunset', label: 'שקיעה טרופית', dark: false, bg: '#fff6ef', card: '#fffdfb', text: '#2b1d2e', accent: '#d9434f', accent2: '#f08a4b' },
+  { id: 'ocean', label: 'אוקיינוס', dark: false, bg: '#eef7fb', card: '#ffffff', text: '#0d2b3e', accent: '#0a6fb5', accent2: '#00a6c7' },
+  { id: 'rainforest', label: 'יער גשם', dark: false, bg: '#eefaf2', card: '#ffffff', text: '#12301f', accent: '#13894f', accent2: '#5aa832' },
+  { id: 'grape', label: 'ענבים', dark: false, bg: '#f6f1fc', card: '#ffffff', text: '#261a3d', accent: '#6c2bd9', accent2: '#b05ce8' },
+  { id: 'raspberry', label: 'פטל', dark: false, bg: '#fdf0f5', card: '#ffffff', text: '#3a1028', accent: '#c8215f', accent2: '#f0568c' },
+  { id: 'desert', label: 'זריחה במדבר', dark: false, bg: '#fbf3e4', card: '#fffcf6', text: '#3b2614', accent: '#c4581b', accent2: '#e3922a' },
+  { id: 'lagoon', label: 'לגונה', dark: false, bg: '#ecfaf7', card: '#ffffff', text: '#0f2f2c', accent: '#00897b', accent2: '#1fb39a' },
+  { id: 'electric', label: 'כחול חשמלי', dark: false, bg: '#f0f3ff', card: '#ffffff', text: '#141b3d', accent: '#3450f0', accent2: '#7a4dff' },
+  { id: 'lava', label: 'לבה', dark: false, bg: '#fff3ef', card: '#ffffff', text: '#2e1410', accent: '#d62839', accent2: '#f26419' },
+  { id: 'meadow', label: 'אחו פורח', dark: false, bg: '#f6f8ec', card: '#ffffff', text: '#22301b', accent: '#3d8b37', accent2: '#c9a227' },
+  { id: 'neon', label: 'לילה זוהר', dark: true, bg: '#0f1020', card: '#1a1b33', text: '#eceeff', accent: '#7c5cff', accent2: '#00b8e6' },
+  { id: 'embers', label: 'גחלים', dark: true, bg: '#140f0e', card: '#221a18', text: '#f6ece8', accent: '#d4481a', accent2: '#f5a000' },
+  { id: 'aurora', label: 'זוהר צפוני', dark: true, bg: '#0b1a1f', card: '#13262d', text: '#e6fbf7', accent: '#7b54c9', accent2: '#00a88c' },
+  { id: 'midnight', label: 'חצות כחולה', dark: true, bg: '#0d1726', card: '#16233a', text: '#e8f0ff', accent: '#2f74e0', accent2: '#38b6e8' },
+  { id: 'nightrose', label: 'ורד לילה', dark: true, bg: '#160d18', card: '#24162a', text: '#fbeefc', accent: '#e0359a', accent2: '#8a52c4' },
+];
+export const DEFAULT_PALETTE = 'ocean';
 
 export const FONT_SIZES = [
   { id: 'sm', label: 'קטן' },
@@ -83,16 +69,19 @@ export const DISPLAY_MODES = [
 export type DisplayModeId = (typeof DISPLAY_MODES)[number]['id'];
 
 const KEYS = {
+  /** 'classic' | 'dark' — the base for dark-specific CSS; read by index.html. */
   theme: 'birds-theme',
-  accent: 'birds-accent',
-  fontColor: 'birds-font-color',
   fontSize: 'birds-font-size',
   fontWeight: 'birds-font-weight',
   displayMode: 'birds-display-mode',
   bgPhoto: 'birds-bg-photo',
   cardTransparency: 'birds-card-transparency',
   palette: 'birds-palette',
+  /** The set's computed custom properties, applied by index.html before first paint. */
+  paletteCss: 'birds-palette-css',
 } as const;
+/** Settings of the old separate pickers, cleared on load. */
+const OLD_KEYS = ['birds-accent', 'birds-font-color'];
 
 export const MAX_CARD_TRANSPARENCY = 90;
 
@@ -104,14 +93,9 @@ function readId<T extends string>(key: string, valid: readonly { id: T }[], fall
   return (valid.some((v) => v.id === saved) ? saved : fallback) as T;
 }
 
-export function currentTheme(): ThemeId {
-  return readId(KEYS.theme, THEMES, 'classic');
-}
-export function currentAccent(): AccentId {
-  return readId(KEYS.accent, ACCENTS, 'default');
-}
-export function currentFontColor(): FontColorId {
-  return readId(KEYS.fontColor, FONT_COLORS, 'default');
+export function currentPalette(): Palette {
+  const id = localStorage.getItem(KEYS.palette);
+  return PALETTES.find((p) => p.id === id) ?? PALETTES.find((p) => p.id === DEFAULT_PALETTE)!;
 }
 export function currentFontSize(): FontSizeId {
   return readId(KEYS.fontSize, FONT_SIZES, 'md');
@@ -122,10 +106,6 @@ export function currentFontWeight(): FontWeightId {
 export function currentDisplayMode(): DisplayModeId {
   return readId(KEYS.displayMode, DISPLAY_MODES, 'auto');
 }
-/** '' = no set: the theme / accent / text color picked one by one. */
-export function currentPalette(): PaletteId | '' {
-  return readId(KEYS.palette, PALETTES, '' as PaletteId) || '';
-}
 export function currentBgPhoto(): number {
   const n = parseInt(localStorage.getItem(KEYS.bgPhoto) ?? '', 10);
   return Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : DEFAULT_BG_PHOTO;
@@ -135,40 +115,90 @@ export function currentCardTransparency(): number {
   return Number.isFinite(n) ? Math.min(MAX_CARD_TRANSPARENCY, Math.max(0, n)) : 0;
 }
 
+/* ---------- deriving every shade from a set's five colors ---------- */
+
+function rgb(hex: string): [number, number, number] {
+  const h = hex.replace('#', '');
+  return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)) as [number, number, number];
+}
+function hex([r, g, b]: number[]): string {
+  return '#' + [r, g, b].map((c) => Math.round(Math.min(255, Math.max(0, c!))).toString(16).padStart(2, '0')).join('');
+}
+/** `a` mixed with `b`, `t` = share of `b` (0…1). */
+function mix(a: string, b: string, t: number): string {
+  const x = rgb(a), y = rgb(b);
+  return hex(x.map((c, i) => c + (y[i]! - c) * t));
+}
+function rgba(color: string, alpha: number): string {
+  return `rgba(${rgb(color).join(', ')}, ${alpha})`;
+}
+
+export function paletteVars(p: Palette): Record<string, string> {
+  const white = '#ffffff';
+  const black = '#000000';
+  const v: Record<string, string> = {
+    '--paper': p.bg,
+    '--card': p.card,
+    '--ink': p.text,
+    '--ink-soft': mix(p.text, p.bg, 0.42),
+    '--line': mix(p.text, p.bg, p.dark ? 0.82 : 0.86),
+    '--accent-700': p.accent,
+    '--accent-600': mix(p.accent, white, 0.18),
+    '--accent-2': p.accent2,
+    '--accent-mid': mix(p.accent, p.accent2, 0.5),
+    '--primary-shadow': rgba(p.accent, p.dark ? 0.45 : 0.38),
+    '--topbar-end': p.accent2,
+    '--empty-overlay': rgba(p.bg, 0.85),
+  };
+  if (p.dark) {
+    // --accent-900 doubles as emphasized text, so on dark it's a light tint.
+    Object.assign(v, {
+      '--accent-900': mix(p.accent, white, 0.55),
+      '--accent-100': mix(p.accent, p.bg, 0.72),
+      '--accent-50': mix(p.accent, p.bg, 0.84),
+      '--toast-bg': mix(p.accent, black, 0.6),
+      '--danger': '#e0685e', '--amber': '#dba13e', '--danger-soft': '#3a201d',
+      '--shadow': '0 1px 2px rgba(0, 0, 0, .3)', '--shadow-lg': '0 6px 18px rgba(0, 0, 0, .42)',
+    });
+  } else {
+    Object.assign(v, {
+      '--accent-900': mix(p.accent, black, 0.45),
+      '--accent-100': mix(p.accent, white, 0.84),
+      '--accent-50': mix(p.accent, white, 0.92),
+      '--toast-bg': mix(p.accent, black, 0.5),
+      '--danger': '#c1443c', '--amber': '#b07d1e', '--danger-soft': '#fbe4e2',
+      '--shadow': `0 1px 2px ${rgba(p.text, 0.1)}`, '--shadow-lg': `0 6px 18px ${rgba(p.text, 0.15)}`,
+    });
+  }
+  return v;
+}
+
 function applyAll(): void {
   const root = document.documentElement;
-  root.setAttribute('data-theme', currentTheme());
-  root.setAttribute('data-accent', currentAccent());
-  root.setAttribute('data-font-color', currentFontColor());
+  const palette = currentPalette();
+  const vars = paletteVars(palette);
+  for (const [k, val] of Object.entries(vars)) root.style.setProperty(k, val);
+  const theme = palette.dark ? 'dark' : 'classic';
+  root.setAttribute('data-theme', theme);
+  root.setAttribute('data-palette', palette.id);
+  root.removeAttribute('data-accent');
+  root.removeAttribute('data-font-color');
   root.setAttribute('data-font-size', currentFontSize());
   root.setAttribute('data-font-weight', currentFontWeight());
   root.setAttribute('data-display-mode', currentDisplayMode());
-  const palette = currentPalette();
-  if (palette) root.setAttribute('data-palette', palette);
-  else root.removeAttribute('data-palette');
   root.style.setProperty('--bg-wash', String(1 - currentBgPhoto() / 100));
   root.style.setProperty('--card-opacity', String(1 - currentCardTransparency() / 100));
-  // The phone's own status bar follows the chosen color too (index.html's
-  // static theme-color is the default green).
-  const barColor = getComputedStyle(root).getPropertyValue('--accent-700').trim();
+  try {
+    localStorage.setItem(KEYS.theme, theme);
+    localStorage.setItem(KEYS.paletteCss, Object.entries(vars).map(([k, val]) => `${k}:${val}`).join(';'));
+    for (const k of OLD_KEYS) localStorage.removeItem(k);
+  } catch { /* private mode */ }
+  // The phone's own status bar follows the set too.
   const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
-  if (meta && barColor) meta.content = barColor;
+  if (meta) meta.content = palette.accent;
 }
 
-/* Picking a theme, accent or text color by hand leaves the ready-made set. */
-export function setTheme(v: ThemeId): void { localStorage.removeItem(KEYS.palette); localStorage.setItem(KEYS.theme, v); applyAll(); }
-export function setAccent(v: AccentId): void { localStorage.removeItem(KEYS.palette); localStorage.setItem(KEYS.accent, v); applyAll(); }
-export function setFontColor(v: FontColorId): void { localStorage.removeItem(KEYS.palette); localStorage.setItem(KEYS.fontColor, v); applyAll(); }
-/** A set brings its own colors: its base theme, with the accent and text
- * color reset so nothing picked earlier mixes into it. */
-export function setPalette(v: PaletteId): void {
-  const p = PALETTES.find((x) => x.id === v)!;
-  localStorage.setItem(KEYS.palette, v);
-  localStorage.setItem(KEYS.theme, p.base);
-  localStorage.setItem(KEYS.accent, 'default');
-  localStorage.setItem(KEYS.fontColor, 'default');
-  applyAll();
-}
+export function setPalette(id: string): void { localStorage.setItem(KEYS.palette, id); applyAll(); }
 export function setFontSize(v: FontSizeId): void { localStorage.setItem(KEYS.fontSize, v); applyAll(); }
 export function setFontWeight(v: FontWeightId): void { localStorage.setItem(KEYS.fontWeight, v); applyAll(); }
 export function setDisplayMode(v: DisplayModeId): void { localStorage.setItem(KEYS.displayMode, v); applyAll(); }
