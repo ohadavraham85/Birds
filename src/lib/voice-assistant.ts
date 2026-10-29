@@ -235,6 +235,16 @@ function obsLine(o: Observation): string {
   return `${dayOf(o.dateTime)} ${timeOf(o.dateTime)} | ${o.locationName || 'ללא מיקום'} | ${birds || 'ללא מינים'}${notes}`;
 }
 
+/** The window shows replies as plain text: drop Markdown that Gemini may
+ * still add (**bold**, "* " bullets, "# " headings). */
+function plainText(text: string): string {
+  return text
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/^\s*[*-]\s+/gm, '• ')
+    .replace(/^#+\s*/gm, '')
+    .trim();
+}
+
 async function answerQuestion(question: string, q: NonNullable<Interpretation['query']>): Promise<string> {
   const species = new Set((q.species ?? []).filter(Boolean));
   const locations = (q.locations ?? []).filter(Boolean);
@@ -250,10 +260,11 @@ async function answerQuestion(question: string, q: NonNullable<Interpretation['q
   if (!matches.length) return 'לא מצאתי תצפיות שמתאימות לשאלה.';
   const rows = matches.slice(0, MAX_ROWS);
   const more = matches.length > rows.length ? `\n(מוצגות ${rows.length} התצפיות האחרונות מתוך ${matches.length} שמתאימות.)` : '';
-  return geminiText(
-    'אתה עוזר ביומן צפרות. ענה בעברית, בקצרה ובצורה מסודרת, רק לפי שורות התצפיות שניתנו (כל שורה: תאריך שעה | מקום | מינים ×כמות | הערות). סדר לפי תאריך, מהחדש לישן, וציין מקומות וכמויות. אם מבקשים "לוג", הצג רשימה של התצפיות. אל תמציא נתונים.',
+  return plainText(await geminiText(
+    'אתה עוזר ביומן צפרות. ענה בעברית, בקצרה ובצורה מסודרת, רק לפי שורות התצפיות שניתנו (כל שורה: תאריך שעה | מקום | מינים ×כמות | הערות). סדר לפי תאריך, מהחדש לישן, וציין מקומות וכמויות. אם מבקשים "לוג", הצג רשימה של התצפיות, שורה לכל תצפית שמתחילה ב-"• ". טקסט רגיל בלבד, בלי עיצוב Markdown (בלי כוכביות ובלי #). אל תמציא נתונים.',
     `השאלה: ${question}\n\nהיום: ${dayOf(new Date().toISOString())}\nמספר התצפיות שמתאימות: ${matches.length}${more}\n\nתצפיות:\n${rows.map(obsLine).join('\n')}`,
-  );
+    35000,
+  ));
 }
 
 /* ---------- one command ---------- */
@@ -313,7 +324,7 @@ ${locations.map((l) => l.name).join(' | ') || '(אין)'}
     case 'query':
       return { reply: await answerQuestion(text, it.query ?? {}), active, undoable: false };
     case 'answer':
-      return { reply: it.reply || state, active, undoable: false };
+      return { reply: plainText(it.reply || state), active, undoable: false };
     default:
       return { reply: it.reply || 'לא הבנתי. אפשר לנסות שוב, למשל: "תוסיף 2 חיוואים".', active, undoable: false };
   }

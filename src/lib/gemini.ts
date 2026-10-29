@@ -25,6 +25,10 @@ const KEY_STORAGE = 'birds-gemini-key';
 const MODEL_STORAGE = 'birds-gemini-model';
 const AUTO_MODEL_CACHE = 'birds-gemini-auto-model';
 const ENDPOINT_CACHE = 'birds-gemini-endpoint';
+const COOLDOWN_STORAGE = 'birds-gemini-cooldown';
+/** A model that was overloaded / stuck is skipped for this long, so the next
+ * commands go straight to one that answers instead of waiting on it again. */
+const COOLDOWN_MS = 30 * 60 * 1000;
 const STUDIO_API = 'https://generativelanguage.googleapis.com/v1beta';
 const VERTEX_API = 'https://aiplatform.googleapis.com/v1/publishers/google';
 /** Tried (in order) when the model list can't be read for some reason. */
@@ -39,7 +43,9 @@ const VERTEX_MODELS: string[] = [
 const MAX_MODEL_TRIES = 6;
 /** A request that hasn't answered by then is given up on, rather than
  * leaving the assistant (or the settings check) spinning forever. */
-const REQUEST_TIMEOUT_MS = 40000;
+const REQUEST_TIMEOUT_MS = 15000;
+/** GeminiError status for "no answer in time" (no HTTP status came back). */
+const TIMEOUT_STATUS = 408;
 
 function read(key: string): string {
   try { return localStorage.getItem(key) || ''; } catch { return ''; }
@@ -104,12 +110,12 @@ export class GeminiError extends Error {
   }
 }
 
-async function call<T>(endpoint: Endpoint, path: string, init?: RequestInit): Promise<T> {
+async function call<T>(endpoint: Endpoint, path: string, init?: RequestInit, timeoutMs = REQUEST_TIMEOUT_MS): Promise<T> {
   const key = getGeminiKey();
   if (!key) throw new GeminiError('לא הוגדר מפתח Gemini. מוסיפים אותו בהגדרות ← עוזר קולי.');
   let res: Response;
   const timeout = new AbortController();
-  const timer = setTimeout(() => timeout.abort(), REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => timeout.abort(), timeoutMs);
   try {
     res = await fetch(`${ENDPOINT_BASE[endpoint]}/${path}`, {
       ...init,
@@ -117,9 +123,8 @@ async function call<T>(endpoint: Endpoint, path: string, init?: RequestInit): Pr
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key, ...init?.headers },
     });
   } catch {
-    throw new GeminiError(timeout.signal.aborted
-      ? `Gemini לא ענה תוך ${REQUEST_TIMEOUT_MS / 1000} שניות. כדאי לנסות שוב. אם זה חוזר, אפשר לכתוב בהגדרות מודל קל יותר (למשל gemini-2.5-flash).`
-      : 'אין חיבור לאינטרנט — העוזר הקולי צריך רשת.');
+    if (timeout.signal.aborted) throw new GeminiError(`Gemini לא ענה תוך ${timeoutMs / 1000} שניות. כדאי לנסות שוב בעוד רגע.`, TIMEOUT_STATUS);
+    throw new GeminiError('אין חיבור לאינטרנט — העוזר הקולי צריך רשת.');
   } finally {
     clearTimeout(timer);
   }
@@ -129,6 +134,7 @@ async function call<T>(endpoint: Endpoint, path: string, init?: RequestInit): Pr
     if (isKeyError(res.status, detail)) throw new GeminiError('Google לא מכיר את המפתח. כדאי להעתיק אותו שוב.', res.status, detail);
     if (res.status === 403) throw new GeminiError(forbiddenMessage(detail, endpoint), res.status, detail);
     if (res.status === 402) throw new GeminiError('נגמר הקרדיט בפרויקט של המפתח ב-Google (מסלול בתשלום מראש). אפשר להוסיף קרדיט ב-ai.studio/projects, או ליצור מפתח בפרויקט חדש בלי חיוב — שם עובד המסלול החינמי.', res.status, detail);
+    if (res.status === 503 || res.status === 500 || res.status === 504) throw new GeminiError('המודלים של Gemini עמוסים כרגע אצל Google. כדאי לנסות שוב בעוד דקה.', res.status, detail);
     if (res.status === 429) throw new GeminiError('אין מכסת שימוש פנויה ב-Gemini כרגע. נסו שוב בעוד דקה.', res.status, detail);
     if (res.status === 404) throw new GeminiError(getManualModel() ? `המודל ${getManualModel()} לא זמין. מוחקים אותו משדה "מודל" בהגדרות כדי שהאפליקציה תבחר לבד.` : 'המודל לא נמצא.', res.status, detail);
     throw new GeminiError(`שגיאה מ-Gemini (${res.status}).`, res.status, detail);
@@ -155,6 +161,25 @@ function forbiddenMessage(detail: string, endpoint: Endpoint): string {
     : 'למפתח אין הרשאה להשתמש ב-Gemini API.';
 }
 
+function cooldowns(): Record<string, number> {
+  try {
+    const all = JSON.parse(read(COOLDOWN_STORAGE) || '{}') as Record<string, number>;
+    const now = Date.now();
+    return Object.fromEntries(Object.entries(all).filter(([, until]) => until > now));
+  } catch {
+    return {};
+  }
+}
+function coolDown(model: string): void {
+  write(COOLDOWN_STORAGE, JSON.stringify({ ...cooldowns(), [model]: Date.now() + COOLDOWN_MS }));
+}
+/** Models not resting after a recent overload — or all of them, if every one is. */
+function withoutResting(models: string[]): string[] {
+  const resting = cooldowns();
+  const awake = models.filter((m) => !resting[m]);
+  return awake.length ? awake : models;
+}
+
 /** 401 (Vertex) / 400 (AI Studio) about the key itself. */
 function isKeyError(status: number, detail: string): boolean {
   return status === 401 || (status === 400 && /api key/i.test(detail));
@@ -169,7 +194,7 @@ export function rankModels(names: string[]): string[] {
   const ids = [...new Set(names.map((n) => n.replace(/^models\//, '')))];
   const version = (id: string): number => Number(/^gemini-(\d+(?:\.\d+)?)/.exec(id)?.[1] ?? 0);
   const byNewest = (a: string, b: string): number => version(b) - version(a);
-  const textFlash = ids.filter((id) => id.startsWith('gemini-') && id.includes('flash') && !/image|tts|audio|live|embedding|thinking/.test(id));
+  const textFlash = ids.filter((id) => id.startsWith('gemini-') && id.includes('flash') && !/image|tts|audio|live|embedding|thinking|omni/.test(id));
   const stable = textFlash.filter((id) => /^gemini-\d+(\.\d+)?-flash$/.test(id)).sort(byNewest);
   const latest: string[] = textFlash.filter((id) => id === 'gemini-flash-latest');
   const lite = textFlash.filter((id) => id.includes('lite')).sort(byNewest);
@@ -187,7 +212,7 @@ async function candidateModels(endpoint: Endpoint): Promise<string[]> {
   if (manual) return [manual];
   const cached = read(AUTO_MODEL_CACHE);
   const cachedFirst = (list: string[]): string[] => (cached && list.includes(cached) ? [cached, ...list.filter((m) => m !== cached)] : list);
-  if (endpoint === 'vertex') return cachedFirst(VERTEX_MODELS);
+  if (endpoint === 'vertex') return cachedFirst(withoutResting(VERTEX_MODELS));
   let ranked: string[] = [];
   try {
     const { models = [] } = await call<{ models?: ModelInfo[] }>('studio', 'models?pageSize=1000');
@@ -197,7 +222,7 @@ async function candidateModels(endpoint: Endpoint): Promise<string[]> {
     if (err instanceof GeminiError && (isKeyError(err.status, err.detail) || err.status === 403)) throw err;
   }
   if (!ranked.length) ranked = FALLBACK_MODELS;
-  return cachedFirst(ranked);
+  return cachedFirst(withoutResting(ranked));
 }
 
 /** The model the next call will use (for the settings screen). */
@@ -211,10 +236,13 @@ interface GenerateResponse {
 }
 
 /** A failure that another model might not have: retired (404), no quota on
- * this tier (429), or a request option that model doesn't support (400 that
- * isn't about the key). */
+ * this tier (429), overloaded or failing on Google's side (500/503/504 —
+ * on the free tier the newest model is often "experiencing high demand"
+ * while the one before it answers in two seconds), too slow to answer, or a
+ * request option that model doesn't support (400 that isn't about the key). */
 function worthTryingAnother(err: unknown): boolean {
-  return err instanceof GeminiError && (err.status === 404 || err.status === 429 || (err.status === 400 && !isKeyError(err.status, err.detail)));
+  if (!(err instanceof GeminiError)) return false;
+  return [404, 429, 500, 503, 504, TIMEOUT_STATUS].includes(err.status) || (err.status === 400 && !isKeyError(err.status, err.detail));
 }
 
 /** Gemini 3 and later "think" at length before answering by default, which
@@ -227,7 +255,7 @@ function wantsLowThinking(model: string): boolean {
 
 type BodyFor = (model: string, lowThinking: boolean) => string;
 
-async function generate(system: string, prompt: string, generationConfig: Record<string, unknown>): Promise<string> {
+async function generate(system: string, prompt: string, generationConfig: Record<string, unknown>, timeoutMs = REQUEST_TIMEOUT_MS): Promise<string> {
   const body: BodyFor = (model, lowThinking) => JSON.stringify({
     systemInstruction: { parts: [{ text: system }] },
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
@@ -239,7 +267,7 @@ async function generate(system: string, prompt: string, generationConfig: Record
   let firstErr: unknown = null;
   for (const endpoint of endpoints) {
     try {
-      const text = await generateOn(endpoint, body);
+      const text = await generateOn(endpoint, body, timeoutMs);
       write(ENDPOINT_CACHE, endpoint);
       return text;
     } catch (err) {
@@ -253,7 +281,7 @@ async function generate(system: string, prompt: string, generationConfig: Record
   throw firstErr;
 }
 
-async function generateOn(endpoint: Endpoint, body: BodyFor): Promise<string> {
+async function generateOn(endpoint: Endpoint, body: BodyFor, timeoutMs: number): Promise<string> {
   // The model that worked last time goes first, without asking Google for
   // the model list on every sentence; the full list only if it stops working.
   const remembered = getManualModel() ? '' : read(AUTO_MODEL_CACHE);
@@ -263,7 +291,7 @@ async function generateOn(endpoint: Endpoint, body: BodyFor): Promise<string> {
     const model = models[i]!;
     let res: GenerateResponse;
     const send = (lowThinking: boolean): Promise<GenerateResponse> =>
-      call<GenerateResponse>(endpoint, `models/${encodeURIComponent(model)}:generateContent`, { method: 'POST', body: body(model, lowThinking) });
+      call<GenerateResponse>(endpoint, `models/${encodeURIComponent(model)}:generateContent`, { method: 'POST', body: body(model, lowThinking) }, timeoutMs);
     try {
       try {
         res = await send(true);
@@ -274,9 +302,10 @@ async function generateOn(endpoint: Endpoint, body: BodyFor): Promise<string> {
     } catch (err) {
       lastErr = err;
       if (getManualModel() || !worthTryingAnother(err)) throw err;
+      if (err instanceof GeminiError && [429, 500, 503, 504, TIMEOUT_STATUS].includes(err.status)) coolDown(model);
       if (i === models.length - 1 && models.length === 1 && model === remembered) {
         write(AUTO_MODEL_CACHE, '');
-        models = [model, ...(await candidateModels(endpoint)).filter((m) => m !== model)].slice(0, MAX_MODEL_TRIES);
+        models = [model, ...(await candidateModels(endpoint)).filter((m) => m !== model)].slice(0, MAX_MODEL_TRIES + 1);
       }
       continue;
     }
@@ -298,6 +327,7 @@ export async function geminiJson<T>(system: string, prompt: string, schema: Reco
   }
 }
 
-export async function geminiText(system: string, prompt: string): Promise<string> {
-  return (await generate(system, prompt, { temperature: 0.3 })).trim();
+/** `timeoutMs`: per-request wait — longer for a summary of many observations. */
+export async function geminiText(system: string, prompt: string, timeoutMs = REQUEST_TIMEOUT_MS): Promise<string> {
+  return (await generate(system, prompt, { temperature: 0.3 }, timeoutMs)).trim();
 }
