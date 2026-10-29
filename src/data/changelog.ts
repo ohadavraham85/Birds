@@ -18,6 +18,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: 47, date: '2026-10-29',
+    title: 'עוזר קולי: הסבר מדויק כשהמפתח נחסם',
+    items: [
+      'כש-Google חוסם את המפתח, ההודעה אומרת עכשיו מה בדיוק לתקן ב-Google Cloud: הגבלת שירותים במפתח, הגבלת אתרים, שירות שלא הופעל, חשבון חיוב או הרשאה.',
+    ],
+  },
+  {
     id: 46, date: '2026-10-29',
     title: 'עוזר קולי: תמיכה במפתח Google Cloud (Vertex AI)',
     items: [
