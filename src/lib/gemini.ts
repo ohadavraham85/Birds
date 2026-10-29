@@ -1,5 +1,12 @@
-/* lib/gemini.ts — direct calls from the app to the Gemini API (Google AI
- * Studio), for the voice assistant (lib/voice-assistant.ts).
+/* lib/gemini.ts — direct calls from the app to Gemini, for the voice
+ * assistant (lib/voice-assistant.ts). Two kinds of key work:
+ *  - a Google AI Studio key ("AIza…") → the Gemini API
+ *    (generativelanguage.googleapis.com);
+ *  - a Google Cloud / Vertex AI key ("AQ.…", e.g. bound to a service account,
+ *    or Vertex express mode) → Vertex AI's global endpoint
+ *    (aiplatform.googleapis.com/v1/publishers/google/models/…).
+ * Both take the key in the x-goog-api-key header, allow calls from the app's
+ * origin (CORS) and share the same generateContent request/response shape.
  *
  * The API key is the user's own, typed into Settings → עוזר קולי on each
  * device and kept only in that device's localStorage: it is never part of
@@ -18,11 +25,18 @@
 const KEY_STORAGE = 'birds-gemini-key';
 const MODEL_STORAGE = 'birds-gemini-model';
 const AUTO_MODEL_CACHE = 'birds-gemini-auto-model';
-const API = 'https://generativelanguage.googleapis.com/v1beta';
+const STUDIO_API = 'https://generativelanguage.googleapis.com/v1beta';
+const VERTEX_API = 'https://aiplatform.googleapis.com/v1/publishers/google';
 /** Tried (in order) when the model list can't be read for some reason. */
 const FALLBACK_MODELS: string[] = ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-2.0-flash', 'gemini-2.5-flash-lite'];
+/** Vertex AI doesn't list its models to an API key, so these are tried in
+ * order (newest first; a name Vertex doesn't have just fails with 404 and
+ * the next is tried, and the first that works is remembered). */
+const VERTEX_MODELS: string[] = [
+  'gemini-3-flash', 'gemini-3-flash-preview', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash-001',
+];
 /** How many models to try before giving up on one call. */
-const MAX_MODEL_TRIES = 5;
+const MAX_MODEL_TRIES = 6;
 
 function read(key: string): string {
   try { return localStorage.getItem(key) || ''; } catch { return ''; }
@@ -34,11 +48,19 @@ function write(key: string, value: string): void {
   } catch { /* private mode — nothing to persist */ }
 }
 
-/** A Gemini key is plain ASCII (letters, digits, "-" and "_"). Pasting on a
- * phone can drag along spaces, line breaks, quotes or invisible direction
- * marks from a Hebrew keyboard — any of which makes Google reject the key. */
+/** A Google key is plain ASCII (letters, digits, ".", "-" and "_"). Pasting
+ * on a phone can drag along spaces, line breaks, quotes or invisible
+ * direction marks from a Hebrew keyboard — any of which makes Google reject
+ * the key. */
 export function cleanKey(raw: string): string {
-  return raw.replace(/[^A-Za-z0-9_-]/g, '');
+  return raw.replace(/[^A-Za-z0-9._-]/g, '');
+}
+
+export type KeyKind = 'studio' | 'vertex';
+/** AI Studio keys start with "AIza"; anything else is treated as a Google
+ * Cloud / Vertex AI key. */
+export function keyKind(key = getGeminiKey()): KeyKind {
+  return key.startsWith('AIza') ? 'studio' : 'vertex';
 }
 
 export function getGeminiKey(): string { return cleanKey(read(KEY_STORAGE)); }
@@ -69,20 +91,29 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   if (!key) throw new GeminiError('לא הוגדר מפתח Gemini. מוסיפים אותו בהגדרות ← עוזר קולי.');
   let res: Response;
   try {
-    res = await fetch(`${API}/${path}`, { ...init, headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key, ...init?.headers } });
+    res = await fetch(`${keyKind(key) === 'studio' ? STUDIO_API : VERTEX_API}/${path}`, { ...init, headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key, ...init?.headers } });
   } catch {
     throw new GeminiError('אין חיבור לאינטרנט — העוזר הקולי צריך רשת.');
   }
   if (!res.ok) {
     let detail = '';
     try { detail = ((await res.json()) as { error?: { message?: string } }).error?.message || ''; } catch { /* not JSON */ }
-    if (res.status === 400 && /api key/i.test(detail)) throw new GeminiError('Google לא מכיר את המפתח. כדאי להעתיק אותו שוב מ-AI Studio.', res.status, detail);
-    if (res.status === 403) throw new GeminiError('למפתח אין הרשאה להשתמש ב-Gemini API.', res.status, detail);
+    if (isKeyError(res.status, detail)) throw new GeminiError('Google לא מכיר את המפתח. כדאי להעתיק אותו שוב.', res.status, detail);
+    if (res.status === 403) {
+      throw new GeminiError(keyKind(key) === 'vertex'
+        ? 'למפתח אין הרשאה ל-Vertex AI. בפרויקט ב-Google Cloud צריך שה-Vertex AI API יהיה מופעל, ושלחשבון השירות של המפתח יהיה תפקיד Vertex AI User.'
+        : 'למפתח אין הרשאה להשתמש ב-Gemini API.', res.status, detail);
+    }
     if (res.status === 429) throw new GeminiError('אין מכסת שימוש פנויה ב-Gemini כרגע. נסו שוב בעוד דקה.', res.status, detail);
     if (res.status === 404) throw new GeminiError('המודל לא נמצא.', res.status, detail);
     throw new GeminiError(`שגיאה מ-Gemini (${res.status}).`, res.status, detail);
   }
   return res.json() as Promise<T>;
+}
+
+/** 401 (Vertex) / 400 (AI Studio) about the key itself. */
+function isKeyError(status: number, detail: string): boolean {
+  return status === 401 || (status === 400 && /api key/i.test(detail));
 }
 
 interface ModelInfo { name: string; supportedGenerationMethods?: string[] }
@@ -110,17 +141,19 @@ export function pickModel(names: string[]): string {
 async function candidateModels(): Promise<string[]> {
   const manual = getManualModel();
   if (manual) return [manual];
+  const cached = read(AUTO_MODEL_CACHE);
+  const cachedFirst = (list: string[]): string[] => (cached && list.includes(cached) ? [cached, ...list.filter((m) => m !== cached)] : list);
+  if (keyKind() === 'vertex') return cachedFirst(VERTEX_MODELS);
   let ranked: string[] = [];
   try {
     const { models = [] } = await call<{ models?: ModelInfo[] }>('models?pageSize=1000');
     ranked = rankModels(models.filter((m) => m.supportedGenerationMethods?.includes('generateContent')).map((m) => m.name));
   } catch (err) {
     // A bad key fails here already — say so instead of trying models.
-    if (err instanceof GeminiError && (err.status === 400 || err.status === 403)) throw err;
+    if (err instanceof GeminiError && (isKeyError(err.status, err.detail) || err.status === 403)) throw err;
   }
   if (!ranked.length) ranked = FALLBACK_MODELS;
-  const cached = read(AUTO_MODEL_CACHE);
-  return cached && ranked.includes(cached) ? [cached, ...ranked.filter((m) => m !== cached)] : ranked;
+  return cachedFirst(ranked);
 }
 
 /** The model the next call will use (for the settings screen). */
@@ -137,7 +170,7 @@ interface GenerateResponse {
  * this tier (429), or a request option that model doesn't support (400 that
  * isn't about the key). */
 function worthTryingAnother(err: unknown): boolean {
-  return err instanceof GeminiError && (err.status === 404 || err.status === 429 || (err.status === 400 && !/api key/i.test(err.detail)));
+  return err instanceof GeminiError && (err.status === 404 || err.status === 429 || (err.status === 400 && !isKeyError(err.status, err.detail)));
 }
 
 async function generate(system: string, prompt: string, generationConfig: Record<string, unknown>): Promise<string> {
