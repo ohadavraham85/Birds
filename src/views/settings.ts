@@ -41,6 +41,7 @@ import {
   type ThemeId, type AccentId, type FontColorId, type FontSizeId, type FontWeightId, type DisplayModeId,
 } from '../lib/theme';
 import { assistantHtml, wireAssistant } from './settings-assistant';
+import { syncGeminiKey } from '../lib/gemini';
 import type { ViewParams } from './view';
 import type { Observation, LocationRow, TagRow, TagIconName, ObserverRow, ObservationTrack, SeriesRow, EquipmentItem } from '../types';
 import { TAG_ICON_NAMES } from '../types';
@@ -160,6 +161,9 @@ export async function activate(): Promise<void> {
   unsubStatus = null;
 
   if (!activeCategory) { renderCategoryMenu(); return; }
+
+  // Pick up a Gemini key pasted on another device (or share this one).
+  if (activeCategory === 'assistant') await syncGeminiKey();
 
   const meta = CATEGORY_META[activeCategory];
   container.innerHTML = `

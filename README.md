@@ -69,7 +69,11 @@ POST /api/sync   { deviceId, since, ops: [{ entity, op, payload }] }
 
 - **ההבנה** נעשית ב-Gemini API (`src/lib/gemini.ts`) עם תשובת JSON מובנית (`responseSchema`). את השינויים עצמם מחיל הקוד (`src/lib/voice-assistant.ts`), ולכן אפשר לבטל את הפעולה האחרונה.
 - **שאלות היסטוריה** עוברות שני שלבים: Gemini מתרגם את השאלה לסינון (מינים, מקומות, טווח תאריכים), האפליקציה מסננת את התצפיות במכשיר, ו-Gemini מנסח תשובה רק מהשורות שנמצאו.
-- **המפתח:** מוזן ב**הגדרות ← עוזר קולי**, ונשמר רק ב-localStorage של המכשיר. הוא לא נכנס לקוד, לריפו או ל-Firestore. שתי נקודות קצה אפשריות, עם אותו מבנה בקשה ואותה כותרת `x-goog-api-key`:
+- **המפתח:** מדביקים אותו פעם אחת ב**הגדרות ← עוזר קולי**.
+  - הוא נשמר ב-`households/{קוד משפחה}/shared/gemini-key` ב-Firestore, ומגיע לבד לשאר המכשירים עם אותו קוד משפחה. בכל מכשיר נשמר גם עותק ב-localStorage.
+  - מחיקה בהגדרות משאירה סימון בענן, ולכן המפתח נמחק גם בשאר המכשירים.
+  - המפתח לא נכנס לקוד או לריפו.
+- **נקודות הקצה:** יש שתיים, עם אותו מבנה בקשה ואותה כותרת `x-goog-api-key`:
   - **Gemini API** (`generativelanguage.googleapis.com`) מקבל כל מפתח מ-[AI Studio](https://aistudio.google.com/apikey), גם `AIza…` הקלאסי וגם `AQ.…` החדש, שקשור לחשבון שירות `ais-gemini-key`.
   - **Vertex AI** (`aiplatform.googleapis.com/v1/publishers/google/models/…`) מקבל מפתח Google Cloud שמורשה ל-Vertex.
   - הקידומת לא מספיקה כדי לדעת לאיזו נקודת קצה המפתח שייך, ולכן מפתח שלא מתחיל ב-`AIza` נשלח קודם ל-Gemini API, ורק אם Google מסרב שם הוא נשלח ל-Vertex. נקודת הקצה שעבדה נשמרת.

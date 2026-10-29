@@ -14,7 +14,7 @@ import { wrapSwipeActions } from '../lib/swipe-actions';
 import { openBulkEditModal, applyBulkEdit, summarizeBulkEdit } from '../lib/bulk-edit';
 import { exportObservationsExcel } from '../lib/export-excel';
 import { exportObservationsPdf } from '../lib/pdf';
-import { icon } from '../lib/icons';
+import { icon, geminiIcon } from '../lib/icons';
 import { viewModeToggleHtml, wireViewModeToggle, syncViewModeToggle, type ViewDisplayMode } from '../lib/view-mode';
 import { toolsToggleHtml, wireToolsToggle, markToolsFiltered } from '../lib/view-tools';
 import { openVoiceAssistant, voiceAssistantBarHtml } from '../lib/voice-assistant-modal';
@@ -86,7 +86,7 @@ export function init(el: HTMLElement): void {
       </div>
       <button type="button" class="btn btn-icon" id="j-calendar-toggle" title="תצוגת לוח שנה" aria-label="תצוגת לוח שנה">${icon('calendar')}</button>
       <button type="button" class="btn btn-icon view-tool" id="j-series-btn" title="ספריית מעקבים" aria-label="ספריית מעקבים">${icon('target')}</button>
-      <button type="button" class="btn btn-icon view-tool" data-voice-assistant title="עוזר קולי" aria-label="עוזר קולי">${icon('mic')}</button>
+      <button type="button" class="btn btn-icon view-tool" data-voice-assistant title="עוזר קולי" aria-label="עוזר קולי">${geminiIcon()}</button>
     </div>
     <div id="j-va-bar"></div>
     <div class="bulk-toolbar" id="j-bulk-toolbar" hidden>
