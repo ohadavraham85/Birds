@@ -18,6 +18,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: 46, date: '2026-10-29',
+    title: 'עוזר קולי: תמיכה במפתח Google Cloud (Vertex AI)',
+    items: [
+      'אפשר להדביק גם מפתח מ-Google Cloud / Vertex AI (למשל שמתחיל ב-AQ.), לא רק מפתח AI Studio שמתחיל ב-AIza. האפליקציה מזהה לבד את סוג המפתח.',
+      'בהגדרות ← עוזר קולי רואים לאיזה שירות המפתח שייך ואיזה מודל נבחר.',
+    ],
+  },
+  {
     id: 45, date: '2026-10-29',
     title: 'עוזר קולי: תיקון שמירת מפתח Gemini',
     items: [

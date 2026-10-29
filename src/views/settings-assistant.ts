@@ -2,21 +2,22 @@
  * (kept on this device only, see lib/gemini.ts) and, optionally, a model
  * chosen by hand instead of the automatic pick. */
 
-import { getGeminiKey, setGeminiKey, getManualModel, setManualModel, currentModel, geminiText, cleanKey, GeminiError } from '../lib/gemini';
+import { getGeminiKey, setGeminiKey, getManualModel, setManualModel, currentModel, geminiText, cleanKey, keyKind, GeminiError } from '../lib/gemini';
 import { escapeHtml } from '../lib/markdown';
 import { toast, withBusyButton } from '../lib/ui';
 import { qs } from '../lib/dom';
 
 /** A Gemini key from AI Studio is 39 characters, starting with "AIza". */
-const EXPECTED_KEY_LENGTH = 39;
+const STUDIO_KEY_LENGTH = 39;
 
-/** "AIza…k3Xw · 39 תווים" — enough to recognise the key without showing it. */
+/** "AIza…k3Xw · 39 תווים · AI Studio" — enough to recognise the key without
+ * showing it, and which service it will be sent to. */
 function keySummary(key: string): string {
   if (!key) return 'אין מפתח שמור.';
-  const shape = key.length === EXPECTED_KEY_LENGTH && key.startsWith('AIza')
-    ? ''
-    : ` — מפתח רגיל מ-AI Studio מתחיל ב-AIza ואורכו ${EXPECTED_KEY_LENGTH} תווים, כדאי להעתיק שוב`;
-  return `מפתח שמור: ${key.slice(0, 4)}…${key.slice(-4)} · ${key.length} תווים${shape}`;
+  const base = `מפתח שמור: ${key.slice(0, 4)}…${key.slice(-4)} · ${key.length} תווים`;
+  if (keyKind(key) === 'vertex') return `${base} · Google Cloud (Vertex AI)`;
+  const shape = key.length === STUDIO_KEY_LENGTH ? '' : ` — מפתח AI Studio רגיל אורכו ${STUDIO_KEY_LENGTH} תווים, כדאי להעתיק שוב`;
+  return `${base} · Google AI Studio${shape}`;
 }
 
 export function assistantHtml(): string {
@@ -25,13 +26,14 @@ export function assistantHtml(): string {
     <div class="settings-card">
       <p style="margin-top:0">העוזר הקולי פותח תצפית מתמשכת ("תפתח תצפית בנחל תבור"), מוסיף אליה ציפורים ("תוסיף 2 חיוואים"), סוגר אותה ("סגור תצפית"), ועונה על שאלות על היסטוריית התצפיות ("מתי ראיתי נשר מקראי?"). ההבנה של המשפטים נעשית ב-Gemini של Google.</p>
       <h4>מפתח Gemini</h4>
-      <ol class="hint" style="padding-inline-start:18px">
-        <li>נכנסים ל-<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> עם חשבון Google.</li>
-        <li>לוחצים <b>Create API key</b>, ואז על המפתח שנוצר ← <b>Copy</b>.</li>
-        <li>מדביקים כאן ולוחצים "שמירה ובדיקה". המפתח נשמר רק במכשיר הזה (לא בענן ולא בקוד), ובכל מכשיר נוסף מדביקים אותו שוב.</li>
-      </ol>
+      <p class="hint">עובד עם שני סוגי מפתחות. האפליקציה מזהה לבד את הסוג:</p>
+      <ul class="hint" style="padding-inline-start:18px">
+        <li><b>Google AI Studio</b> (מתחיל ב-AIza): מ-<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> ← <b>Create API key</b> ← <b>Copy</b>.</li>
+        <li><b>Google Cloud / Vertex AI</b> (מתחיל למשל ב-AQ.): מפתח API מ-Google Cloud. בפרויקט צריך שה-Vertex AI API יהיה מופעל.</li>
+      </ul>
+      <p class="hint">מדביקים כאן ולוחצים "שמירה ובדיקה". המפתח נשמר רק במכשיר הזה (לא בענן ולא בקוד), ובכל מכשיר נוסף מדביקים אותו שוב.</p>
       <div class="field">
-        <input type="text" id="s-gemini-key" placeholder="${key ? 'להחלפה: מדביקים כאן מפתח חדש' : 'מדביקים כאן את המפתח (AIza...)'}"
+        <input type="text" id="s-gemini-key" placeholder="${key ? 'להחלפה: מדביקים כאן מפתח חדש' : 'מדביקים כאן את המפתח (AIza... או AQ....)'}"
           autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" dir="ltr">
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
