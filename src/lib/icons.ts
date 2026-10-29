@@ -83,6 +83,21 @@ export function icon(name: IconName, extraClass = ''): string {
   return `<svg class="icon${extraClass ? ' ' + extraClass : ''}" viewBox="0 0 24 24" aria-hidden="true">${PATHS[name]}</svg>`;
 }
 
+let geminiIconSeq = 0;
+/** The Gemini four-pointed star in its blue → purple → pink colors, for the
+ * voice assistant's buttons (which talk to Gemini). Filled with a gradient
+ * rather than drawn as a stroke like the icons above, so it isn't part of
+ * PATHS; each copy gets its own gradient id. */
+export function geminiIcon(extraClass = ''): string {
+  const id = `gemini-grad-${++geminiIconSeq}`;
+  return `<svg class="icon icon-gemini${extraClass ? ' ' + extraClass : ''}" viewBox="0 0 24 24" aria-hidden="true">
+    <defs><linearGradient id="${id}" x1="3" y1="21" x2="21" y2="3" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4285f4"/><stop offset=".55" stop-color="#9b72cb"/><stop offset="1" stop-color="#d96570"/>
+    </linearGradient></defs>
+    <path fill="url(#${id})" d="M12 2c.6 5.2 4.8 9.4 10 10-5.2.6-9.4 4.8-10 10-.6-5.2-4.8-9.4-10-10 5.2-.6 9.4-4.8 10-10Z"/>
+  </svg>`;
+}
+
 /** Fills every `[data-icon]` placeholder in static HTML (index.html chrome)
  * with its SVG. Dynamically-rendered view templates call icon() directly. */
 export function hydrateIcons(root: ParentNode = document): void {

@@ -6,9 +6,9 @@
 
 import { showModal, toast } from './ui';
 import { escapeHtml } from './markdown';
-import { icon } from './icons';
+import { icon, geminiIcon } from './icons';
 import { startDictation, stopDictation, isDictating, isVoiceDictationSupported } from './voice-dictation';
-import { hasGeminiKey } from './gemini';
+import { hasGeminiKey, syncGeminiKey } from './gemini';
 import { runCommand, getActiveObservation, closeActiveObservation, undoLast, canUndo, fmtDuration, type AssistantResult } from './voice-assistant';
 import { entriesOf } from './observation';
 import { navigate } from '../main';
@@ -16,12 +16,17 @@ import type { Observation } from '../types';
 
 const EXAMPLES = ['תפתח תצפית בנחל תבור', 'תוסיף 2 חיוואים', 'ראיתי עוד כוס חורבות', 'סגור תצפית', 'מתי ראיתי נשר מקראי בתקופה האחרונה?'];
 
+/** Takes the key pasted on another device first (lib/gemini.ts's syncGeminiKey). */
 export function openVoiceAssistant(): void {
+  void syncGeminiKey().then(showVoiceAssistant);
+}
+
+function showVoiceAssistant(): void {
   const wrap = document.createElement('div');
   wrap.className = 'va';
   if (!hasGeminiKey()) {
     wrap.innerHTML = `
-      <h3>${icon('sparkles')} עוזר קולי</h3>
+      <h3>${geminiIcon()} עוזר קולי</h3>
       <p>כדי שהעוזר יעבוד צריך מפתח Gemini אישי (חינמי). מוסיפים אותו פעם אחת בהגדרות ← עוזר קולי.</p>
       <div class="modal-actions">
         <button type="button" class="btn btn-primary" id="va-settings">${icon('gear')} להגדרות</button>
@@ -35,7 +40,7 @@ export function openVoiceAssistant(): void {
 
   const micSupported = isVoiceDictationSupported();
   wrap.innerHTML = `
-    <h3>${icon('sparkles')} עוזר קולי</h3>
+    <h3>${geminiIcon()} עוזר קולי</h3>
     <div class="va-session" id="va-session"></div>
     <div class="va-log" id="va-log">
       <p class="hint va-examples">אפשר לומר למשל:<br>${EXAMPLES.map((e) => `<span class="va-example">"${escapeHtml(e)}"</span>`).join('<br>')}</p>
@@ -189,8 +194,8 @@ export function voiceAssistantBarHtml(active: Observation | undefined, withButto
         <span class="va-live-dot" aria-hidden="true"></span>
         <span class="va-banner-text"><strong>תצפית פעילה${active.locationName ? ` · ${escapeHtml(active.locationName)}` : ''}</strong>
           <span>מ-${new Date(start).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })} · ${n} מינים</span></span>
-        <span class="va-banner-mic">${icon('mic')}</span>
+        <span class="va-banner-mic">${geminiIcon()}</span>
       </button>`;
   }
-  return withButton ? `<button type="button" class="btn btn-block va-open-btn" data-voice-assistant>${icon('mic')} עוזר קולי</button>` : '';
+  return withButton ? `<button type="button" class="btn btn-block va-open-btn" data-voice-assistant>${geminiIcon('va-badge')} עוזר קולי</button>` : '';
 }

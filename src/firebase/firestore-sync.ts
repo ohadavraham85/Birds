@@ -7,7 +7,7 @@
  * rest of the app. */
 
 import {
-  collection, doc, setDoc, onSnapshot, getDocs, query, limit, type Unsubscribe, type QuerySnapshot, type DocumentData,
+  collection, doc, setDoc, getDoc, onSnapshot, getDocs, query, limit, type Unsubscribe, type QuerySnapshot, type DocumentData,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, getBytes, listAll, getMetadata } from 'firebase/storage';
 import { firebaseDb, firebaseStorage } from './app';
@@ -173,6 +173,35 @@ export async function getFirebaseSyncCode(): Promise<string> {
 
 export function isFirebaseSyncActive(): boolean {
   return !!activeCode;
+}
+
+/** Single values shared by every device in the household that aren't a list
+ * of records — e.g. the voice assistant's Gemini key, so it's pasted once and
+ * reaches the phone too. Stored at households/{code}/shared/{name}. Saving
+ * '' keeps the document as a deletion mark, so other devices drop their copy
+ * too instead of sharing it again. */
+export async function putSharedValue(name: string, value: string): Promise<boolean> {
+  if (!activeCode) return false;
+  try {
+    await setDoc(doc(firebaseDb(), 'households', activeCode, 'shared', docSafeId(name)), { value, updatedAt: new Date().toISOString() });
+    return true;
+  } catch (err) {
+    console.warn('Firebase: shared value not saved', name, err);
+    return false;
+  }
+}
+
+/** null = never shared (or can't tell right now); '' = deliberately removed. */
+export async function getSharedValue(name: string): Promise<string | null> {
+  if (!activeCode) return null;
+  try {
+    const snap = await getDoc(doc(firebaseDb(), 'households', activeCode, 'shared', docSafeId(name)));
+    const value = snap.exists() ? (snap.data() as { value?: unknown }).value : null;
+    return typeof value === 'string' ? value : null;
+  } catch (err) {
+    console.warn('Firebase: shared value not read', name, err);
+    return null;
+  }
 }
 
 export interface StorageUsage {

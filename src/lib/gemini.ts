@@ -12,14 +12,16 @@
  * is tried on the Gemini API first and on Vertex AI if Google refuses it
  * there; whichever works is remembered.
  *
- * The API key is the user's own, typed into Settings → עוזר קולי on each
- * device and kept only in that device's localStorage: it is never part of
- * the shipped code, the repo, or the synced Firestore data.
+ * The API key is the user's own, pasted once in Settings → עוזר קולי and
+ * shared with the household's other devices through Firebase (see
+ * syncGeminiKey); it is never part of the shipped code or the repo.
  *
  * Which model to call is picked automatically — newest stable "flash" first,
  * then older/preview/lite ones — and the next candidate is tried whenever one
  * is retired (404) or has no quota on this key's tier (429 / "limit: 0"). A
  * model chosen by hand in Settings is always used as-is. */
+
+import { getSharedValue, putSharedValue } from '../firebase/firestore-sync';
 
 const KEY_STORAGE = 'birds-gemini-key';
 const MODEL_STORAGE = 'birds-gemini-model';
@@ -91,6 +93,40 @@ export function setGeminiKey(key: string): void {
   write(ENDPOINT_CACHE, '');
 }
 export function hasGeminiKey(): boolean { return !!getGeminiKey(); }
+
+/* The key is pasted once and shared with the household's other devices
+ * through Firebase (households/{code}/shared/gemini-key — the same place,
+ * guarded by the same family code, as the rest of the synced data). The
+ * shared copy is the one that counts; each device keeps a local copy so the
+ * assistant also starts without waiting on the network. */
+const SHARED_KEY_NAME = 'gemini-key';
+const SHARE_TIMEOUT_MS = 4000;
+
+function withTimeout<T>(p: Promise<T>, fallback: T): Promise<T> {
+  return Promise.race([p, new Promise<T>((resolve) => setTimeout(() => resolve(fallback), SHARE_TIMEOUT_MS))]);
+}
+
+/** Saves the key here and for every device; '' removes it everywhere.
+ * Resolves false when it couldn't reach the cloud (no sync / offline). */
+export async function saveGeminiKeyEverywhere(key: string): Promise<boolean> {
+  setGeminiKey(key);
+  return withTimeout(putSharedValue(SHARED_KEY_NAME, getGeminiKey()), false);
+}
+
+/** Brings this device in line with the shared key: takes it when it differs
+ * (pasted or replaced on another device), drops this device's copy when it
+ * was deleted on another device, and uploads this device's key when none was
+ * ever shared (a key pasted before keys were shared). */
+export async function syncGeminiKey(): Promise<void> {
+  const raw = await withTimeout(getSharedValue(SHARED_KEY_NAME), null);
+  const local = getGeminiKey();
+  if (raw === null) {
+    if (local) await withTimeout(putSharedValue(SHARED_KEY_NAME, local), false);
+    return;
+  }
+  const shared = cleanKey(raw);
+  if (shared !== local) setGeminiKey(shared);
+}
 
 /** '' = automatic. */
 export function getManualModel(): string { return read(MODEL_STORAGE).trim(); }

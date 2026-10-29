@@ -1,11 +1,13 @@
 /* views/settings-assistant.ts — Settings → עוזר קולי: the Gemini API key
- * (kept on this device only, see lib/gemini.ts) and, optionally, a model
- * chosen by hand instead of the automatic pick. */
+ * (pasted once and shared with the other devices through Firebase, see
+ * lib/gemini.ts) and, optionally, a model chosen by hand instead of the
+ * automatic pick. */
 
-import { getGeminiKey, setGeminiKey, getManualModel, setManualModel, currentModel, geminiText, cleanKey, knownEndpoint, ENDPOINT_LABEL, GeminiError } from '../lib/gemini';
+import { getGeminiKey, saveGeminiKeyEverywhere, getManualModel, setManualModel, currentModel, geminiText, cleanKey, knownEndpoint, ENDPOINT_LABEL, GeminiError } from '../lib/gemini';
 import { escapeHtml } from '../lib/markdown';
 import { toast, withBusyButton } from '../lib/ui';
 import { qs } from '../lib/dom';
+import { isFirebaseSyncActive } from '../firebase/firestore-sync';
 
 /** A Gemini key from AI Studio is 39 characters, starting with "AIza". */
 const STUDIO_KEY_LENGTH = 39;
@@ -28,7 +30,9 @@ export function assistantHtml(): string {
       <p style="margin-top:0">העוזר הקולי פותח תצפית מתמשכת ("תפתח תצפית בנחל תבור"), מוסיף אליה ציפורים ("תוסיף 2 חיוואים"), סוגר אותה ("סגור תצפית"), ועונה על שאלות על היסטוריית התצפיות ("מתי ראיתי נשר מקראי?"). ההבנה של המשפטים נעשית ב-Gemini של Google.</p>
       <h4>מפתח Gemini</h4>
       <p class="hint">מוציאים מפתח ב-<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> ← <b>Create API key</b> ← <b>Copy</b>. המפתח יכול להתחיל ב-AIza או ב-AQ.. גם מפתח מ-Google Cloud עם הרשאה ל-Vertex AI עובד, והאפליקציה מזהה לבד לאן לשלוח אותו.</p>
-      <p class="hint">מדביקים כאן ולוחצים "שמירה ובדיקה". המפתח נשמר רק במכשיר הזה (לא בענן ולא בקוד), ובכל מכשיר נוסף מדביקים אותו שוב.</p>
+      <p class="hint">מדביקים כאן ולוחצים "שמירה ובדיקה". ${isFirebaseSyncActive()
+        ? 'המפתח נשמר בסנכרון לענן (עם קוד המשפחה) ומגיע לבד לשאר המכשירים, כך שמדביקים אותו פעם אחת.'
+        : 'הסנכרון לענן לא מופעל, ולכן המפתח נשמר רק במכשיר הזה. כשמפעילים סנכרון (הגדרות ← סנכרון וגיבוי), הוא יעבור לבד לשאר המכשירים.'}</p>
       <div class="field">
         <input type="text" id="s-gemini-key" placeholder="${key ? 'להחלפה: מדביקים כאן מפתח חדש' : 'מדביקים כאן את המפתח (AIza... או AQ....)'}"
           autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" dir="ltr">
@@ -83,24 +87,26 @@ export function wireAssistant(container: HTMLElement): void {
   }
 
   const saveBtn = qs<HTMLButtonElement>(container, '#s-gemini-save');
-  saveBtn.addEventListener('click', () => {
+  saveBtn.addEventListener('click', () => void (async () => {
     const typed = cleanKey(keyEl.value);
-    if (typed) setGeminiKey(typed);
     setManualModel(modelEl.value);
     keyEl.value = '';
+    const shared = typed ? await saveGeminiKeyEverywhere(typed) : true;
     summary.textContent = keySummary(getGeminiKey());
     if (!getGeminiKey()) { status.textContent = 'לא הודבק מפתח.'; return; }
-    void test(saveBtn);
-  });
+    await test(saveBtn);
+    if (typed && !shared && isFirebaseSyncActive()) status.textContent += '\nשימו לב: לא הצלחתי לשמור את המפתח בענן כרגע, ולכן הוא שמור רק במכשיר הזה. שומרים שוב כשיש רשת.';
+  })());
 
   const testBtn = container.querySelector<HTMLButtonElement>('#s-gemini-test');
   testBtn?.addEventListener('click', () => void test(testBtn));
 
-  container.querySelector('#s-gemini-clear')?.addEventListener('click', () => {
-    setGeminiKey('');
+  container.querySelector('#s-gemini-clear')?.addEventListener('click', () => void (async () => {
+    const shared = await saveGeminiKeyEverywhere('');
     keyEl.value = '';
     summary.textContent = keySummary('');
-    status.textContent = 'המפתח נמחק מהמכשיר.';
+    status.className = 'settings-status';
+    status.textContent = shared ? 'המפתח נמחק מכל המכשירים.' : 'המפתח נמחק מהמכשיר הזה.';
     showModel();
-  });
+  })());
 }
