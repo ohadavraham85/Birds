@@ -27,6 +27,24 @@ export const ACCENTS = [
 ] as const;
 export type AccentId = (typeof ACCENTS)[number]['id'];
 
+/** Ready-made color sets: background, cards, text and an accent color chosen
+ * together, so they always match (picking theme / accent / text color one by
+ * one can produce clashing mixes, like a blue-grey theme under an orange bar).
+ * Each set sits on a base theme for everything not color-related (dark sets
+ * on "dark") and its colors live in app.css under [data-palette]. The four
+ * swatch colors here only draw its preview card in Settings. */
+export const PALETTES = [
+  { id: 'desert', label: 'מדבר', base: 'classic', bg: '#f4ebdd', card: '#fffaf2', text: '#3b2a1d', accent: '#b9582f' },
+  { id: 'sea', label: 'ים תיכון', base: 'classic', bg: '#e8f1f5', card: '#ffffff', text: '#10293b', accent: '#1d6fa3' },
+  { id: 'olive', label: 'זית ושמנת', base: 'classic', bg: '#f1efe3', card: '#fdfcf5', text: '#2b2d1c', accent: '#62752a' },
+  { id: 'sunset', label: 'שקיעה', base: 'classic', bg: '#f7ebe6', card: '#fffaf7', text: '#3a1e28', accent: '#b0435a' },
+  { id: 'lavender', label: 'לבנדר וצפחה', base: 'classic', bg: '#eeedf5', card: '#fcfcff', text: '#24213a', accent: '#6152c0' },
+  { id: 'shore', label: 'חוף', base: 'classic', bg: '#f5efe4', card: '#fffdf8', text: '#1f3434', accent: '#1b7e78' },
+  { id: 'night', label: 'לילה בשטח', base: 'dark', bg: '#12161b', card: '#1d232a', text: '#e9edf1', accent: '#b06d25' },
+  { id: 'ember', label: 'פחם וגחלים', base: 'dark', bg: '#141010', card: '#211a19', text: '#f3ece9', accent: '#c4502d' },
+] as const;
+export type PaletteId = (typeof PALETTES)[number]['id'];
+
 /** Curated primary+secondary text-color pairs, chosen to keep contrast
  * against any of the background themes above — rather than a free-form
  * color wheel, which could easily produce illegible text. */
@@ -73,6 +91,7 @@ const KEYS = {
   displayMode: 'birds-display-mode',
   bgPhoto: 'birds-bg-photo',
   cardTransparency: 'birds-card-transparency',
+  palette: 'birds-palette',
 } as const;
 
 export const MAX_CARD_TRANSPARENCY = 90;
@@ -103,6 +122,10 @@ export function currentFontWeight(): FontWeightId {
 export function currentDisplayMode(): DisplayModeId {
   return readId(KEYS.displayMode, DISPLAY_MODES, 'auto');
 }
+/** '' = no set: the theme / accent / text color picked one by one. */
+export function currentPalette(): PaletteId | '' {
+  return readId(KEYS.palette, PALETTES, '' as PaletteId) || '';
+}
 export function currentBgPhoto(): number {
   const n = parseInt(localStorage.getItem(KEYS.bgPhoto) ?? '', 10);
   return Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : DEFAULT_BG_PHOTO;
@@ -120,6 +143,9 @@ function applyAll(): void {
   root.setAttribute('data-font-size', currentFontSize());
   root.setAttribute('data-font-weight', currentFontWeight());
   root.setAttribute('data-display-mode', currentDisplayMode());
+  const palette = currentPalette();
+  if (palette) root.setAttribute('data-palette', palette);
+  else root.removeAttribute('data-palette');
   root.style.setProperty('--bg-wash', String(1 - currentBgPhoto() / 100));
   root.style.setProperty('--card-opacity', String(1 - currentCardTransparency() / 100));
   // The phone's own status bar follows the chosen color too (index.html's
@@ -129,9 +155,20 @@ function applyAll(): void {
   if (meta && barColor) meta.content = barColor;
 }
 
-export function setTheme(v: ThemeId): void { localStorage.setItem(KEYS.theme, v); applyAll(); }
-export function setAccent(v: AccentId): void { localStorage.setItem(KEYS.accent, v); applyAll(); }
-export function setFontColor(v: FontColorId): void { localStorage.setItem(KEYS.fontColor, v); applyAll(); }
+/* Picking a theme, accent or text color by hand leaves the ready-made set. */
+export function setTheme(v: ThemeId): void { localStorage.removeItem(KEYS.palette); localStorage.setItem(KEYS.theme, v); applyAll(); }
+export function setAccent(v: AccentId): void { localStorage.removeItem(KEYS.palette); localStorage.setItem(KEYS.accent, v); applyAll(); }
+export function setFontColor(v: FontColorId): void { localStorage.removeItem(KEYS.palette); localStorage.setItem(KEYS.fontColor, v); applyAll(); }
+/** A set brings its own colors: its base theme, with the accent and text
+ * color reset so nothing picked earlier mixes into it. */
+export function setPalette(v: PaletteId): void {
+  const p = PALETTES.find((x) => x.id === v)!;
+  localStorage.setItem(KEYS.palette, v);
+  localStorage.setItem(KEYS.theme, p.base);
+  localStorage.setItem(KEYS.accent, 'default');
+  localStorage.setItem(KEYS.fontColor, 'default');
+  applyAll();
+}
 export function setFontSize(v: FontSizeId): void { localStorage.setItem(KEYS.fontSize, v); applyAll(); }
 export function setFontWeight(v: FontWeightId): void { localStorage.setItem(KEYS.fontWeight, v); applyAll(); }
 export function setDisplayMode(v: DisplayModeId): void { localStorage.setItem(KEYS.displayMode, v); applyAll(); }

@@ -42,7 +42,10 @@ export default defineConfig({
         scope: '.',
         display: 'standalone',
         background_color: '#fbfdfb',
-        theme_color: '#2d6a4f',
+        // Android paints its navigation bar (below the app's tab bar) in this
+        // fixed color — it can't follow the chosen color set, so it matches
+        // the white tab bar instead of being the old green.
+        theme_color: '#ffffff',
         categories: ['productivity', 'utilities'],
         icons: [
           { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
