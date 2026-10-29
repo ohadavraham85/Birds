@@ -99,16 +99,31 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
     let detail = '';
     try { detail = ((await res.json()) as { error?: { message?: string } }).error?.message || ''; } catch { /* not JSON */ }
     if (isKeyError(res.status, detail)) throw new GeminiError('Google לא מכיר את המפתח. כדאי להעתיק אותו שוב.', res.status, detail);
-    if (res.status === 403) {
-      throw new GeminiError(keyKind(key) === 'vertex'
-        ? 'למפתח אין הרשאה ל-Vertex AI. בפרויקט ב-Google Cloud צריך שה-Vertex AI API יהיה מופעל, ושלחשבון השירות של המפתח יהיה תפקיד Vertex AI User.'
-        : 'למפתח אין הרשאה להשתמש ב-Gemini API.', res.status, detail);
-    }
+    if (res.status === 403) throw new GeminiError(forbiddenMessage(detail, keyKind(key)), res.status, detail);
     if (res.status === 429) throw new GeminiError('אין מכסת שימוש פנויה ב-Gemini כרגע. נסו שוב בעוד דקה.', res.status, detail);
     if (res.status === 404) throw new GeminiError('המודל לא נמצא.', res.status, detail);
     throw new GeminiError(`שגיאה מ-Gemini (${res.status}).`, res.status, detail);
   }
   return res.json() as Promise<T>;
+}
+
+/** Google's 403s have several distinct causes, each fixed in a different
+ * place in the Google Cloud console — say which one it is. */
+function forbiddenMessage(detail: string, kind: KeyKind): string {
+  const api = kind === 'vertex' ? 'Vertex AI API (Agent Platform API)' : 'Generative Language API';
+  if (/referer|referrer/i.test(detail)) {
+    return `המפתח מוגבל לאתרים מסוימים. ב-Google Cloud: Credentials ← המפתח ← Application restrictions: מוסיפים את כתובת האפליקציה (${location.origin}/*), או בוחרים None.`;
+  }
+  if (/are blocked/i.test(detail)) {
+    return `המפתח חסום לשירות הזה. ב-Google Cloud: APIs & Services ← Credentials ← לוחצים על המפתח ← API restrictions: מוסיפים לרשימה את ${api}, או בוחרים Don't restrict key, ושומרים.`;
+  }
+  if (/has not been used|is disabled|SERVICE_DISABLED/i.test(detail)) {
+    return `השירות ${api} לא מופעל בפרויקט. מפעילים אותו בקישור שבתשובת Google, ומחכים כמה דקות.`;
+  }
+  if (/billing/i.test(detail)) return 'בפרויקט ב-Google Cloud צריך לחבר חשבון חיוב (Billing).';
+  return kind === 'vertex'
+    ? 'למפתח אין הרשאה ל-Vertex AI. ב-Google Cloud ← IAM נותנים לחשבון השירות של המפתח את התפקיד Vertex AI User.'
+    : 'למפתח אין הרשאה להשתמש ב-Gemini API.';
 }
 
 /** 401 (Vertex) / 400 (AI Studio) about the key itself. */
