@@ -69,9 +69,10 @@ POST /api/sync   { deviceId, since, ops: [{ entity, op, payload }] }
 
 - **ההבנה** נעשית ב-Gemini API (`src/lib/gemini.ts`) עם תשובת JSON מובנית (`responseSchema`). את השינויים עצמם מחיל הקוד (`src/lib/voice-assistant.ts`), ולכן אפשר לבטל את הפעולה האחרונה.
 - **שאלות היסטוריה** עוברות שני שלבים: Gemini מתרגם את השאלה לסינון (מינים, מקומות, טווח תאריכים), האפליקציה מסננת את התצפיות במכשיר, ו-Gemini מנסח תשובה רק מהשורות שנמצאו.
-- **המפתח:** מוזן ב**הגדרות ← עוזר קולי**, ונשמר רק ב-localStorage של המכשיר. הוא לא נכנס לקוד, לריפו או ל-Firestore. יש שני סוגים, והאפליקציה מזהה לבד את הסוג:
-  - **מפתח AI Studio** (מתחיל ב-`AIza`, מ-[aistudio.google.com/apikey](https://aistudio.google.com/apikey)) נשלח ל-Gemini API, `generativelanguage.googleapis.com`.
-  - **מפתח Google Cloud / Vertex AI** (למשל `AQ.…`) נשלח לנקודת הקצה הגלובלית של Vertex AI, `aiplatform.googleapis.com/v1/publishers/google/models/…`. בפרויקט צריך שה-Vertex AI API יהיה מופעל.
+- **המפתח:** מוזן ב**הגדרות ← עוזר קולי**, ונשמר רק ב-localStorage של המכשיר. הוא לא נכנס לקוד, לריפו או ל-Firestore. שתי נקודות קצה אפשריות, עם אותו מבנה בקשה ואותה כותרת `x-goog-api-key`:
+  - **Gemini API** (`generativelanguage.googleapis.com`) מקבל כל מפתח מ-[AI Studio](https://aistudio.google.com/apikey), גם `AIza…` הקלאסי וגם `AQ.…` החדש, שקשור לחשבון שירות `ais-gemini-key`.
+  - **Vertex AI** (`aiplatform.googleapis.com/v1/publishers/google/models/…`) מקבל מפתח Google Cloud שמורשה ל-Vertex.
+  - הקידומת לא מספיקה כדי לדעת לאיזו נקודת קצה המפתח שייך, ולכן מפתח שלא מתחיל ב-`AIza` נשלח קודם ל-Gemini API, ורק אם Google מסרב שם הוא נשלח ל-Vertex. נקודת הקצה שעבדה נשמרת.
 - **המודל** נבחר אוטומטית: מודל ה-Flash העדכני ביותר שעובד עם המפתח. אם מודל לא קיים (404) או שאין לו מכסה (429), האפליקציה עוברת לבא בתור. ב-Vertex, שלא מציג למפתח API את רשימת המודלים, נבדקת רשימה קבועה מהחדש לישן. אפשר גם לקבוע מודל ידנית באותו מסך.
 
 ### מבנה מסמך תצפית ב-Firestore

@@ -18,6 +18,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: 48, date: '2026-10-29',
+    title: 'עוזר קולי: מפתח AQ. מ-AI Studio עובד',
+    items: [
+      'גם מפתחות AI Studio מסוג חדש (שמתחילים ב-AQ.) נשלחים עכשיו ל-Gemini, ולא ל-Vertex AI שחסם אותם.',
+      'האפליקציה מגלה לבד לאיזה שירות המפתח שייך וזוכרת את זה. בהגדרות רואים לאיזה שירות הוא שייך.',
+    ],
+  },
+  {
     id: 47, date: '2026-10-29',
     title: 'עוזר קולי: הסבר מדויק כשהמפתח נחסם',
     items: [
