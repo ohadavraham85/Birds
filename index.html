@@ -12,12 +12,12 @@
     try {
       var root = document.documentElement;
       var t = localStorage.getItem('birds-theme'); if (t) root.setAttribute('data-theme', t);
-      var a = localStorage.getItem('birds-accent'); if (a) root.setAttribute('data-accent', a);
-      var fc = localStorage.getItem('birds-font-color'); if (fc) root.setAttribute('data-font-color', fc);
       var fs = localStorage.getItem('birds-font-size'); if (fs) root.setAttribute('data-font-size', fs);
       var fw = localStorage.getItem('birds-font-weight'); if (fw) root.setAttribute('data-font-weight', fw);
       var dm = localStorage.getItem('birds-display-mode'); if (dm) root.setAttribute('data-display-mode', dm);
       var pl = localStorage.getItem('birds-palette'); if (pl) root.setAttribute('data-palette', pl);
+      var pc = localStorage.getItem('birds-palette-css'); if (pc) root.style.cssText += ';' + pc;
+      var bar = pc && /--accent-700:([^;]+)/.exec(pc); if (bar) document.querySelector('meta[name="theme-color"]').setAttribute('content', bar[1]);
       var bp = parseInt(localStorage.getItem('birds-bg-photo'), 10); if (bp >= 0 && bp <= 100) root.style.setProperty('--bg-wash', String(1 - bp / 100));
       var ct = parseInt(localStorage.getItem('birds-card-transparency'), 10); if (ct >= 0 && ct <= 90) root.style.setProperty('--card-opacity', String(1 - ct / 100));
     } catch (e) {}

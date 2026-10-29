@@ -34,11 +34,11 @@ import { icon, type IconName } from '../lib/icons';
 import { readExifDate } from '../lib/exif';
 import { primarySpecies } from '../lib/observation';
 import {
-  THEMES, ACCENTS, FONT_COLORS, FONT_SIZES, FONT_WEIGHTS, DISPLAY_MODES, PALETTES, currentPalette, setPalette, type PaletteId,
-  currentTheme, currentAccent, currentFontColor, currentFontSize, currentFontWeight, currentDisplayMode,
-  setTheme, setAccent, setFontColor, setFontSize, setFontWeight, setDisplayMode,
+  FONT_SIZES, FONT_WEIGHTS, DISPLAY_MODES, PALETTES, currentPalette, setPalette, type Palette,
+  currentFontSize, currentFontWeight, currentDisplayMode,
+  setFontSize, setFontWeight, setDisplayMode,
   currentBgPhoto, setBgPhoto, currentCardTransparency, setCardTransparency, MAX_CARD_TRANSPARENCY,
-  type ThemeId, type AccentId, type FontColorId, type FontSizeId, type FontWeightId, type DisplayModeId,
+  type FontSizeId, type FontWeightId, type DisplayModeId,
 } from '../lib/theme';
 import { assistantHtml, wireAssistant } from './settings-assistant';
 import { syncGeminiKey } from '../lib/gemini';
@@ -151,9 +151,6 @@ export async function activate(): Promise<void> {
   const notifOnThisDay = await isOnThisDayEnabled();
   const notifInactivity = await isInactivityEnabled();
 
-  const activeTheme = currentTheme();
-  const activeAccent = currentAccent();
-  const activeFontColor = currentFontColor();
   const activeFontSize = currentFontSize();
   const activeFontWeight = currentFontWeight();
 
@@ -171,7 +168,7 @@ export async function activate(): Promise<void> {
       <button type="button" class="btn btn-sm" id="settings-back">→ הגדרות</button>
       <h2>${icon(meta.icon)} ${meta.title}</h2>
     </div>
-    ${activeCategory === 'appearance' ? appearanceHtml(activeTheme, activeAccent, activeFontColor, activeFontSize, activeFontWeight, currentDisplayMode()) : ''}
+    ${activeCategory === 'appearance' ? appearanceHtml(activeFontSize, activeFontWeight, currentDisplayMode()) : ''}
     ${activeCategory === 'sync' ? syncHtml(fbCode) : ''}
     ${activeCategory === 'assistant' ? assistantHtml() : ''}
     ${activeCategory === 'notifications' ? notificationsHtml(notifSupported, notifPermission, notifEnabled, notifMigration, notifOnThisDay, notifInactivity) : ''}
@@ -199,7 +196,22 @@ export async function activate(): Promise<void> {
 
 /* ---------- עיצוב ---------- */
 
-function appearanceHtml(activeTheme: ThemeId, activeAccent: AccentId, activeFontColor: FontColorId, activeFontSize: FontSizeId, activeFontWeight: FontWeightId, activeDisplayMode: DisplayModeId): string {
+/** A set's card: a mini screen in its own colors — top bar in its accent
+ * gradient, a card with two text lines and an accent dot. */
+function paletteSwatchHtml(p: Palette, activeId: string): string {
+  return `
+    <button type="button" class="palette-swatch${p.id === activeId ? ' active' : ''}" data-palette="${p.id}"
+      style="--pv-bg:${p.bg};--pv-card:${p.card};--pv-text:${p.text};--pv-accent:${p.accent};--pv-accent2:${p.accent2}">
+      <span class="palette-preview" aria-hidden="true">
+        <span class="pv-bar"></span>
+        <span class="pv-card"><span class="pv-line"></span><span class="pv-line pv-short"></span><span class="pv-dot"></span></span>
+      </span>
+      <span class="palette-name">${escapeHtml(p.label)}</span>
+    </button>`;
+}
+
+function appearanceHtml(activeFontSize: FontSizeId, activeFontWeight: FontWeightId, activeDisplayMode: DisplayModeId): string {
+  const activePalette = currentPalette().id;
   return `
     <div class="settings-card">
       <p style="font-size:.9rem;color:var(--ink-soft);margin-top:0">
@@ -207,44 +219,14 @@ function appearanceHtml(activeTheme: ThemeId, activeAccent: AccentId, activeFont
       </p>
 
       <h4>ערכות צבעים</h4>
-      <p class="hint" style="margin-top:0">רקע, כרטיסים, טקסט וצבע דגש שמתאימים זה לזה. אפשר גם לבחור כל אחד בנפרד למטה ("התאמה אישית").</p>
+      <p class="hint" style="margin-top:0">בכל ערכה הרקע, הכרטיסים, הטקסט ושני צבעי הדגש (במעבר צבע) מתאימים זה לזה.</p>
+      <h5 class="palette-group-title">בהירות</h5>
       <div class="palette-picker" id="s-palette-picker">
-        ${PALETTES.map((p) => `
-          <button type="button" class="palette-swatch${p.id === currentPalette() ? ' active' : ''}" data-palette="${p.id}"
-            style="--pv-bg:${p.bg};--pv-card:${p.card};--pv-text:${p.text};--pv-accent:${p.accent}">
-            <span class="palette-preview" aria-hidden="true">
-              <span class="pv-bar"></span>
-              <span class="pv-card"><span class="pv-line"></span><span class="pv-line pv-short"></span><span class="pv-dot"></span></span>
-            </span>
-            <span class="palette-name">${escapeHtml(p.label)}</span>
-          </button>`).join('')}
+        ${PALETTES.filter((p) => !p.dark).map((p) => paletteSwatchHtml(p, activePalette)).join('')}
       </div>
-
-      <h4>התאמה אישית: ערכת נושא (רקע)</h4>
-      <div class="theme-picker" id="s-theme-picker">
-        ${THEMES.map((t) => `
-          <button type="button" class="theme-swatch${t.id === activeTheme ? ' active' : ''}" data-theme="${t.id}" title="${escapeHtml(t.label)}">
-            <span class="theme-dot" style="background:${t.swatch}"></span>
-            <span>${escapeHtml(t.label)}</span>
-          </button>`).join('')}
-      </div>
-
-      <h4>התאמה אישית: צבע דגש</h4>
-      <div class="theme-picker" id="s-accent-picker">
-        ${ACCENTS.map((a) => `
-          <button type="button" class="theme-swatch${a.id === activeAccent ? ' active' : ''}" data-accent="${a.id}" title="${escapeHtml(a.label)}">
-            <span class="theme-dot${a.swatch ? '' : ' theme-dot-none'}" style="${a.swatch ? `background:${a.swatch}` : ''}"></span>
-            <span>${escapeHtml(a.label)}</span>
-          </button>`).join('')}
-      </div>
-
-      <h4>התאמה אישית: צבע טקסט</h4>
-      <div class="theme-picker" id="s-font-color-picker">
-        ${FONT_COLORS.map((f) => `
-          <button type="button" class="theme-swatch${f.id === activeFontColor ? ' active' : ''}" data-font-color="${f.id}" title="${escapeHtml(f.label)}">
-            <span class="theme-dot${f.swatch ? '' : ' theme-dot-none'}" style="${f.swatch ? `background:${f.swatch}` : ''}"></span>
-            <span>${escapeHtml(f.label)}</span>
-          </button>`).join('')}
+      <h5 class="palette-group-title">כהות</h5>
+      <div class="palette-picker" id="s-palette-picker-dark">
+        ${PALETTES.filter((p) => p.dark).map((p) => paletteSwatchHtml(p, activePalette)).join('')}
       </div>
 
       <div class="row-2">
@@ -296,9 +278,7 @@ function appearanceHtml(activeTheme: ThemeId, activeAccent: AccentId, activeFont
 
 function wireAppearance(): void {
   qs(container, '#s-palette-picker').addEventListener('click', onPalettePick);
-  qs(container, '#s-theme-picker').addEventListener('click', onThemePick);
-  qs(container, '#s-accent-picker').addEventListener('click', onAccentPick);
-  qs(container, '#s-font-color-picker').addEventListener('click', onFontColorPick);
+  qs(container, '#s-palette-picker-dark').addEventListener('click', onPalettePick);
   qs(container, '#s-font-size-picker').addEventListener('click', onFontSizePick);
   qs(container, '#s-font-weight-picker').addEventListener('click', onFontWeightPick);
   qs(container, '#s-display-mode-picker').addEventListener('click', onDisplayModePick);
@@ -1322,15 +1302,6 @@ async function onObserverListClick(e: Event): Promise<void> {
   toast(`"${name}" הוסר מרשימת הצופים`);
 }
 
-function pickSwatch(groupSelector: string, e: Event, apply: (btn: HTMLElement) => void): void {
-  const btn = (e.target as HTMLElement).closest<HTMLElement>('.theme-swatch');
-  if (!btn) return;
-  apply(btn);
-  qs(container, groupSelector).querySelectorAll('.theme-swatch').forEach((el) => {
-    el.classList.toggle('active', el === btn);
-  });
-}
-
 function pickSeg(groupSelector: string, e: Event, apply: (btn: HTMLElement) => void): void {
   const btn = (e.target as HTMLElement).closest<HTMLElement>('.seg-btn');
   if (!btn) return;
@@ -1340,25 +1311,11 @@ function pickSeg(groupSelector: string, e: Event, apply: (btn: HTMLElement) => v
   });
 }
 
-/** A hand-picked theme / accent / text color leaves the ready-made set. */
-function clearPaletteMark(): void {
-  container.querySelectorAll('#s-palette-picker .palette-swatch.active').forEach((el) => el.classList.remove('active'));
-}
 function onPalettePick(e: Event): void {
   const btn = (e.target as HTMLElement).closest<HTMLElement>('.palette-swatch');
   if (!btn) return;
-  setPalette(btn.dataset.palette as PaletteId);
-  // The set also resets theme, accent and text color — redraw to show that.
-  void activate();
-}
-function onThemePick(e: Event): void {
-  pickSwatch('#s-theme-picker', e, (btn) => { setTheme(btn.dataset.theme as ThemeId); clearPaletteMark(); });
-}
-function onAccentPick(e: Event): void {
-  pickSwatch('#s-accent-picker', e, (btn) => { setAccent(btn.dataset.accent as AccentId); clearPaletteMark(); });
-}
-function onFontColorPick(e: Event): void {
-  pickSwatch('#s-font-color-picker', e, (btn) => { setFontColor(btn.dataset.fontColor as FontColorId); clearPaletteMark(); });
+  setPalette(btn.dataset.palette!);
+  container.querySelectorAll('.palette-swatch').forEach((el) => el.classList.toggle('active', el === btn));
 }
 function onFontSizePick(e: Event): void {
   pickSeg('#s-font-size-picker', e, (btn) => setFontSize(btn.dataset.fontSize as FontSizeId));
