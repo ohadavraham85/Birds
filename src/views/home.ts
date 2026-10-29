@@ -15,6 +15,7 @@ import { escapeHtml } from '../lib/markdown';
 import { fmtDateTime, showModal, toast } from '../lib/ui';
 import { icon, type IconName } from '../lib/icons';
 import { listDrafts, clearDraft } from '../lib/draft';
+import { openVoiceAssistant, voiceAssistantBarHtml } from '../lib/voice-assistant-modal';
 import { qs, input } from '../lib/dom';
 import { navigate } from '../main';
 import { loadDashLayout, resetDashLayout, dashGridHtml, wireDashGrid, type DashWidget } from '../lib/dashboard-layout';
@@ -1013,7 +1014,7 @@ function render(): void {
     { id: 'onThisDay', title: 'בתאריך הזה', defaultSpan: 6, html: onThisDayHtml() },
     ...statsWidgets(filteredObservations()),
   ];
-  qs(container, '#home-body').innerHTML = draftBannerHtml() + rangeBarHtml() +
+  qs(container, '#home-body').innerHTML = draftBannerHtml() + voiceAssistantBarHtml(allObservations.find((o) => o.status === 'active'), true) + rangeBarHtml() +
     `<div class="dash-toolbar"><span class="hint">גררו את ⠿ כדי להזיז כרטיס, ואת הפינה התחתונה כדי לשנות רוחב וגובה (לחיצה כפולה על הפינה מחזירה לגובה התוכן).</span>
       <button type="button" class="btn btn-sm" id="dash-reset">איפוס סידור</button></div>` +
     dashGridHtml(widgets);
@@ -1025,6 +1026,7 @@ function render(): void {
 function onClick(e: Event): void {
   const target = e.target as HTMLElement;
 
+  if (target.closest('[data-voice-assistant]')) { openVoiceAssistant(); return; }
   if (target.closest('#dash-reset')) { void resetDashLayout().then(render); return; }
 
   if (target.closest('#goals-edit-btn')) {

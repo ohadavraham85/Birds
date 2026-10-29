@@ -1,3 +1,5 @@
+> **לא בשימוש כרגע.** העוזר הקולי עבר ל-Gemini API, שנקרא ישירות מהאפליקציה עם מפתח אישי שמוזן בהגדרות (ראו `src/lib/gemini.ts` ו"עוזר קולי" ב-README הראשי). הפונקציה הזו לא נקראת יותר מהאפליקציה, והיא נשארת כאן רק לתיעוד.
+
 # Cloud Function: parseVoiceObservation
 
 Turns one dictated Hebrew field note into a structured observation (species +

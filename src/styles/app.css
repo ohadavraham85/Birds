@@ -1912,19 +1912,50 @@ a.media-link-icon:hover { color: var(--accent-700); }
 
 /* ---------- smart voice observation (home + modal) ---------- */
 
-.voice-ai-btn {
-  margin-bottom: 14px; background: linear-gradient(135deg, var(--accent-700), var(--accent-600));
-  border-color: var(--accent-700); color: #fff;
+/* Voice assistant (lib/voice-assistant-modal.ts) */
+.va-open-btn {
+  margin-bottom: 12px; background: var(--accent-700); border-color: var(--accent-700); color: #fff;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
 }
-.voice-ai-modal h3 { display: flex; align-items: center; gap: 8px; }
-.voice-ai-modal .hint { margin-top: 0; }
-.voice-ai-transcript {
-  min-height: 70px; max-height: 220px; overflow-y: auto;
-  background: var(--accent-50); border: 1px solid var(--line); border-radius: var(--radius);
-  padding: 10px 12px; margin-bottom: 10px; font-size: .92rem; line-height: 1.5; white-space: pre-wrap;
+.va-banner {
+  display: flex; align-items: center; gap: 10px; width: 100%; margin-bottom: 12px;
+  padding: 10px 12px; border: 1px solid var(--accent-600); border-radius: var(--radius);
+  background: var(--accent-50); color: inherit; font: inherit; text-align: start; cursor: pointer;
 }
-.voice-ai-transcript:empty::before { content: 'התמלול יופיע כאן...'; color: var(--ink-soft); }
-.voice-ai-interim { color: var(--ink-soft); }
+.va-banner-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.va-banner-text span { font-size: .82rem; color: var(--ink-soft); }
+.va-banner-mic {
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 38px; height: 38px; border-radius: 50%; background: var(--accent-700); color: #fff;
+}
+.va-live-dot {
+  width: 10px; height: 10px; border-radius: 50%; background: #e03131; flex-shrink: 0;
+  animation: va-pulse 1.6s ease-in-out infinite;
+}
+@keyframes va-pulse { 50% { opacity: .35; } }
+
+.va { display: flex; flex-direction: column; gap: 10px; width: min(92vw, 520px); }
+.va h3 { display: flex; align-items: center; gap: 8px; margin: 0; }
+.va-no-session { margin: 0; }
+.va-session-card { border: 1px solid var(--accent-600); border-radius: var(--radius); background: var(--accent-50); padding: 10px 12px; }
+.va-session-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.va-session-time { font-size: .82rem; color: var(--ink-soft); }
+.va-session-species { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.va-chip { background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; font-size: .85rem; }
+.va-session-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.va-log {
+  display: flex; flex-direction: column; gap: 6px; min-height: 120px; max-height: 40vh; overflow-y: auto;
+  padding: 4px 0;
+}
+.va-examples { margin: 0; line-height: 1.7; }
+.va-example { color: var(--accent-700); }
+.va-bubble { max-width: 88%; padding: 8px 12px; border-radius: 14px; white-space: pre-wrap; font-size: .92rem; line-height: 1.45; }
+.va-user { align-self: flex-start; background: var(--accent-700); color: #fff; border-end-start-radius: 4px; }
+.va-bot { align-self: flex-end; background: var(--accent-50); border: 1px solid var(--line); border-end-end-radius: 4px; }
+.va-error { align-self: flex-end; background: #fdecea; color: #a61b1b; border: 1px solid #f5c2c0; }
+.va-input { display: flex; gap: 6px; align-items: center; }
+.va-input input { flex: 1; min-width: 0; }
+.va-mic.listening { background: #e03131; border-color: #e03131; color: #fff; animation: va-pulse 1.2s ease-in-out infinite; }
 
 .voice-species-picker h3 { display: flex; align-items: center; gap: 8px; }
 .voice-species-picker .hint { margin-top: 0; }
