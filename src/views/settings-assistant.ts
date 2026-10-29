@@ -2,10 +2,22 @@
  * (kept on this device only, see lib/gemini.ts) and, optionally, a model
  * chosen by hand instead of the automatic pick. */
 
-import { getGeminiKey, setGeminiKey, getManualModel, setManualModel, currentModel, geminiText } from '../lib/gemini';
+import { getGeminiKey, setGeminiKey, getManualModel, setManualModel, currentModel, geminiText, cleanKey, GeminiError } from '../lib/gemini';
 import { escapeHtml } from '../lib/markdown';
 import { toast, withBusyButton } from '../lib/ui';
 import { qs } from '../lib/dom';
+
+/** A Gemini key from AI Studio is 39 characters, starting with "AIza". */
+const EXPECTED_KEY_LENGTH = 39;
+
+/** "AIza…k3Xw · 39 תווים" — enough to recognise the key without showing it. */
+function keySummary(key: string): string {
+  if (!key) return 'אין מפתח שמור.';
+  const shape = key.length === EXPECTED_KEY_LENGTH && key.startsWith('AIza')
+    ? ''
+    : ` — מפתח רגיל מ-AI Studio מתחיל ב-AIza ואורכו ${EXPECTED_KEY_LENGTH} תווים, כדאי להעתיק שוב`;
+  return `מפתח שמור: ${key.slice(0, 4)}…${key.slice(-4)} · ${key.length} תווים${shape}`;
+}
 
 export function assistantHtml(): string {
   const key = getGeminiKey();
@@ -15,23 +27,26 @@ export function assistantHtml(): string {
       <h4>מפתח Gemini</h4>
       <ol class="hint" style="padding-inline-start:18px">
         <li>נכנסים ל-<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> עם חשבון Google.</li>
-        <li>לוחצים <b>Create API key</b> ומעתיקים את המפתח.</li>
-        <li>מדביקים כאן ושומרים. המפתח נשמר רק במכשיר הזה (לא בענן ולא בקוד), ובכל מכשיר נוסף מדביקים אותו שוב.</li>
+        <li>לוחצים <b>Create API key</b>, ואז על המפתח שנוצר ← <b>Copy</b>.</li>
+        <li>מדביקים כאן ולוחצים "שמירה ובדיקה". המפתח נשמר רק במכשיר הזה (לא בענן ולא בקוד), ובכל מכשיר נוסף מדביקים אותו שוב.</li>
       </ol>
       <div class="field">
-        <input type="password" id="s-gemini-key" value="${escapeHtml(key)}" placeholder="AIza..." autocomplete="off" dir="ltr">
+        <input type="text" id="s-gemini-key" placeholder="${key ? 'להחלפה: מדביקים כאן מפתח חדש' : 'מדביקים כאן את המפתח (AIza...)'}"
+          autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" dir="ltr">
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button type="button" class="btn btn-primary" id="s-gemini-save">שמירה ובדיקה</button>
-        ${key ? '<button type="button" class="btn btn-danger" id="s-gemini-clear">מחיקת המפתח</button>' : ''}
+        ${key ? '<button type="button" class="btn" id="s-gemini-test">בדיקה חוזרת</button><button type="button" class="btn btn-danger" id="s-gemini-clear">מחיקת המפתח</button>' : ''}
       </div>
-      <p class="settings-status" id="s-gemini-status">${key ? 'מפתח שמור במכשיר.' : 'אין מפתח שמור.'}</p>
+      <p class="hint" id="s-gemini-key-summary">${escapeHtml(keySummary(key))}</p>
+      <p class="settings-status" id="s-gemini-status" style="white-space:pre-wrap;overflow-wrap:anywhere"></p>
 
       <h4>מודל</h4>
       <div class="field">
-        <input type="text" id="s-gemini-model" value="${escapeHtml(getManualModel())}" placeholder="אוטומטי (המודל ה-Flash העדכני)" dir="ltr">
+        <input type="text" id="s-gemini-model" value="${escapeHtml(getManualModel())}" placeholder="אוטומטי (המודל ה-Flash העדכני)" dir="ltr"
+          autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
       </div>
-      <p class="hint">משאירים ריק כדי שהאפליקציה תבחר לבד את המודל העדכני. <span id="s-gemini-model-now"></span></p>
+      <p class="hint">משאירים ריק כדי שהאפליקציה תבחר לבד מודל שעובד עם המפתח. <span id="s-gemini-model-now"></span></p>
     </div>`;
 }
 
@@ -39,6 +54,7 @@ export function wireAssistant(container: HTMLElement): void {
   const keyEl = qs<HTMLInputElement>(container, '#s-gemini-key');
   const modelEl = qs<HTMLInputElement>(container, '#s-gemini-model');
   const status = qs(container, '#s-gemini-status');
+  const summary = qs(container, '#s-gemini-key-summary');
   const modelNow = qs(container, '#s-gemini-model-now');
 
   const showModel = (): void => {
@@ -47,26 +63,43 @@ export function wireAssistant(container: HTMLElement): void {
   };
   showModel();
 
-  const saveBtn = qs<HTMLButtonElement>(container, '#s-gemini-save');
-  saveBtn.addEventListener('click', () => {
-    setGeminiKey(keyEl.value);
-    setManualModel(modelEl.value);
-    if (!getGeminiKey()) { status.textContent = 'אין מפתח שמור.'; return; }
-    void withBusyButton(saveBtn, 'בודק...', async () => {
+  async function test(btn: HTMLButtonElement): Promise<void> {
+    status.className = 'settings-status';
+    status.textContent = '';
+    await withBusyButton(btn, 'בודק...', async () => {
       try {
         await geminiText('ענה במילה אחת.', 'כתוב: תקין');
-        status.textContent = 'המפתח נשמר ועובד ✓';
+        status.className = 'settings-status ok';
+        status.textContent = `המפתח עובד ✓ (מודל: ${await currentModel()})`;
         toast('העוזר הקולי מוכן ✓');
       } catch (err) {
-        status.textContent = `המפתח נשמר, אבל הבדיקה נכשלה: ${(err as Error).message}`;
+        const e = err as Error;
+        const detail = err instanceof GeminiError && err.detail ? `\nתשובת Google: ${err.detail}` : '';
+        status.className = 'settings-status err';
+        status.textContent = `הבדיקה נכשלה: ${e.message}${detail}`;
       }
       showModel();
     });
+  }
+
+  const saveBtn = qs<HTMLButtonElement>(container, '#s-gemini-save');
+  saveBtn.addEventListener('click', () => {
+    const typed = cleanKey(keyEl.value);
+    if (typed) setGeminiKey(typed);
+    setManualModel(modelEl.value);
+    keyEl.value = '';
+    summary.textContent = keySummary(getGeminiKey());
+    if (!getGeminiKey()) { status.textContent = 'לא הודבק מפתח.'; return; }
+    void test(saveBtn);
   });
+
+  const testBtn = container.querySelector<HTMLButtonElement>('#s-gemini-test');
+  testBtn?.addEventListener('click', () => void test(testBtn));
 
   container.querySelector('#s-gemini-clear')?.addEventListener('click', () => {
     setGeminiKey('');
     keyEl.value = '';
+    summary.textContent = keySummary('');
     status.textContent = 'המפתח נמחק מהמכשיר.';
     showModel();
   });
