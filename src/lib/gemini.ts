@@ -130,7 +130,7 @@ async function call<T>(endpoint: Endpoint, path: string, init?: RequestInit): Pr
     if (res.status === 403) throw new GeminiError(forbiddenMessage(detail, endpoint), res.status, detail);
     if (res.status === 402) throw new GeminiError('נגמר הקרדיט בפרויקט של המפתח ב-Google (מסלול בתשלום מראש). אפשר להוסיף קרדיט ב-ai.studio/projects, או ליצור מפתח בפרויקט חדש בלי חיוב — שם עובד המסלול החינמי.', res.status, detail);
     if (res.status === 429) throw new GeminiError('אין מכסת שימוש פנויה ב-Gemini כרגע. נסו שוב בעוד דקה.', res.status, detail);
-    if (res.status === 404) throw new GeminiError('המודל לא נמצא.', res.status, detail);
+    if (res.status === 404) throw new GeminiError(getManualModel() ? `המודל ${getManualModel()} לא זמין. מוחקים אותו משדה "מודל" בהגדרות כדי שהאפליקציה תבחר לבד.` : 'המודל לא נמצא.', res.status, detail);
     throw new GeminiError(`שגיאה מ-Gemini (${res.status}).`, res.status, detail);
   }
   return res.json() as Promise<T>;
@@ -217,11 +217,23 @@ function worthTryingAnother(err: unknown): boolean {
   return err instanceof GeminiError && (err.status === 404 || err.status === 429 || (err.status === 400 && !isKeyError(err.status, err.detail)));
 }
 
+/** Gemini 3 and later "think" at length before answering by default, which
+ * takes many seconds even for a one-line command — too slow while standing
+ * in the field. They're asked to think briefly; a model that rejects the
+ * setting gets the request again without it. */
+function wantsLowThinking(model: string): boolean {
+  return /^gemini-(?:[3-9]|\d{2,})/.test(model);
+}
+
+type BodyFor = (model: string, lowThinking: boolean) => string;
+
 async function generate(system: string, prompt: string, generationConfig: Record<string, unknown>): Promise<string> {
-  const body = JSON.stringify({
+  const body: BodyFor = (model, lowThinking) => JSON.stringify({
     systemInstruction: { parts: [{ text: system }] },
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    generationConfig,
+    generationConfig: lowThinking && wantsLowThinking(model)
+      ? { ...generationConfig, thinkingConfig: { thinkingLevel: 'low' } }
+      : generationConfig,
   });
   const endpoints = endpointsToTry();
   let firstErr: unknown = null;
@@ -241,7 +253,7 @@ async function generate(system: string, prompt: string, generationConfig: Record
   throw firstErr;
 }
 
-async function generateOn(endpoint: Endpoint, body: string): Promise<string> {
+async function generateOn(endpoint: Endpoint, body: BodyFor): Promise<string> {
   // The model that worked last time goes first, without asking Google for
   // the model list on every sentence; the full list only if it stops working.
   const remembered = getManualModel() ? '' : read(AUTO_MODEL_CACHE);
@@ -250,8 +262,15 @@ async function generateOn(endpoint: Endpoint, body: string): Promise<string> {
   for (let i = 0; i < models.length; i++) {
     const model = models[i]!;
     let res: GenerateResponse;
+    const send = (lowThinking: boolean): Promise<GenerateResponse> =>
+      call<GenerateResponse>(endpoint, `models/${encodeURIComponent(model)}:generateContent`, { method: 'POST', body: body(model, lowThinking) });
     try {
-      res = await call<GenerateResponse>(endpoint, `models/${encodeURIComponent(model)}:generateContent`, { method: 'POST', body });
+      try {
+        res = await send(true);
+      } catch (err) {
+        if (!(wantsLowThinking(model) && err instanceof GeminiError && err.status === 400 && /thinking/i.test(err.detail))) throw err;
+        res = await send(false);
+      }
     } catch (err) {
       lastErr = err;
       if (getManualModel() || !worthTryingAnother(err)) throw err;
