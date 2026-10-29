@@ -187,6 +187,68 @@
 :root[data-theme="dark"][data-font-color="high-contrast"],
 :root[data-theme="oled"][data-font-color="high-contrast"] { --ink: #ffffff; --ink-soft: #d5d5d5; }
 
+/* ---------- ready-made color sets (Settings → עיצוב → ערכות צבעים) ---------- */
+/* Background, cards, text and accent chosen together (lib/theme.ts PALETTES).
+ * Choosing a set also resets the accent and text color to "default" and the
+ * theme to the set's base (classic / dark), so the only rules competing with
+ * these are the base theme's — same specificity, and these come later. */
+:root[data-palette="desert"] {
+  --paper: #f4ebdd; --card: #fffaf2; --ink: #3b2a1d; --ink-soft: #7d6650; --line: #e7d9c3;
+  --accent-900: #6e2f16; --accent-700: #b9582f; --accent-600: #cc7550; --accent-100: #f6dccd; --accent-50: #fbeee6;
+  --topbar-end: #6e2f16; --toast-bg: #6e2f16; --primary-shadow: rgba(185, 88, 47, .35);
+  --shadow: 0 1px 2px rgba(70, 45, 20, .09); --shadow-lg: 0 6px 18px rgba(70, 45, 20, .14);
+  --danger-soft: #f7e2df; --empty-overlay: color-mix(in srgb, #f4ebdd 85%, transparent);
+}
+:root[data-palette="sea"] {
+  --paper: #e8f1f5; --card: #ffffff; --ink: #10293b; --ink-soft: #5b7384; --line: #d4e3ea;
+  --accent-900: #0b3a5a; --accent-700: #1d6fa3; --accent-600: #3f88b8; --accent-100: #d5e8f4; --accent-50: #ecf5fb;
+  --topbar-end: #0b3a5a; --toast-bg: #0b3a5a; --primary-shadow: rgba(29, 111, 163, .35);
+  --shadow: 0 1px 2px rgba(15, 40, 60, .09); --shadow-lg: 0 6px 18px rgba(15, 40, 60, .14);
+  --danger-soft: #f7e2df; --empty-overlay: color-mix(in srgb, #e8f1f5 85%, transparent);
+}
+:root[data-palette="olive"] {
+  --paper: #f1efe3; --card: #fdfcf5; --ink: #2b2d1c; --ink-soft: #6c6e55; --line: #e1dfcc;
+  --accent-900: #33401a; --accent-700: #62752a; --accent-600: #7b8e3f; --accent-100: #e7ecd0; --accent-50: #f4f6e8;
+  --topbar-end: #33401a; --toast-bg: #33401a; --primary-shadow: rgba(98, 117, 42, .35);
+  --shadow: 0 1px 2px rgba(45, 50, 20, .09); --shadow-lg: 0 6px 18px rgba(45, 50, 20, .14);
+  --danger-soft: #f7e2df; --empty-overlay: color-mix(in srgb, #f1efe3 85%, transparent);
+}
+:root[data-palette="sunset"] {
+  --paper: #f7ebe6; --card: #fffaf7; --ink: #3a1e28; --ink-soft: #7f5f69; --line: #ecd9d2;
+  --accent-900: #5e1b2c; --accent-700: #b0435a; --accent-600: #c26076; --accent-100: #f4d9df; --accent-50: #faeef1;
+  --topbar-end: #5e1b2c; --toast-bg: #5e1b2c; --primary-shadow: rgba(176, 67, 90, .35);
+  --shadow: 0 1px 2px rgba(70, 25, 40, .09); --shadow-lg: 0 6px 18px rgba(70, 25, 40, .14);
+  --danger-soft: #f7e2df; --empty-overlay: color-mix(in srgb, #f7ebe6 85%, transparent);
+}
+:root[data-palette="lavender"] {
+  --paper: #eeedf5; --card: #fcfcff; --ink: #24213a; --ink-soft: #67647e; --line: #deddea;
+  --accent-900: #2f2670; --accent-700: #6152c0; --accent-600: #7a6ccd; --accent-100: #e3dff8; --accent-50: #f2f0fc;
+  --topbar-end: #2f2670; --toast-bg: #2f2670; --primary-shadow: rgba(97, 82, 192, .35);
+  --shadow: 0 1px 2px rgba(35, 30, 70, .09); --shadow-lg: 0 6px 18px rgba(35, 30, 70, .14);
+  --danger-soft: #f7e2df; --empty-overlay: color-mix(in srgb, #eeedf5 85%, transparent);
+}
+:root[data-palette="shore"] {
+  --paper: #f5efe4; --card: #fffdf8; --ink: #1f3434; --ink-soft: #5f7272; --line: #e6dccb;
+  --accent-900: #0d4744; --accent-700: #1b7e78; --accent-600: #369993; --accent-100: #d4eeeb; --accent-50: #ebf7f5;
+  --topbar-end: #0d4744; --toast-bg: #0d4744; --primary-shadow: rgba(27, 126, 120, .35);
+  --shadow: 0 1px 2px rgba(30, 50, 50, .09); --shadow-lg: 0 6px 18px rgba(30, 50, 50, .14);
+  --danger-soft: #f7e2df; --empty-overlay: color-mix(in srgb, #f5efe4 85%, transparent);
+}
+:root[data-palette="night"] {
+  --paper: #12161b; --card: #1d232a; --ink: #e9edf1; --ink-soft: #95a1ad; --line: #2b333c;
+  --accent-900: #f3c98f; --accent-700: #b06d25; --accent-600: #c98436; --accent-100: #3a2c1a; --accent-50: #2a2116;
+  --topbar-end: #0c0f13; --toast-bg: #0c0f13; --primary-shadow: rgba(176, 109, 37, .4);
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3); --shadow-lg: 0 6px 18px rgba(0, 0, 0, .42);
+  --danger: #e0685e; --amber: #dba13e; --danger-soft: #3a201d; --empty-overlay: color-mix(in srgb, #12161b 85%, transparent);
+}
+:root[data-palette="ember"] {
+  --paper: #141010; --card: #211a19; --ink: #f3ece9; --ink-soft: #a8958f; --line: #352a28;
+  --accent-900: #f7b9a4; --accent-700: #c4502d; --accent-600: #d96a47; --accent-100: #3d201a; --accent-50: #2b1814;
+  --topbar-end: #0d0909; --toast-bg: #0d0909; --primary-shadow: rgba(196, 80, 45, .4);
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3); --shadow-lg: 0 6px 18px rgba(0, 0, 0, .42);
+  --danger: #e0685e; --amber: #dba13e; --danger-soft: #3a201d; --empty-overlay: color-mix(in srgb, #141010 85%, transparent);
+}
+
 /* ---------- font size / weight ---------- */
 
 :root[data-font-size="sm"] { font-size: 14px; }
@@ -674,6 +736,10 @@ input[type="password"], textarea, select {
   font: inherit;
   color: var(--ink);
 }
+
+/* Search / date fields size themselves, but take the same colors (else the
+ * browser's white shows up in the dark themes). */
+input[type="search"], input[type="date"] { background: var(--card); color: var(--ink); }
 
 input:hover, select:hover, textarea:hover { border-color: var(--accent-600); }
 input:focus, textarea:focus { outline: 2px solid var(--accent-600); border-color: transparent; }
@@ -1467,6 +1533,29 @@ a.media-link-icon:hover { color: var(--accent-700); }
 .theme-swatch.active { border-color: var(--accent-700); background: var(--accent-50); font-weight: 600; }
 .theme-dot { width: 26px; height: 26px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); }
 .theme-dot-none { background: var(--card); border: 2px dashed var(--ink-soft); }
+/* Ready-made color sets: a mini screen in the set's own colors — top bar in
+ * its accent, a card with two text lines and an accent dot on its background. */
+.palette-picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 10px; margin-bottom: 6px; }
+.palette-swatch {
+  display: flex; flex-direction: column; align-items: stretch; gap: 6px; padding: 6px;
+  border: 2px solid var(--line); border-radius: var(--radius); background: var(--card);
+  font: inherit; color: inherit; cursor: pointer;
+}
+.palette-swatch:hover { border-color: var(--accent-600); }
+.palette-swatch.active { border-color: var(--accent-700); box-shadow: 0 0 0 2px var(--accent-100); font-weight: 600; }
+.palette-preview {
+  display: flex; flex-direction: column; height: 64px; border-radius: 6px; overflow: hidden;
+  background: var(--pv-bg); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .08);
+}
+.pv-bar { height: 12px; background: var(--pv-accent); flex-shrink: 0; }
+.pv-card {
+  position: relative; display: flex; flex-direction: column; gap: 5px; margin: 8px; padding: 7px 8px;
+  border-radius: 5px; background: var(--pv-card); box-shadow: 0 1px 2px rgba(0, 0, 0, .12);
+}
+.pv-line { height: 4px; width: 80%; border-radius: 2px; background: var(--pv-text); }
+.pv-line.pv-short { width: 50%; opacity: .55; }
+.pv-dot { position: absolute; inset-inline-end: 7px; top: 50%; width: 9px; height: 9px; margin-top: -4.5px; border-radius: 50%; background: var(--pv-accent); }
+.palette-name { font-size: .85rem; text-align: center; }
 
 .settings-card h4 { margin: 16px 0 8px; font-size: .88rem; color: var(--ink-soft); font-weight: 600; }
 .settings-card h4:first-of-type { margin-top: 4px; }

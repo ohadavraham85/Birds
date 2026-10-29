@@ -34,7 +34,7 @@ import { icon, type IconName } from '../lib/icons';
 import { readExifDate } from '../lib/exif';
 import { primarySpecies } from '../lib/observation';
 import {
-  THEMES, ACCENTS, FONT_COLORS, FONT_SIZES, FONT_WEIGHTS, DISPLAY_MODES,
+  THEMES, ACCENTS, FONT_COLORS, FONT_SIZES, FONT_WEIGHTS, DISPLAY_MODES, PALETTES, currentPalette, setPalette, type PaletteId,
   currentTheme, currentAccent, currentFontColor, currentFontSize, currentFontWeight, currentDisplayMode,
   setTheme, setAccent, setFontColor, setFontSize, setFontWeight, setDisplayMode,
   currentBgPhoto, setBgPhoto, currentCardTransparency, setCardTransparency, MAX_CARD_TRANSPARENCY,
@@ -206,7 +206,21 @@ function appearanceHtml(activeTheme: ThemeId, activeAccent: AccentId, activeFont
         התאימו את מראה האפליקציה — כל שינוי חל מיד ונשמר במכשיר זה.
       </p>
 
-      <h4>ערכת נושא (רקע)</h4>
+      <h4>ערכות צבעים</h4>
+      <p class="hint" style="margin-top:0">רקע, כרטיסים, טקסט וצבע דגש שמתאימים זה לזה. אפשר גם לבחור כל אחד בנפרד למטה ("התאמה אישית").</p>
+      <div class="palette-picker" id="s-palette-picker">
+        ${PALETTES.map((p) => `
+          <button type="button" class="palette-swatch${p.id === currentPalette() ? ' active' : ''}" data-palette="${p.id}"
+            style="--pv-bg:${p.bg};--pv-card:${p.card};--pv-text:${p.text};--pv-accent:${p.accent}">
+            <span class="palette-preview" aria-hidden="true">
+              <span class="pv-bar"></span>
+              <span class="pv-card"><span class="pv-line"></span><span class="pv-line pv-short"></span><span class="pv-dot"></span></span>
+            </span>
+            <span class="palette-name">${escapeHtml(p.label)}</span>
+          </button>`).join('')}
+      </div>
+
+      <h4>התאמה אישית: ערכת נושא (רקע)</h4>
       <div class="theme-picker" id="s-theme-picker">
         ${THEMES.map((t) => `
           <button type="button" class="theme-swatch${t.id === activeTheme ? ' active' : ''}" data-theme="${t.id}" title="${escapeHtml(t.label)}">
@@ -215,7 +229,7 @@ function appearanceHtml(activeTheme: ThemeId, activeAccent: AccentId, activeFont
           </button>`).join('')}
       </div>
 
-      <h4>צבע דגש (Accent)</h4>
+      <h4>התאמה אישית: צבע דגש</h4>
       <div class="theme-picker" id="s-accent-picker">
         ${ACCENTS.map((a) => `
           <button type="button" class="theme-swatch${a.id === activeAccent ? ' active' : ''}" data-accent="${a.id}" title="${escapeHtml(a.label)}">
@@ -224,7 +238,7 @@ function appearanceHtml(activeTheme: ThemeId, activeAccent: AccentId, activeFont
           </button>`).join('')}
       </div>
 
-      <h4>צבע טקסט</h4>
+      <h4>התאמה אישית: צבע טקסט</h4>
       <div class="theme-picker" id="s-font-color-picker">
         ${FONT_COLORS.map((f) => `
           <button type="button" class="theme-swatch${f.id === activeFontColor ? ' active' : ''}" data-font-color="${f.id}" title="${escapeHtml(f.label)}">
@@ -281,6 +295,7 @@ function appearanceHtml(activeTheme: ThemeId, activeAccent: AccentId, activeFont
 }
 
 function wireAppearance(): void {
+  qs(container, '#s-palette-picker').addEventListener('click', onPalettePick);
   qs(container, '#s-theme-picker').addEventListener('click', onThemePick);
   qs(container, '#s-accent-picker').addEventListener('click', onAccentPick);
   qs(container, '#s-font-color-picker').addEventListener('click', onFontColorPick);
@@ -1325,14 +1340,25 @@ function pickSeg(groupSelector: string, e: Event, apply: (btn: HTMLElement) => v
   });
 }
 
+/** A hand-picked theme / accent / text color leaves the ready-made set. */
+function clearPaletteMark(): void {
+  container.querySelectorAll('#s-palette-picker .palette-swatch.active').forEach((el) => el.classList.remove('active'));
+}
+function onPalettePick(e: Event): void {
+  const btn = (e.target as HTMLElement).closest<HTMLElement>('.palette-swatch');
+  if (!btn) return;
+  setPalette(btn.dataset.palette as PaletteId);
+  // The set also resets theme, accent and text color — redraw to show that.
+  void activate();
+}
 function onThemePick(e: Event): void {
-  pickSwatch('#s-theme-picker', e, (btn) => setTheme(btn.dataset.theme as ThemeId));
+  pickSwatch('#s-theme-picker', e, (btn) => { setTheme(btn.dataset.theme as ThemeId); clearPaletteMark(); });
 }
 function onAccentPick(e: Event): void {
-  pickSwatch('#s-accent-picker', e, (btn) => setAccent(btn.dataset.accent as AccentId));
+  pickSwatch('#s-accent-picker', e, (btn) => { setAccent(btn.dataset.accent as AccentId); clearPaletteMark(); });
 }
 function onFontColorPick(e: Event): void {
-  pickSwatch('#s-font-color-picker', e, (btn) => setFontColor(btn.dataset.fontColor as FontColorId));
+  pickSwatch('#s-font-color-picker', e, (btn) => { setFontColor(btn.dataset.fontColor as FontColorId); clearPaletteMark(); });
 }
 function onFontSizePick(e: Event): void {
   pickSeg('#s-font-size-picker', e, (btn) => setFontSize(btn.dataset.fontSize as FontSizeId));
