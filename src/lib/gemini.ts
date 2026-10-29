@@ -37,6 +37,9 @@ const VERTEX_MODELS: string[] = [
 ];
 /** How many models to try before giving up on one call. */
 const MAX_MODEL_TRIES = 6;
+/** A request that hasn't answered by then is given up on, rather than
+ * leaving the assistant (or the settings check) spinning forever. */
+const REQUEST_TIMEOUT_MS = 40000;
 
 function read(key: string): string {
   try { return localStorage.getItem(key) || ''; } catch { return ''; }
@@ -105,10 +108,20 @@ async function call<T>(endpoint: Endpoint, path: string, init?: RequestInit): Pr
   const key = getGeminiKey();
   if (!key) throw new GeminiError('לא הוגדר מפתח Gemini. מוסיפים אותו בהגדרות ← עוזר קולי.');
   let res: Response;
+  const timeout = new AbortController();
+  const timer = setTimeout(() => timeout.abort(), REQUEST_TIMEOUT_MS);
   try {
-    res = await fetch(`${ENDPOINT_BASE[endpoint]}/${path}`, { ...init, headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key, ...init?.headers } });
+    res = await fetch(`${ENDPOINT_BASE[endpoint]}/${path}`, {
+      ...init,
+      signal: timeout.signal,
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key, ...init?.headers },
+    });
   } catch {
-    throw new GeminiError('אין חיבור לאינטרנט — העוזר הקולי צריך רשת.');
+    throw new GeminiError(timeout.signal.aborted
+      ? `Gemini לא ענה תוך ${REQUEST_TIMEOUT_MS / 1000} שניות. כדאי לנסות שוב. אם זה חוזר, אפשר לכתוב בהגדרות מודל קל יותר (למשל gemini-2.5-flash).`
+      : 'אין חיבור לאינטרנט — העוזר הקולי צריך רשת.');
+  } finally {
+    clearTimeout(timer);
   }
   if (!res.ok) {
     let detail = '';
