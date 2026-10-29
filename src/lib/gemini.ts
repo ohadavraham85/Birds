@@ -1,30 +1,30 @@
 /* lib/gemini.ts — direct calls from the app to Gemini, for the voice
- * assistant (lib/voice-assistant.ts). Two kinds of key work:
- *  - a Google AI Studio key ("AIza…") → the Gemini API
- *    (generativelanguage.googleapis.com);
- *  - a Google Cloud / Vertex AI key ("AQ.…", e.g. bound to a service account,
- *    or Vertex express mode) → Vertex AI's global endpoint
- *    (aiplatform.googleapis.com/v1/publishers/google/models/…).
- * Both take the key in the x-goog-api-key header, allow calls from the app's
- * origin (CORS) and share the same generateContent request/response shape.
+ * assistant (lib/voice-assistant.ts). A key can be served by either of two
+ * Google endpoints, which share the same generateContent request/response
+ * shape and both take the key in the x-goog-api-key header (CORS allows the
+ * app's origin on both):
+ *  - the Gemini API (generativelanguage.googleapis.com) — every key made in
+ *    Google AI Studio, both the classic "AIza…" ones and the newer "AQ.…"
+ *    ones bound to an "ais-gemini-key" service account;
+ *  - Vertex AI's global endpoint (aiplatform.googleapis.com/v1/publishers/
+ *    google/models/…) — a Google Cloud key allowed to use Vertex AI.
+ * The key's prefix doesn't tell which one it belongs to, so a non-"AIza" key
+ * is tried on the Gemini API first and on Vertex AI if Google refuses it
+ * there; whichever works is remembered.
  *
  * The API key is the user's own, typed into Settings → עוזר קולי on each
  * device and kept only in that device's localStorage: it is never part of
- * the shipped code, the repo, or the synced Firestore data. That's what lets
- * this work straight from the phone, without a server of our own (the older
- * Claude-based Cloud Function in functions/ needed the Firebase Blaze plan
- * and a deploy from a computer).
+ * the shipped code, the repo, or the synced Firestore data.
  *
- * Which model to call is picked automatically from the models the key can
- * use — newest stable "flash" first, then older/preview/lite ones — and the
- * next candidate is tried whenever one is retired (404) or has no quota on
- * this key's tier (429 / "limit: 0"), so the assistant keeps working as
- * Google changes model names and free-tier limits. A model chosen by hand in
- * Settings is always used as-is. */
+ * Which model to call is picked automatically — newest stable "flash" first,
+ * then older/preview/lite ones — and the next candidate is tried whenever one
+ * is retired (404) or has no quota on this key's tier (429 / "limit: 0"). A
+ * model chosen by hand in Settings is always used as-is. */
 
 const KEY_STORAGE = 'birds-gemini-key';
 const MODEL_STORAGE = 'birds-gemini-model';
 const AUTO_MODEL_CACHE = 'birds-gemini-auto-model';
+const ENDPOINT_CACHE = 'birds-gemini-endpoint';
 const STUDIO_API = 'https://generativelanguage.googleapis.com/v1beta';
 const VERTEX_API = 'https://aiplatform.googleapis.com/v1/publishers/google';
 /** Tried (in order) when the model list can't be read for some reason. */
@@ -56,24 +56,39 @@ export function cleanKey(raw: string): string {
   return raw.replace(/[^A-Za-z0-9._-]/g, '');
 }
 
-export type KeyKind = 'studio' | 'vertex';
-/** AI Studio keys start with "AIza"; anything else is treated as a Google
- * Cloud / Vertex AI key. */
-export function keyKind(key = getGeminiKey()): KeyKind {
-  return key.startsWith('AIza') ? 'studio' : 'vertex';
+export type Endpoint = 'studio' | 'vertex';
+const ENDPOINT_BASE: Record<Endpoint, string> = { studio: STUDIO_API, vertex: VERTEX_API };
+export const ENDPOINT_LABEL: Record<Endpoint, string> = { studio: 'Gemini API (AI Studio)', vertex: 'Vertex AI (Google Cloud)' };
+
+/** Endpoints to try for the saved key, the one known to work first. */
+function endpointsToTry(key = getGeminiKey()): Endpoint[] {
+  if (key.startsWith('AIza')) return ['studio'];
+  return read(ENDPOINT_CACHE) === 'vertex' ? ['vertex', 'studio'] : ['studio', 'vertex'];
+}
+
+/** The endpoint the saved key was last seen working on ('' = not checked yet). */
+export function knownEndpoint(): Endpoint | '' {
+  const key = getGeminiKey();
+  if (!key) return '';
+  if (key.startsWith('AIza')) return 'studio';
+  const e = read(ENDPOINT_CACHE);
+  return e === 'studio' || e === 'vertex' ? e : '';
 }
 
 export function getGeminiKey(): string { return cleanKey(read(KEY_STORAGE)); }
 export function setGeminiKey(key: string): void {
   write(KEY_STORAGE, cleanKey(key));
   write(AUTO_MODEL_CACHE, '');
+  write(ENDPOINT_CACHE, '');
 }
 export function hasGeminiKey(): boolean { return !!getGeminiKey(); }
 
 /** '' = automatic. */
 export function getManualModel(): string { return read(MODEL_STORAGE).trim(); }
 export function setManualModel(model: string): void {
-  write(MODEL_STORAGE, model.trim().replace(/^models\//, ''));
+  const next = model.trim().replace(/^models\//, '');
+  if (next === getManualModel()) return;
+  write(MODEL_STORAGE, next);
   write(AUTO_MODEL_CACHE, '');
 }
 
@@ -86,12 +101,12 @@ export class GeminiError extends Error {
   }
 }
 
-async function call<T>(path: string, init?: RequestInit): Promise<T> {
+async function call<T>(endpoint: Endpoint, path: string, init?: RequestInit): Promise<T> {
   const key = getGeminiKey();
   if (!key) throw new GeminiError('לא הוגדר מפתח Gemini. מוסיפים אותו בהגדרות ← עוזר קולי.');
   let res: Response;
   try {
-    res = await fetch(`${keyKind(key) === 'studio' ? STUDIO_API : VERTEX_API}/${path}`, { ...init, headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key, ...init?.headers } });
+    res = await fetch(`${ENDPOINT_BASE[endpoint]}/${path}`, { ...init, headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key, ...init?.headers } });
   } catch {
     throw new GeminiError('אין חיבור לאינטרנט — העוזר הקולי צריך רשת.');
   }
@@ -99,7 +114,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
     let detail = '';
     try { detail = ((await res.json()) as { error?: { message?: string } }).error?.message || ''; } catch { /* not JSON */ }
     if (isKeyError(res.status, detail)) throw new GeminiError('Google לא מכיר את המפתח. כדאי להעתיק אותו שוב.', res.status, detail);
-    if (res.status === 403) throw new GeminiError(forbiddenMessage(detail, keyKind(key)), res.status, detail);
+    if (res.status === 403) throw new GeminiError(forbiddenMessage(detail, endpoint), res.status, detail);
     if (res.status === 429) throw new GeminiError('אין מכסת שימוש פנויה ב-Gemini כרגע. נסו שוב בעוד דקה.', res.status, detail);
     if (res.status === 404) throw new GeminiError('המודל לא נמצא.', res.status, detail);
     throw new GeminiError(`שגיאה מ-Gemini (${res.status}).`, res.status, detail);
@@ -109,8 +124,8 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 
 /** Google's 403s have several distinct causes, each fixed in a different
  * place in the Google Cloud console — say which one it is. */
-function forbiddenMessage(detail: string, kind: KeyKind): string {
-  const api = kind === 'vertex' ? 'Vertex AI API (Agent Platform API)' : 'Generative Language API';
+function forbiddenMessage(detail: string, endpoint: Endpoint): string {
+  const api = endpoint === 'vertex' ? 'Vertex AI API (Agent Platform API)' : 'Generative Language API';
   if (/referer|referrer/i.test(detail)) {
     return `המפתח מוגבל לאתרים מסוימים. ב-Google Cloud: Credentials ← המפתח ← Application restrictions: מוסיפים את כתובת האפליקציה (${location.origin}/*), או בוחרים None.`;
   }
@@ -121,7 +136,7 @@ function forbiddenMessage(detail: string, kind: KeyKind): string {
     return `השירות ${api} לא מופעל בפרויקט. מפעילים אותו בקישור שבתשובת Google, ומחכים כמה דקות.`;
   }
   if (/billing/i.test(detail)) return 'בפרויקט ב-Google Cloud צריך לחבר חשבון חיוב (Billing).';
-  return kind === 'vertex'
+  return endpoint === 'vertex'
     ? 'למפתח אין הרשאה ל-Vertex AI. ב-Google Cloud ← IAM נותנים לחשבון השירות של המפתח את התפקיד Vertex AI User.'
     : 'למפתח אין הרשאה להשתמש ב-Gemini API.';
 }
@@ -153,15 +168,15 @@ export function pickModel(names: string[]): string {
   return rankModels(names)[0] ?? FALLBACK_MODELS[0]!;
 }
 
-async function candidateModels(): Promise<string[]> {
+async function candidateModels(endpoint: Endpoint): Promise<string[]> {
   const manual = getManualModel();
   if (manual) return [manual];
   const cached = read(AUTO_MODEL_CACHE);
   const cachedFirst = (list: string[]): string[] => (cached && list.includes(cached) ? [cached, ...list.filter((m) => m !== cached)] : list);
-  if (keyKind() === 'vertex') return cachedFirst(VERTEX_MODELS);
+  if (endpoint === 'vertex') return cachedFirst(VERTEX_MODELS);
   let ranked: string[] = [];
   try {
-    const { models = [] } = await call<{ models?: ModelInfo[] }>('models?pageSize=1000');
+    const { models = [] } = await call<{ models?: ModelInfo[] }>('studio', 'models?pageSize=1000');
     ranked = rankModels(models.filter((m) => m.supportedGenerationMethods?.includes('generateContent')).map((m) => m.name));
   } catch (err) {
     // A bad key fails here already — say so instead of trying models.
@@ -173,7 +188,7 @@ async function candidateModels(): Promise<string[]> {
 
 /** The model the next call will use (for the settings screen). */
 export async function currentModel(): Promise<string> {
-  return getManualModel() || read(AUTO_MODEL_CACHE) || (await candidateModels())[0]!;
+  return getManualModel() || read(AUTO_MODEL_CACHE) || (await candidateModels(endpointsToTry()[0]!))[0]!;
 }
 
 interface GenerateResponse {
@@ -194,16 +209,43 @@ async function generate(system: string, prompt: string, generationConfig: Record
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
     generationConfig,
   });
-  const models = (await candidateModels()).slice(0, MAX_MODEL_TRIES);
+  const endpoints = endpointsToTry();
+  let firstErr: unknown = null;
+  for (const endpoint of endpoints) {
+    try {
+      const text = await generateOn(endpoint, body);
+      write(ENDPOINT_CACHE, endpoint);
+      return text;
+    } catch (err) {
+      firstErr ??= err;
+      // The key itself refused here (unknown / blocked / service off): the
+      // other endpoint may be the one it belongs to. Anything else is final.
+      if (!(err instanceof GeminiError && (isKeyError(err.status, err.detail) || err.status === 403))) throw err;
+    }
+  }
+  // Both refused: the first endpoint's reason is the one worth showing.
+  throw firstErr;
+}
+
+async function generateOn(endpoint: Endpoint, body: string): Promise<string> {
+  // The model that worked last time goes first, without asking Google for
+  // the model list on every sentence; the full list only if it stops working.
+  const remembered = getManualModel() ? '' : read(AUTO_MODEL_CACHE);
+  let models = remembered && endpoint === read(ENDPOINT_CACHE) ? [remembered] : (await candidateModels(endpoint)).slice(0, MAX_MODEL_TRIES);
   let lastErr: unknown = null;
-  for (const model of models) {
+  for (let i = 0; i < models.length; i++) {
+    const model = models[i]!;
     let res: GenerateResponse;
     try {
-      res = await call<GenerateResponse>(`models/${encodeURIComponent(model)}:generateContent`, { method: 'POST', body });
+      res = await call<GenerateResponse>(endpoint, `models/${encodeURIComponent(model)}:generateContent`, { method: 'POST', body });
     } catch (err) {
       lastErr = err;
-      if (!getManualModel() && worthTryingAnother(err)) continue;
-      throw err;
+      if (getManualModel() || !worthTryingAnother(err)) throw err;
+      if (i === models.length - 1 && models.length === 1 && model === remembered) {
+        write(AUTO_MODEL_CACHE, '');
+        models = [model, ...(await candidateModels(endpoint)).filter((m) => m !== model)].slice(0, MAX_MODEL_TRIES);
+      }
+      continue;
     }
     if (!getManualModel()) write(AUTO_MODEL_CACHE, model);
     const text = res.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') ?? '';
